@@ -1,0 +1,17 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://TownHall.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://bri0m13so81s" path="res://Objects/Fortress/Wonder_SecondAge_Level1.fbx" id="2_l1"]
+[ext_resource type="PackedScene" uid="uid://cfprmprmqptyy" path="res://Objects/Castle/WonderWalls_SecondAge.fbx" id="3_l2"]
+[ext_resource type="PackedScene" uid="uid://b3m5ay28h8qh4" path="res://Objects/Castle Fortress/Wonder_SecondAge_Level3.fbx" id="4_l3"]
+
+[node name="TownHall" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Model_L1" parent="." instance=ExtResource("2_l1")]
+
+[node name="Model_L2" parent="." instance=ExtResource("3_l2")]
+visible = false
+
+[node name="Model_L3" parent="." instance=ExtResource("4_l3")]
+visible = false
