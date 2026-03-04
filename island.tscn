@@ -13,6 +13,7 @@
 [ext_resource type="PackedScene" uid="uid://dqb323cbtr1la" path="res://Objects/Trees cut/Resource_Tree_Group_Cut.fbx" id="11_uq18n"]
 [ext_resource type="PackedScene" uid="uid://c8nor88yjdbm6" path="res://Objects/Port/Port_FirstAge_Level2.fbx" id="12_44qto"]
 [ext_resource type="PackedScene" uid="uid://buhnftkme3vtu" path="res://Objects/Wooden Wall/Wall_FirstAge.fbx" id="13_hkouh"]
+[ext_resource type="PackedScene" uid="uid://dl2eov8hcipj6" path="res://Objects/Archery Second Age Le/Archery_SecondAge_Level1.fbx" id="14_kjlm2"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_is1nd"]
 albedo_color = Color(0.823529, 0.847059, 0.470588, 1)
@@ -177,3 +178,10 @@ transform = Transform3D(-34.895813, 0, 2.6985629, 0, 35, 0, -2.6985629, 0, -34.8
 
 [node name="Wall_FirstAge8" parent="Node3D" unique_id=1865583794 instance=ExtResource("13_hkouh")]
 transform = Transform3D(-34.30453, 0, -6.942564, 0, 35, 0, 6.942564, 0, -34.30453, -16.86414, 2.4760206, 179.3172)
+
+[node name="Archery_SecondAge_Level1" parent="Node3D" unique_id=1046794609 instance=ExtResource("14_kjlm2")]
+transform = Transform3D(15, 0, 0, 0, 15, 0, 0, 0, 15, -48.626575, 2.4692447, -26.070545)
+
+[node name="Archery_SecondAge_Level1" parent="." unique_id=1317053948 instance=ExtResource("14_kjlm2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -67.17527, 2.4692295, 84.274315)
+visible = false
