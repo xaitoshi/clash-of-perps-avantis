@@ -2,10 +2,6 @@
 
 [ext_resource type="Script" uid="uid://ihv8yue75pjf" path="res://scripts/island_camera.gd" id="1_0iamf"]
 [ext_resource type="Script" uid="uid://dracsc4jme0ck" path="res://scripts/build_ui.gd" id="3_fgmf3"]
-[ext_resource type="PackedScene" uid="uid://bap7ool2adbqv" path="res://Objects/Town Center/TownCenter_FirstAge_Level1.fbx" id="3_gljqa"]
-[ext_resource type="PackedScene" uid="uid://b1b7ig56ywi84" path="res://Objects/Trees cut/Resource_PineTree_Group_Cut.fbx" id="4_b4opu"]
-[ext_resource type="PackedScene" uid="uid://b40dpp82rc3tt" path="res://Objects/Pine Trees/Resource_PineTree_Group.fbx" id="5_5jwi3"]
-[ext_resource type="PackedScene" uid="uid://c6vvhy2na0pk5" path="res://Objects/Rock/Resource_Rock_2.fbx" id="6_c7iw8"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_is1nd"]
 albedo_color = Color(0.823529, 0.847059, 0.470588, 1)
@@ -97,18 +93,3 @@ environment = SubResource("Environment_fgmf3")
 
 [node name="BuildUI" type="CanvasLayer" parent="." unique_id=262810915]
 script = ExtResource("3_fgmf3")
-
-[node name="TownCenter_FirstAge_Level1" parent="." unique_id=1614880150 instance=ExtResource("3_gljqa")]
-transform = Transform3D(30, 0, 0, 0, 30, 0, 0, 0, 30, -91, 2, 13)
-
-[node name="Resource_PineTree_Group_Cut" parent="." unique_id=92814074 instance=ExtResource("4_b4opu")]
-transform = Transform3D(30, 0, 0, 0, 30, 0, 0, 0, 30, -152, 2, 35)
-
-[node name="Resource_PineTree_Group" parent="." unique_id=1022373222 instance=ExtResource("5_5jwi3")]
-transform = Transform3D(35, 0, 0, 0, 35, 0, 0, 0, 35, -94, 2, 56)
-
-[node name="Resource_Rock_2" parent="." unique_id=2008769346 instance=ExtResource("6_c7iw8")]
-transform = Transform3D(129.90381, 0, -75, 0, 150, 0, 75, 0, 129.90381, -151, 2, -128)
-
-[node name="Resource_Rock_3" parent="." unique_id=816027855 instance=ExtResource("6_c7iw8")]
-transform = Transform3D(150, 0, 0, 0, 150, 0, 0, 0, 150, -51, 2, -128)
