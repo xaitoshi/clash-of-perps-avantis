@@ -8,6 +8,8 @@ extends Node3D
 # ── Camera Settings ──────────────────────────────────────────────
 ## How fast the camera pans when dragging (scaled by zoom level)
 @export var pan_speed: float = 0.010
+## How fast the camera moves with WASD keys
+@export var key_pan_speed: float = 3.0
 ## How fast the camera zooms with scroll wheel
 @export var zoom_speed: float = 1.0
 ## Minimum distance from pivot (closest zoom)
@@ -22,7 +24,7 @@ extends Node3D
 @export var pan_limit_max: Vector3 = Vector3(15.0, 0.0, 15.0)
 
 ## Camera pitch angle in degrees (45 = standard Clash-style)
-@export_range(20.0, 80.0) var camera_pitch: float = 35.0
+@export_range(20.0, 80.0) var camera_pitch: float = 45.0
 
 # ── Internal State ───────────────────────────────────────────────
 var _pitch_pivot: Node3D     # Rotates around X (pitch / tilt)
@@ -89,11 +91,41 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	# ── WASD movement ────────────────────────────────────────────
+	var move_dir := Vector3.ZERO
+	if Input.is_key_pressed(KEY_W):
+		move_dir.z -= 1.0
+	if Input.is_key_pressed(KEY_S):
+		move_dir.z += 1.0
+	if Input.is_key_pressed(KEY_A):
+		move_dir.x -= 1.0
+	if Input.is_key_pressed(KEY_D):
+		move_dir.x += 1.0
+	if move_dir != Vector3.ZERO:
+		var speed = key_pan_speed * _current_zoom * 0.2 * delta
+		_target_position += move_dir.normalized() * speed
+		_target_position.x = clampf(_target_position.x, pan_limit_min.x, pan_limit_max.x)
+		_target_position.y = 0.0
+		_target_position.z = clampf(_target_position.z, pan_limit_min.z, pan_limit_max.z)
+
+	# ── Q/E zoom ─────────────────────────────────────────────────
+	if Input.is_key_pressed(KEY_E):
+		_target_zoom = maxf(_target_zoom - zoom_speed * delta * 3.0, min_zoom)
+	if Input.is_key_pressed(KEY_Q):
+		_target_zoom = minf(_target_zoom + zoom_speed * delta * 3.0, max_zoom)
+
+	# ── C = center camera on island ──────────────────────────────
+	if Input.is_key_pressed(KEY_C):
+		_target_position = Vector3.ZERO
+		_target_zoom = max_zoom
+
+	var t = 1.0 - exp(-smoothing * delta)
+
 	# Smoothly interpolate position (pan)
-	global_position = global_position.lerp(_target_position, smoothing * delta)
+	global_position = global_position.lerp(_target_position, t)
 
 	# Smoothly interpolate zoom
-	_current_zoom = lerpf(_current_zoom, _target_zoom, smoothing * delta)
+	_current_zoom = lerpf(_current_zoom, _target_zoom, t)
 	_camera.position.z = _current_zoom
 
 	# Apply pitch angle
