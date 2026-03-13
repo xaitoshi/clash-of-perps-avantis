@@ -8,14 +8,14 @@ extends Camera2D
 @export var pan_speed: float = 1.0
 ## How fast the camera zooms with scroll wheel
 @export var zoom_speed: float = 0.1
-## Minimum zoom (most zoomed in)
-@export var min_zoom: float = 0.4
-## Maximum zoom (most zoomed out)
+## Minimum zoom (most zoomed out)
+@export var min_zoom: float = 0.25
+## Maximum zoom (most zoomed in)
 @export var max_zoom: float = 2.0
 ## Smooth interpolation factor (higher = snappier)
 @export var smoothing: float = 6.0
 ## Map size in world pixels
-@export var map_size: Vector2 = Vector2(4000.0, 3000.0)
+@export var map_size: Vector2 = Vector2(8000.0, 6000.0)
 
 # ── Internal State ───────────────────────────────────────────────
 var _target_position: Vector2 = Vector2.ZERO

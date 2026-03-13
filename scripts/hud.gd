@@ -1,12 +1,24 @@
 extends CanvasLayer
-## World-map HUD — Boom Beach style.
+## World-map HUD — Boom Beach / Clash style.
 ## Attach to the UI CanvasLayer; builds every widget in _ready().
+
+signal home_pressed
 
 # ── node refs (filled in _ready) ──
 var _name_lbl: Label
 var _level_lbl: Label
 var _trophy_lbl: Label
 var _res_labels := {}          # "gold" → Label, etc.
+
+# ── color palette ──
+const C_PANEL_BG     := Color(0.06, 0.10, 0.04, 0.88)
+const C_PANEL_BORDER := Color(0.23, 0.17, 0.04, 0.95)
+const C_GOLD_ACCENT  := Color(0.83, 0.63, 0.09, 1.0)
+const C_GOLD_LIGHT   := Color(1.0, 0.85, 0.3, 1.0)
+const C_TEXT_WARM     := Color(1.0, 0.97, 0.91, 1.0)
+const C_GREEN_BTN    := Color(0.16, 0.42, 0.10, 0.92)
+const C_GREEN_BORDER := Color(0.10, 0.29, 0.04, 1.0)
+const C_GREEN_HI     := Color(0.29, 0.60, 0.22, 0.7)
 
 # ══════════════════════════════════════
 #  LIFECYCLE
@@ -84,21 +96,26 @@ func _build_top_bar(parent: Control) -> void:
 
 func _build_player_panel(parent: Control) -> void:
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _make_style(Color(0, 0, 0, 0.5), 16))
+	panel.add_theme_stylebox_override("panel", _game_style(
+		C_PANEL_BG, C_PANEL_BORDER, 20, 2))
 	parent.add_child(panel)
 
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 10)
 	panel.add_child(hbox)
 
-	# ── Avatar circle ──
+	# ── Avatar circle (gold ring) ──
 	var avatar := Panel.new()
-	avatar.custom_minimum_size = Vector2(56, 56)
+	avatar.custom_minimum_size = Vector2(64, 64)
 	var asb := StyleBoxFlat.new()
-	asb.bg_color = Color(0.12, 0.22, 0.42, 0.95)
-	asb.border_color = Color(0.85, 0.68, 0.15, 1.0)
-	asb.set_border_width_all(3)
-	asb.set_corner_radius_all(28)
+	asb.bg_color = Color(0.10, 0.22, 0.42, 0.95)
+	asb.border_color = C_GOLD_ACCENT
+	asb.set_border_width_all(4)
+	asb.set_corner_radius_all(32)
+	asb.content_margin_left = 0
+	asb.content_margin_right = 0
+	asb.content_margin_top = 0
+	asb.content_margin_bottom = 0
 	avatar.add_theme_stylebox_override("panel", asb)
 	hbox.add_child(avatar)
 
@@ -106,63 +123,74 @@ func _build_player_panel(parent: Control) -> void:
 	_level_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_level_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_level_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_level_lbl.add_theme_font_size_override("font_size", 24)
+	_level_lbl.add_theme_font_size_override("font_size", 28)
 	_level_lbl.add_theme_color_override("font_color", Color.WHITE)
-	_level_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
-	_level_lbl.add_theme_constant_override("shadow_offset_x", 1)
-	_level_lbl.add_theme_constant_override("shadow_offset_y", 1)
+	_level_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	_level_lbl.add_theme_constant_override("shadow_offset_x", 2)
+	_level_lbl.add_theme_constant_override("shadow_offset_y", 2)
 	avatar.add_child(_level_lbl)
 
 	# ── Name + trophies column ──
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 2)
+	vbox.add_theme_constant_override("separation", 3)
 	hbox.add_child(vbox)
 
-	_name_lbl = _make_label("Player", 20, Color.WHITE)
+	_name_lbl = _make_label("Player", 22, C_TEXT_WARM)
 	vbox.add_child(_name_lbl)
 
 	var trophy_row := HBoxContainer.new()
-	trophy_row.add_theme_constant_override("separation", 4)
+	trophy_row.add_theme_constant_override("separation", 5)
 	vbox.add_child(trophy_row)
 
-	trophy_row.add_child(_make_label("!", 17, Color(1.0, 0.25, 0.25)))
+	# Star icon for trophies
+	trophy_row.add_child(_make_label("\u2605", 19, C_GOLD_LIGHT))
 
-	_trophy_lbl = _make_label("0", 17, Color(1.0, 0.85, 0.3))
+	_trophy_lbl = _make_label("0", 18, C_GOLD_LIGHT)
 	trophy_row.add_child(_trophy_lbl)
 
 # ── Resources Panel ──────────────────
 
 func _build_resources_panel(parent: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _make_style(Color(0, 0, 0, 0.5), 14))
-	parent.add_child(panel)
-
 	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 6)
-	panel.add_child(hbox)
+	hbox.add_theme_constant_override("separation", 8)
+	parent.add_child(hbox)
 
-	_add_res(hbox, "gold",  Color(1.0, 0.85, 0.1))
-	_add_res(hbox, "wood",  Color(0.55, 0.36, 0.16))
+	_add_res(hbox, "gold",
+		Color(0.16, 0.12, 0.04, 0.88),
+		Color(0.35, 0.27, 0.06, 0.95),
+		Color(1.0, 0.82, 0.1, 1.0),
+		Color(0.50, 0.40, 0.08, 0.7))
+	_add_res(hbox, "wood",
+		Color(0.10, 0.08, 0.03, 0.88),
+		Color(0.28, 0.18, 0.06, 0.95),
+		Color(0.72, 0.45, 0.14, 1.0),
+		Color(0.42, 0.30, 0.10, 0.7))
 
-func _add_res(parent: Control, key: String, icon_col: Color) -> void:
+func _add_res(parent: Control, key: String, bg: Color, border: Color,
+		icon_col: Color, highlight: Color) -> void:
 	var item := PanelContainer.new()
-	var sb := _make_style(Color(0, 0, 0, 0.25), 8)
-	sb.content_margin_left = 7
-	sb.content_margin_right = 9
-	sb.content_margin_top = 4
-	sb.content_margin_bottom = 4
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.set_border_width_all(2)
+	sb.border_width_top = 1
+	sb.set_corner_radius_all(14)
+	sb.content_margin_left = 10
+	sb.content_margin_right = 12
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
 	item.add_theme_stylebox_override("panel", sb)
 	parent.add_child(item)
 
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 5)
+	h.add_theme_constant_override("separation", 6)
 	item.add_child(h)
 
-	# colored dot as icon placeholder
-	h.add_child(_make_label("\u25CF", 18, icon_col))  # ●
+	var icon_lbl := _make_label("\u25CF", 20, icon_col)
+	h.add_child(icon_lbl)
 
-	var val := _make_label("0", 17, Color.WHITE)
-	val.custom_minimum_size.x = 50
+	var val := _make_label("0", 19, C_TEXT_WARM)
+	val.custom_minimum_size.x = 56
 	h.add_child(val)
 
 	_res_labels[key] = val
@@ -172,15 +200,18 @@ func _add_res(parent: Control, key: String, icon_col: Color) -> void:
 func _build_menu_btn(parent: Control) -> void:
 	var btn := Button.new()
 	btn.name = "MenuBtn"
-	btn.text = "\u2261"   # ≡
-	btn.position = Vector2(14, 82)
-	btn.custom_minimum_size = Vector2(48, 48)
-	btn.add_theme_font_size_override("font_size", 30)
-	btn.add_theme_color_override("font_color", Color.WHITE)
-	btn.add_theme_stylebox_override("normal",  _make_style(Color(0, 0, 0, 0.5), 12))
-	btn.add_theme_stylebox_override("hover",   _make_style(Color(0.15, 0.15, 0.15, 0.6), 12))
-	btn.add_theme_stylebox_override("pressed", _make_style(Color(0.1, 0.1, 0.1, 0.7), 12))
-	btn.add_theme_stylebox_override("focus",   StyleBoxEmpty.new())
+	btn.text = "\u2261"
+	btn.position = Vector2(14, 90)
+	btn.custom_minimum_size = Vector2(52, 52)
+	btn.add_theme_font_size_override("font_size", 32)
+	btn.add_theme_color_override("font_color", C_TEXT_WARM)
+	btn.add_theme_stylebox_override("normal",
+		_game_style(Color(0.08, 0.12, 0.06, 0.85), Color(0.54, 0.48, 0.23, 0.8), 14, 2))
+	btn.add_theme_stylebox_override("hover",
+		_game_style(Color(0.12, 0.16, 0.08, 0.90), Color(0.64, 0.55, 0.28, 0.9), 14, 2))
+	btn.add_theme_stylebox_override("pressed",
+		_game_style(Color(0.05, 0.08, 0.03, 0.92), Color(0.44, 0.38, 0.18, 0.9), 14, 2))
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	parent.add_child(btn)
 
 # ── Home Button (bottom-right) ───────
@@ -189,32 +220,39 @@ func _build_home_btn(parent: Control) -> void:
 	var btn := Button.new()
 	btn.name = "HomeBtn"
 	btn.text = "Home"
-	btn.custom_minimum_size = Vector2(100, 44)
-	btn.add_theme_font_size_override("font_size", 18)
+	btn.custom_minimum_size = Vector2(112, 48)
+	btn.add_theme_font_size_override("font_size", 19)
 	btn.add_theme_color_override("font_color", Color.WHITE)
 	btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	btn.offset_left = -114
-	btn.offset_top = -54
+	btn.offset_left = -126
+	btn.offset_top = -58
 	btn.offset_right = -14
 	btn.offset_bottom = -10
-	btn.add_theme_stylebox_override("normal",  _make_style(Color(0, 0, 0, 0.5), 12))
-	btn.add_theme_stylebox_override("hover",   _make_style(Color(0.15, 0.15, 0.15, 0.6), 12))
-	btn.add_theme_stylebox_override("pressed", _make_style(Color(0.1, 0.1, 0.1, 0.7), 12))
-	btn.add_theme_stylebox_override("focus",   StyleBoxEmpty.new())
+	btn.add_theme_stylebox_override("normal",
+		_game_style(C_GREEN_BTN, C_GREEN_BORDER, 22, 2))
+	btn.add_theme_stylebox_override("hover",
+		_game_style(Color(0.20, 0.50, 0.14, 0.95), Color(0.12, 0.34, 0.06, 1.0), 22, 2))
+	btn.add_theme_stylebox_override("pressed",
+		_game_style(Color(0.10, 0.32, 0.06, 0.95), Color(0.08, 0.22, 0.03, 1.0), 22, 2))
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	btn.pressed.connect(func(): home_pressed.emit())
 	parent.add_child(btn)
 
 # ══════════════════════════════════════
 #  HELPERS
 # ══════════════════════════════════════
 
-func _make_style(color: Color, radius: int) -> StyleBoxFlat:
+func _game_style(bg: Color, border_col: Color, radius: int,
+		border_w: int = 2) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = color
+	sb.bg_color = bg
+	sb.border_color = border_col
+	sb.set_border_width_all(border_w)
 	sb.set_corner_radius_all(radius)
-	sb.content_margin_left = 10
-	sb.content_margin_right = 10
-	sb.content_margin_top = 6
-	sb.content_margin_bottom = 6
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 8
 	return sb
 
 func _make_label(text: String, size: int, color: Color) -> Label:
@@ -222,9 +260,9 @@ func _make_label(text: String, size: int, color: Color) -> Label:
 	lbl.text = text
 	lbl.add_theme_font_size_override("font_size", size)
 	lbl.add_theme_color_override("font_color", color)
-	lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-	lbl.add_theme_constant_override("shadow_offset_x", 1)
-	lbl.add_theme_constant_override("shadow_offset_y", 1)
+	lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	lbl.add_theme_constant_override("shadow_offset_x", 2)
+	lbl.add_theme_constant_override("shadow_offset_y", 2)
 	return lbl
 
 func _set_res(key: String, value: int) -> void:

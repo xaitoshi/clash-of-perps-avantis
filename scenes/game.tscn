@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://gy0v6ohtvjnb"]
+
+[ext_resource type="Script" uid="uid://6de2pmdeel2" path="res://scripts/game_manager.gd" id="1_game"]
+[ext_resource type="PackedScene" uid="uid://dpilt66cufmgi" path="res://Main.tscn" id="2_island"]
+[ext_resource type="PackedScene" uid="uid://cf7162wre3f6m" path="res://scenes/world_map.tscn" id="3_map"]
+[ext_resource type="Script" uid="uid://b6nwhtqffjigx" path="res://scripts/cloud_transition.gd" id="4_cloud"]
+
+[node name="Game" type="Node" unique_id=1699506912]
+script = ExtResource("1_game")
+
+[node name="IslandView" parent="." unique_id=1348000523 instance=ExtResource("2_island")]
+
+[node name="WorldMapView" parent="." unique_id=594022217 instance=ExtResource("3_map")]
+
+[node name="CloudTransition" type="CanvasLayer" parent="." unique_id=1491253079]
+script = ExtResource("4_cloud")
+auto_reveal = false

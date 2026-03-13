@@ -1,7 +1,7 @@
 extends CanvasLayer
 ## Boom Beach-style cloud fly-through effect.
-## Add to a scene — clouds auto-reveal on _ready().
-## Call close() to cover the screen with clouds before leaving.
+## Uses pre-generated NoiseTexture2D for each cloud — organic shapes,
+## minimal per-frame shader cost (1 texture sample + radial fade).
 
 signal reveal_finished
 signal close_finished
@@ -14,40 +14,48 @@ signal close_finished
 const CLOUD_COUNT := 6
 
 const CLOUD_CONFIGS = [
-	# Foreground (fast, large, leave first on reveal)
-	{"dir": Vector2(-1.2, -0.8), "scale": 1.3, "delay": 0.0, "z": 5, "seed": 7.0},
-	{"dir": Vector2(1.2, -0.7),  "scale": 1.25, "delay": 0.05, "z": 5, "seed": 23.0},
-	# Midground
-	{"dir": Vector2(-1.3, 0.2),  "scale": 1.0, "delay": 0.12, "z": 3, "seed": 41.0},
-	{"dir": Vector2(1.3, 0.1),   "scale": 1.05, "delay": 0.15, "z": 3, "seed": 59.0},
-	# Background (slow, smaller, leave last on reveal)
-	{"dir": Vector2(-0.8, 0.9),  "scale": 0.85, "delay": 0.25, "z": 1, "seed": 73.0},
-	{"dir": Vector2(0.9, 0.8),   "scale": 0.8, "delay": 0.28, "z": 1, "seed": 89.0},
+	{"dir": Vector2(-1.2, -0.8), "scale": 1.3, "delay": 0.0, "z": 5, "seed": 7},
+	{"dir": Vector2(1.2, -0.7),  "scale": 1.25, "delay": 0.05, "z": 5, "seed": 23},
+	{"dir": Vector2(-1.3, 0.2),  "scale": 1.0, "delay": 0.12, "z": 3, "seed": 41},
+	{"dir": Vector2(1.3, 0.1),   "scale": 1.05, "delay": 0.15, "z": 3, "seed": 59},
+	{"dir": Vector2(-0.8, 0.9),  "scale": 0.85, "delay": 0.25, "z": 1, "seed": 73},
+	{"dir": Vector2(0.9, 0.8),   "scale": 0.8, "delay": 0.28, "z": 1, "seed": 89},
 ]
 
 # ── Internal ─────────────────────────────────────────────────────
 var _clouds: Array[Sprite2D] = []
 var _white_overlay: ColorRect
-var _white_tex: ImageTexture
 var _cloud_shader: Shader
 
 
 func _ready() -> void:
 	layer = 100
-	_create_base_texture()
 	_cloud_shader = load("res://shaders/cloud.gdshader")
 	_build_clouds()
 	if auto_reveal:
 		_set_clouds_covering()
-		# Small delay so the scene has time to render first frame
 		await get_tree().process_frame
 		reveal()
 
 
-func _create_base_texture() -> void:
-	var img := Image.create(256, 256, false, Image.FORMAT_RGBA8)
-	img.fill(Color.WHITE)
-	_white_tex = ImageTexture.create_from_image(img)
+func _create_cloud_noise(seed_val: int) -> NoiseTexture2D:
+	var tex := NoiseTexture2D.new()
+	tex.width = 512
+	tex.height = 512
+	tex.generate_mipmaps = false
+	tex.seamless = false
+
+	var n := FastNoiseLite.new()
+	n.seed = seed_val
+	n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	n.frequency = 0.005
+	n.fractal_type = FastNoiseLite.FRACTAL_FBM
+	n.fractal_octaves = 5
+	n.fractal_lacunarity = 2.0
+	n.fractal_gain = 0.5
+
+	tex.noise = n
+	return tex
 
 
 func _build_clouds() -> void:
@@ -58,18 +66,17 @@ func _build_clouds() -> void:
 	_white_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_white_overlay)
 
-	# Cloud sprites
+	# Cloud sprites — each with unique noise texture
 	for i in range(CLOUD_COUNT):
 		var cfg: Dictionary = CLOUD_CONFIGS[i]
 		var spr := Sprite2D.new()
-		spr.texture = _white_tex
+		spr.texture = _create_cloud_noise(cfg["seed"])
 		spr.z_index = cfg["z"]
 
 		var mat := ShaderMaterial.new()
 		mat.shader = _cloud_shader
-		mat.set_shader_parameter("seed_val", cfg["seed"])
 		mat.set_shader_parameter("progress", 1.0)
-		mat.set_shader_parameter("softness", 0.4)
+		mat.set_shader_parameter("softness", 0.35)
 		spr.material = mat
 
 		add_child(spr)
@@ -81,7 +88,8 @@ func _get_vp_size() -> Vector2:
 
 
 func _base_scale() -> float:
-	return _get_vp_size().x / 256.0 * 0.7
+	var vp := _get_vp_size()
+	return maxf(vp.x, vp.y) / 512.0 * 1.6
 
 
 # Place all clouds so they fully cover the screen
@@ -94,7 +102,7 @@ func _set_clouds_covering() -> void:
 		var cfg: Dictionary = CLOUD_CONFIGS[i]
 		var spr: Sprite2D = _clouds[i]
 		var s: float = _base_scale() * cfg["scale"]
-		spr.position = vp * 0.5 + cfg["dir"].normalized() * vp.x * 0.03
+		spr.position = vp * 0.5 + cfg["dir"].normalized() * vp.x * 0.04
 		spr.scale = Vector2(s, s)
 		spr.visible = true
 		(spr.material as ShaderMaterial).set_shader_parameter("progress", 1.0)
@@ -122,10 +130,8 @@ func reveal() -> void:
 		var scale_mult: float = cfg["scale"]
 		var dir: Vector2 = cfg["dir"]
 
-		# Background clouds leave first, foreground last (reversed parallax)
 		var delay: float = 0.28 - cfg["delay"]
 
-		# Fly out in their original direction
 		var end_pos := vp * 0.5 + dir * vp * 0.7
 		var end_scale := bs * scale_mult * 2.5
 
@@ -147,7 +153,7 @@ func reveal() -> void:
 	)
 
 
-## Clouds fly in covering the screen. Connect to close_finished to change scene.
+## Clouds fly in covering the screen.
 func close() -> void:
 	var vp := _get_vp_size()
 	_white_overlay.size = vp
@@ -165,10 +171,9 @@ func close() -> void:
 		var dir: Vector2 = cfg["dir"]
 		var delay: float = cfg["delay"]
 
-		# Start off-screen
 		var start_pos := vp * 0.5 + dir * vp * 0.6
 		var start_scale := bs * scale_mult * 2.5
-		var end_pos := vp * 0.5 + dir.normalized() * vp.x * 0.03
+		var end_pos := vp * 0.5 + dir.normalized() * vp.x * 0.04
 		var end_scale := bs * scale_mult
 
 		spr.visible = true
@@ -187,7 +192,6 @@ func close() -> void:
 			0.0, 1.0, close_duration * 0.7
 		).set_delay(delay)
 
-	# White overlay at the end
 	tw.tween_property(_white_overlay, "modulate:a", 1.0, 0.3) \
 		.set_delay(close_duration - 0.3) \
 		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
