@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://yq3xo6ybvwbk"]
+[gd_scene format=3 uid="uid://dpilt66cufmgi"]
 
 [ext_resource type="PackedScene" uid="uid://bt2voohr3otgb" path="res://Model/Island/Isl.glb" id="1_uu6xs"]
 [ext_resource type="Script" uid="uid://vikmob2bagbn" path="res://scripts/camera_rig.gd" id="2_cam"]
