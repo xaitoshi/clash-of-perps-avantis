@@ -121,4 +121,3 @@ script = ExtResource("4_cm0pq")
 grid_height = 3
 grid_plane_path = NodePath("../Island/gridPlane2")
 create_ui = false
-always_show_grid = true

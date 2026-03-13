@@ -235,7 +235,10 @@ func _build_home_btn(parent: Control) -> void:
 	btn.add_theme_stylebox_override("pressed",
 		_game_style(Color(0.10, 0.32, 0.06, 0.95), Color(0.08, 0.22, 0.03, 1.0), 22, 2))
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	btn.pressed.connect(func(): home_pressed.emit())
+	btn.pressed.connect(func():
+		home_pressed.emit()
+		get_tree().change_scene_to_file("res://scenes/Main.tscn")
+	)
 	parent.add_child(btn)
 
 # ══════════════════════════════════════

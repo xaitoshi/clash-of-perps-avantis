@@ -9,6 +9,8 @@ extends Node3D
 @export var grid_plane_path: NodePath = "../gridPlane"
 @export var create_ui: bool = true
 @export var always_show_grid: bool = false
+@export var allowed_buildings: PackedStringArray = []  # Empty = all allowed
+@export var blocked_buildings: PackedStringArray = []  # These are never allowed
 
 # ── Building Definitions ──────────────────────────────────────
 var building_defs: Dictionary = {
@@ -114,6 +116,7 @@ func _ready() -> void:
 	_setup_from_grid_plane()
 	if create_ui:
 		_create_ui()
+	_create_building_panel()
 	if always_show_grid:
 		_show_grid()
 
@@ -124,6 +127,7 @@ func _setup_from_grid_plane() -> void:
 		push_warning("BuildingSystem: gridPlane not found!")
 		return
 
+	plane.visible = false
 	grid_center = plane.global_position
 	grid_y = grid_center.y + 0.05
 	grid_rotation = plane.global_rotation.y
@@ -157,6 +161,21 @@ func _create_ui() -> void:
 	gold_label = _create_resource_label(res_bar, "Gold", resources.gold, Color(0.9, 0.75, 0.2))
 	metal_label = _create_resource_label(res_bar, "Metal", resources.metal, Color(0.6, 0.65, 0.7))
 
+	# ── Attack button (bottom right, above Build) ───────────────
+	var attack_button = Button.new()
+	attack_button.text = "Attack"
+	attack_button.custom_minimum_size = Vector2(300, 120)
+	attack_button.anchor_left = 1.0
+	attack_button.anchor_right = 1.0
+	attack_button.anchor_top = 1.0
+	attack_button.anchor_bottom = 1.0
+	attack_button.offset_left = -320
+	attack_button.offset_right = -20
+	attack_button.offset_top = -280
+	attack_button.offset_bottom = -160
+	_style_button(attack_button, Color(0.6, 0.2, 0.2), Color(0.7, 0.25, 0.25))
+	canvas.add_child(attack_button)
+
 	# ── Build button (bottom right) ────────────────────────────
 	build_button = Button.new()
 	build_button.text = "Build"
@@ -188,6 +207,22 @@ func _create_ui() -> void:
 	_style_button(destroy_button, Color(0.6, 0.15, 0.15), Color(0.7, 0.2, 0.2))
 	destroy_button.pressed.connect(_destroy_all_buildings)
 	canvas.add_child(destroy_button)
+
+	# ── Map button (bottom left, above Destroy All) ───────────
+	var map_button = Button.new()
+	map_button.text = "Map"
+	map_button.custom_minimum_size = Vector2(300, 120)
+	map_button.anchor_left = 0.0
+	map_button.anchor_right = 0.0
+	map_button.anchor_top = 1.0
+	map_button.anchor_bottom = 1.0
+	map_button.offset_left = 20
+	map_button.offset_right = 320
+	map_button.offset_top = -280
+	map_button.offset_bottom = -160
+	_style_button(map_button, Color(0.2, 0.35, 0.55), Color(0.25, 0.4, 0.6))
+	map_button.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/world_map.tscn"))
+	canvas.add_child(map_button)
 
 	# ── Shop panel (center) ────────────────────────────────────
 	shop_panel = PanelContainer.new()
@@ -251,7 +286,14 @@ func _create_ui() -> void:
 	close_btn.pressed.connect(_toggle_shop)
 	vbox.add_child(close_btn)
 
-	# ── Building info panel (bottom center) ───────────────────
+
+func _create_building_panel() -> void:
+	if building_panel:
+		return
+	if not canvas:
+		canvas = CanvasLayer.new()
+		add_child(canvas)
+
 	building_panel = PanelContainer.new()
 	building_panel.visible = false
 	building_panel.custom_minimum_size = Vector2(400, 180)
@@ -380,7 +422,17 @@ func _start_placement(building_id: String) -> void:
 		bs._begin_placement(building_id)
 
 
+func _can_build_here(building_id: String) -> bool:
+	if allowed_buildings.size() > 0 and building_id not in allowed_buildings:
+		return false
+	if building_id in blocked_buildings:
+		return false
+	return true
+
+
 func _begin_placement(building_id: String) -> void:
+	if not _can_build_here(building_id):
+		return
 	is_placing = true
 	current_building_id = building_id
 	if build_button:

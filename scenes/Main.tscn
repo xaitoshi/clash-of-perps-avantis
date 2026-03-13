@@ -115,10 +115,11 @@ metadata/_edit_lock_ = true
 [node name="BuildingSystem" type="Node3D" parent="." unique_id=1299042875]
 script = ExtResource("4_cm0pq")
 grid_plane_path = NodePath("../Island/gridPlane")
+blocked_buildings = PackedStringArray("port")
 
 [node name="BuildingSystem2" type="Node3D" parent="." unique_id=988755368]
 script = ExtResource("4_cm0pq")
 grid_height = 3
 grid_plane_path = NodePath("../Island/gridPlane2")
 create_ui = false
-always_show_grid = true
+allowed_buildings = PackedStringArray("port")
