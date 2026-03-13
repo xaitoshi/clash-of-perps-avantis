@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://dpilt66cufmgi"]
+[gd_scene format=3 uid="uid://dosexdc7fxdx0"]
 
 [ext_resource type="PackedScene" uid="uid://bt2voohr3otgb" path="res://Model/Island/Isl.glb" id="1_uu6xs"]
 [ext_resource type="Script" uid="uid://vikmob2bagbn" path="res://scripts/camera_rig.gd" id="2_cam"]
@@ -66,7 +66,6 @@ metadata/_edit_lock_ = true
 
 [node name="gridPlane" type="MeshInstance3D" parent="Island" unique_id=2081397116]
 transform = Transform3D(0.5499543, 0, 0.0070937276, 0, 0.01666667, 0, -0.0070937276, 0, 0.5499543, -0.20163433, 0.07670069, 0.20906071)
-visible = false
 mesh = SubResource("BoxMesh_r0du0")
 metadata/_edit_lock_ = true
 
@@ -115,11 +114,9 @@ metadata/_edit_lock_ = true
 [node name="BuildingSystem" type="Node3D" parent="." unique_id=1299042875]
 script = ExtResource("4_cm0pq")
 grid_plane_path = NodePath("../Island/gridPlane")
-blocked_buildings = PackedStringArray("port")
 
 [node name="BuildingSystem2" type="Node3D" parent="." unique_id=988755368]
 script = ExtResource("4_cm0pq")
 grid_height = 3
 grid_plane_path = NodePath("../Island/gridPlane2")
 create_ui = false
-allowed_buildings = PackedStringArray("port")
