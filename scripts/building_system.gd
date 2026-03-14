@@ -21,6 +21,7 @@ var building_defs: Dictionary = {
 		"height": 0.3,
 		"scene": "res://Model/Mine/1.gltf",
 		"model_scale": 0.2,
+		"hp_levels": [1200, 2200, 3800],
 	},
 	"barn": {
 		"name": "Barn",
@@ -30,6 +31,7 @@ var building_defs: Dictionary = {
 		"scene": "res://Model/Barn/1.glb",
 		"scenes": ["res://Model/Barn/1.glb", "res://Model/Barn/2.glb", "res://Model/Barn/3.glb"],
 		"model_scale": 0.2,
+		"hp_levels": [2000, 3500, 6000],
 	},
 	"port": {
 		"name": "Port",
@@ -39,6 +41,7 @@ var building_defs: Dictionary = {
 		"scene": "res://Model/Port/1.glb",
 		"scenes": ["res://Model/Port/1.glb", "res://Model/Port/2.glb", "res://Model/Port/3.glb"],
 		"model_scale": 0.2,
+		"hp_levels": [1800, 3200, 5500],
 	},
 	"sawmill": {
 		"name": "Sawmill",
@@ -47,6 +50,7 @@ var building_defs: Dictionary = {
 		"height": 0.35,
 		"scene": "res://Model/Sawmill/1.glb",
 		"model_scale": 0.1,
+		"hp_levels": [1200, 2200, 3800],
 	},
 	"town_hall": {
 		"name": "Town Hall",
@@ -56,6 +60,8 @@ var building_defs: Dictionary = {
 		"scene": "res://Model/Town_Hall/1.gltf",
 		"scenes": ["res://Model/Town_Hall/1.gltf", "res://Model/Town_Hall/2.gltf", "res://Model/Town_Hall/3.gltf"],
 		"model_scale": 0.2,
+		"hp_levels": [3500, 6000, 10000],
+		"is_main": true,
 	},
 	"turret": {
 		"name": "Turret",
@@ -64,6 +70,7 @@ var building_defs: Dictionary = {
 		"height": 0.45,
 		"scene": "res://Model/Turret/scene.gltf",
 		"model_scale": 0.2,
+		"hp_levels": [900, 1600, 2800],
 	},
 }
 
@@ -107,6 +114,8 @@ var gold_label: Label
 var metal_label: Label
 var building_panel: PanelContainer
 var building_panel_title: Label
+var building_panel_hp: Label
+var building_panel_hp_bar: ProgressBar
 
 
 func _ready() -> void:
@@ -119,6 +128,17 @@ func _ready() -> void:
 	_create_building_panel()
 	if always_show_grid:
 		_show_grid()
+
+
+func _process(_delta: float) -> void:
+	if selected_building.size() > 0 and building_panel and building_panel.visible:
+		var hp = selected_building.get("hp", 0)
+		var max_hp = selected_building.get("max_hp", 1)
+		if building_panel_hp:
+			building_panel_hp.text = "HP: %d / %d" % [hp, max_hp]
+		if building_panel_hp_bar:
+			building_panel_hp_bar.max_value = max_hp
+			building_panel_hp_bar.value = hp
 
 
 func _setup_from_grid_plane() -> void:
@@ -174,6 +194,7 @@ func _create_ui() -> void:
 	attack_button.offset_top = -280
 	attack_button.offset_bottom = -160
 	_style_button(attack_button, Color(0.6, 0.2, 0.2), Color(0.7, 0.25, 0.25))
+	attack_button.pressed.connect(_on_attack_pressed)
 	canvas.add_child(attack_button)
 
 	# ── Build button (bottom right) ────────────────────────────
@@ -296,7 +317,7 @@ func _create_building_panel() -> void:
 
 	building_panel = PanelContainer.new()
 	building_panel.visible = false
-	building_panel.custom_minimum_size = Vector2(400, 180)
+	building_panel.custom_minimum_size = Vector2(400, 280)
 	var bp_style = StyleBoxFlat.new()
 	bp_style.bg_color = Color(0.12, 0.14, 0.2, 1.0)
 	bp_style.corner_radius_top_left = 12
@@ -315,7 +336,7 @@ func _create_building_panel() -> void:
 	building_panel.anchor_bottom = 1.0
 	building_panel.offset_left = -200
 	building_panel.offset_right = 200
-	building_panel.offset_top = -200
+	building_panel.offset_top = -300
 	building_panel.offset_bottom = -20
 	canvas.add_child(building_panel)
 
@@ -334,6 +355,28 @@ func _create_building_panel() -> void:
 	building_panel_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	building_panel_title.add_theme_color_override("font_color", Color.WHITE)
 	bp_vbox.add_child(building_panel_title)
+
+	# HP bar
+	building_panel_hp_bar = ProgressBar.new()
+	building_panel_hp_bar.custom_minimum_size = Vector2(0, 24)
+	building_panel_hp_bar.max_value = 100
+	building_panel_hp_bar.value = 100
+	var bar_bg = StyleBoxFlat.new()
+	bar_bg.bg_color = Color(0.15, 0.15, 0.15, 1.0)
+	bar_bg.set_corner_radius_all(4)
+	building_panel_hp_bar.add_theme_stylebox_override("background", bar_bg)
+	var bar_fill = StyleBoxFlat.new()
+	bar_fill.bg_color = Color(0.2, 0.75, 0.2, 1.0)
+	bar_fill.set_corner_radius_all(4)
+	building_panel_hp_bar.add_theme_stylebox_override("fill", bar_fill)
+	building_panel_hp_bar.show_percentage = false
+	bp_vbox.add_child(building_panel_hp_bar)
+
+	# HP label
+	building_panel_hp = Label.new()
+	building_panel_hp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	building_panel_hp.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
+	bp_vbox.add_child(building_panel_hp)
 
 	var upgrade_btn = Button.new()
 	upgrade_btn.text = "Upgrade"
@@ -641,11 +684,14 @@ func _try_place_building() -> bool:
 	building.position = local_pos
 
 	add_child(building)
+	var max_hp = _get_hp_for(def, 1)
 	placed_buildings.append({
 		"id": current_building_id,
 		"grid_pos": current_grid_pos,
 		"node": building,
 		"level": 1,
+		"hp": max_hp,
+		"max_hp": max_hp,
 	})
 
 	return true
@@ -729,8 +775,15 @@ func _select_building(b: Dictionary) -> void:
 	selected_building = b
 	var def = building_defs[b.id]
 	var level = b.get("level", 1)
+	var hp = b.get("hp", _get_hp_for(def, level))
+	var max_hp = b.get("max_hp", hp)
 	if building_panel_title:
 		building_panel_title.text = "%s (Lv. %d)" % [def.name, level]
+	if building_panel_hp:
+		building_panel_hp.text = "HP: %d / %d" % [hp, max_hp]
+	if building_panel_hp_bar:
+		building_panel_hp_bar.max_value = max_hp
+		building_panel_hp_bar.value = hp
 	if building_panel:
 		building_panel.visible = true
 
@@ -746,12 +799,20 @@ func _upgrade_selected() -> void:
 		return
 	var def = building_defs[selected_building.id]
 	var level = selected_building.get("level", 1)
-	# Check max level if scenes array exists
-	if def.has("scenes") and level >= def.scenes.size():
+	var max_level = def.hp_levels.size() if def.has("hp_levels") else 3
+	if level >= max_level:
 		return
 	selected_building["level"] = level + 1
+	var new_max_hp = _get_hp_for(def, selected_building.level)
+	selected_building["max_hp"] = new_max_hp
+	selected_building["hp"] = new_max_hp
 	if building_panel_title:
 		building_panel_title.text = "%s (Lv. %d)" % [def.name, selected_building.level]
+	if building_panel_hp:
+		building_panel_hp.text = "HP: %d / %d" % [new_max_hp, new_max_hp]
+	if building_panel_hp_bar:
+		building_panel_hp_bar.max_value = new_max_hp
+		building_panel_hp_bar.value = new_max_hp
 	# Swap model if scenes array exists
 	if def.has("scenes"):
 		var new_level = selected_building.level
@@ -767,3 +828,33 @@ func _upgrade_selected() -> void:
 			var s = def.get("model_scale", 0.2)
 			model.scale = Vector3(s, s, s)
 			selected_building.node.add_child(model)
+
+
+func remove_building(b: Dictionary) -> void:
+	var idx = placed_buildings.find(b)
+	if idx < 0:
+		return
+	var def = building_defs[b.id]
+	var gp = b.grid_pos as Vector2i
+	for x in range(def.cells.x):
+		for z in range(def.cells.y):
+			var cell_idx = (gp.y + z) * grid_width + (gp.x + x)
+			if cell_idx >= 0 and cell_idx < grid.size():
+				grid[cell_idx] = false
+	if is_instance_valid(b.node):
+		b.node.queue_free()
+	placed_buildings.remove_at(idx)
+	_deselect_building()
+
+
+func _get_hp_for(def: Dictionary, level: int) -> int:
+	if def.has("hp_levels"):
+		var idx = clampi(level - 1, 0, def.hp_levels.size() - 1)
+		return def.hp_levels[idx]
+	return 1000
+
+
+func _on_attack_pressed() -> void:
+	var attack_system = get_node_or_null("../AttackSystem")
+	if attack_system and attack_system.has_method("enter_attack_mode"):
+		attack_system.enter_attack_mode()
