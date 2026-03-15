@@ -1,20 +1,20 @@
 extends BaseTroop
-## Knight — melee fighter. Damage when sword touches the building mid-swing.
+## Barbarian — slow melee tank with axe and shield.
 
-@export var sword_scene: String = "res://Model/Characters/Assets/sword_1handed.gltf"
+@export var axe_scene: String = "res://Model/Characters/Assets/axe_1handed.gltf"
 @export var hit_distance: float = 0.25
 @export var hit_anim_threshold: float = 0.4
 
-var _sword_attachment: BoneAttachment3D
+var _axe_attachment: BoneAttachment3D
 var _hit_this_swing: bool = false
 
 
 func _init_stats() -> void:
-	move_speed = 0.5
+	move_speed = 0.4
 	attack_range = 0.24
-	hp = 1100
-	damage = 75
-	atk_speed = 0.6
+	hp = 520
+	damage = 90
+	atk_speed = 0.625
 	attack_anim = "Melee_1H_Attack_Chop"
 	anim_files = [
 		"res://Model/Characters/Animations/Rig_Medium/Rig_Medium_General.glb",
@@ -24,7 +24,7 @@ func _init_stats() -> void:
 
 
 func _setup_weapons() -> void:
-	_sword_attachment = _attach_to_bone("handslot.r", "SwordAttachment", sword_scene, "Sword")
+	_axe_attachment = _attach_to_bone("handslot.r", "AxeAttachment", axe_scene, "Axe", Vector3(0, 180, 0))
 
 
 func _do_attack(delta: float) -> void:
@@ -42,13 +42,13 @@ func _do_attack(delta: float) -> void:
 			anim_player.play(attack_anim)
 
 	# Hit only after animation passes threshold AND weapon is close
-	if not _hit_this_swing and _sword_attachment and is_instance_valid(target_building.get("node")):
+	if not _hit_this_swing and _axe_attachment and is_instance_valid(target_building.get("node")):
 		if anim_player.is_playing() and anim_player.current_animation == attack_anim:
 			var anim_len = anim_player.current_animation_length
 			if anim_len > 0 and anim_player.current_animation_position / anim_len >= hit_anim_threshold:
-				var sword_pos = _sword_attachment.global_position
+				var axe_pos = _axe_attachment.global_position
 				var building_pos = target_building.node.global_position
-				if sword_pos.distance_to(building_pos) <= hit_distance:
+				if axe_pos.distance_to(building_pos) <= hit_distance:
 					_hit_this_swing = true
 					target_building["hp"] = target_building.hp - damage
 					if target_building.hp <= 0:

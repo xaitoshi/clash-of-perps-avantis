@@ -34,10 +34,11 @@ func _ready() -> void:
 
 func enter_attack_mode() -> void:
 	is_attack_mode = true
-	# Activate knight AI
-	var knight = get_tree().current_scene.find_child("Knight", true, false)
-	if knight and knight.has_method("activate"):
-		knight.activate()
+	# Activate all troops
+	for troop_name in ["Ranger"]:
+		var troop = get_tree().current_scene.find_child(troop_name, true, false)
+		if troop and troop.has_method("activate"):
+			troop.activate()
 	print("Attack mode ON - click on shipPlane!")
 
 
