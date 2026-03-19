@@ -85,10 +85,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_target_position -= right * delta.x * pan_speed * zoom_factor
 		_target_position -= forward * delta.y * pan_speed * zoom_factor
 
-		# Clamp to boundaries
-		_target_position.x = clampf(_target_position.x, pan_limit_min.x, pan_limit_max.x)
 		_target_position.y = 0.0
-		_target_position.z = clampf(_target_position.z, pan_limit_min.z, pan_limit_max.z)
 
 
 func _process(delta: float) -> void:
@@ -105,9 +102,7 @@ func _process(delta: float) -> void:
 	if move_dir != Vector3.ZERO:
 		var speed = key_pan_speed * _current_zoom * 0.2 * delta
 		_target_position += move_dir.normalized() * speed
-		_target_position.x = clampf(_target_position.x, pan_limit_min.x, pan_limit_max.x)
 		_target_position.y = 0.0
-		_target_position.z = clampf(_target_position.z, pan_limit_min.z, pan_limit_max.z)
 
 	# ── Q/E zoom ─────────────────────────────────────────────────
 	if Input.is_key_pressed(KEY_E):

@@ -4,13 +4,13 @@ extends Node3D
 @export var grid_plane_path: NodePath = "../Island/shipPlane"
 @export var ship_scene_path: String = "res://Model/Ship/Sail Ship.glb"
 @export var ship_scale: float = 0.15
-@export var sail_duration: float = 6.0
+@export var sail_duration: float = 1.0
 @export var spawn_distance: float = 8.0
 @export var water_node_path: NodePath = "../Water"
 @export var max_ships: int = 5
 @export var troops_per_ship: int = 3
 @export var troop_spawn_delay: float = 0.4
-@export var troop_scale: float = 0.1
+@export var troop_scale: float = 0.05
 
 const SHIP_TROOPS = [
 	{"model": "res://Model/Characters/Model/Knight.glb", "script": "res://scripts/knight.gd"},
@@ -35,6 +35,7 @@ func _ready() -> void:
 	if ship_plane == null:
 		push_warning("AttackSystem: shipPlane not found")
 		return
+	ship_plane.visible = false
 	plane_center = ship_plane.global_position
 	plane_y = plane_center.y
 	plane_extent_x = ship_plane.global_transform.basis.x.length()
@@ -48,11 +49,15 @@ func _ready() -> void:
 func enter_attack_mode() -> void:
 	is_attack_mode = true
 	_ships_placed = 0
+	if ship_plane:
+		ship_plane.visible = true
 	print("Attack mode ON - place up to %d ships!" % max_ships)
 
 
 func exit_attack_mode() -> void:
 	is_attack_mode = false
+	if ship_plane:
+		ship_plane.visible = false
 
 
 func _input(event: InputEvent) -> void:

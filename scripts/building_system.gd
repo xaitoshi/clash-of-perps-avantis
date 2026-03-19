@@ -107,6 +107,9 @@ var selected_building: Dictionary = {}
 # ── UI ────────────────────────────────────────────────────────
 var canvas: CanvasLayer
 var build_button: Button
+var attack_button: Button
+var _search_tween: Tween
+var _is_searching: bool = false
 var shop_panel: PanelContainer
 var is_shop_open: bool = false
 var wood_label: Label
@@ -232,8 +235,24 @@ func _create_ui() -> void:
 	gold_label = _create_resource_label(res_bar, "Gold", resources.gold, Color(0.9, 0.75, 0.2))
 	metal_label = _create_resource_label(res_bar, "Metal", resources.metal, Color(0.6, 0.65, 0.7))
 
+	# ── Find button (bottom right, above Attack) ─────────────────
+	var find_button = Button.new()
+	find_button.text = "Find"
+	find_button.custom_minimum_size = Vector2(300, 120)
+	find_button.anchor_left = 1.0
+	find_button.anchor_right = 1.0
+	find_button.anchor_top = 1.0
+	find_button.anchor_bottom = 1.0
+	find_button.offset_left = -320
+	find_button.offset_right = -20
+	find_button.offset_top = -420
+	find_button.offset_bottom = -300
+	_style_button(find_button, Color(0.2, 0.4, 0.6), Color(0.25, 0.5, 0.7))
+	find_button.pressed.connect(_on_find_pressed)
+	canvas.add_child(find_button)
+
 	# ── Attack button (bottom right, above Build) ───────────────
-	var attack_button = Button.new()
+	attack_button = Button.new()
 	attack_button.text = "Attack"
 	attack_button.custom_minimum_size = Vector2(300, 120)
 	attack_button.anchor_left = 1.0
@@ -572,6 +591,11 @@ func _create_box_placeholder(def: Dictionary) -> Node3D:
 
 func _create_placed_building(def: Dictionary) -> Node3D:
 	var node = Node3D.new()
+	# Attach turret AI script BEFORE adding children so _process registers
+	if current_building_id == "turret":
+		var turret_script = load("res://scripts/turret.gd")
+		if turret_script:
+			node.set_script(turret_script)
 	if def.has("scene"):
 		var scene_res = load(def.scene)
 		if scene_res:
@@ -1128,3 +1152,7 @@ func _on_attack_pressed() -> void:
 	var attack_system = get_node_or_null("../AttackSystem")
 	if attack_system and attack_system.has_method("enter_attack_mode"):
 		attack_system.enter_attack_mode()
+
+
+func _on_find_pressed() -> void:
+	print("Find pressed")

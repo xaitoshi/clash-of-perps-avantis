@@ -5,7 +5,7 @@ extends Node3D
 
 @export var move_speed: float = 0.5
 @export var attack_range: float = 0.15
-@export var separation_radius: float = 0.25
+@export var separation_radius: float = 0.10
 @export var separation_force: float = 1.5
 
 var level: int = 1
@@ -147,6 +147,14 @@ func _play_victory() -> void:
 		anim_player.play("Idle_A")
 
 
+func take_damage(dmg: int) -> void:
+	hp -= dmg
+	if hp <= 0:
+		if is_in_group("troops"):
+			remove_from_group("troops")
+		queue_free()
+
+
 func _move_to_target(delta: float) -> void:
 	if target_building.size() == 0 or not is_instance_valid(target_building.node):
 		_find_next_target()
@@ -170,7 +178,7 @@ func _move_to_target(delta: float) -> void:
 	move_vec += sep * separation_force * delta
 
 	global_position += move_vec
-	global_position.y = target_pos.y
+	global_position.y = target_building.node.global_position.y
 
 	if dist <= attack_range:
 		state = State.ATTACKING
