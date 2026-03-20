@@ -4,11 +4,11 @@ extends Node3D
 @export var grid_plane_path: NodePath = "../Island/shipPlane"
 @export var ship_scene_path: String = "res://Model/Ship/Sail Ship.glb"
 @export var ship_scale: float = 0.15
-@export var sail_duration: float = 1.0
-@export var spawn_distance: float = 8.0
+@export var sail_duration: float = 3.0
+@export var spawn_distance: float = 4.0
 @export var water_node_path: NodePath = "../Water"
 @export var max_ships: int = 5
-@export var troops_per_ship: int = 3
+@export var troops_per_ship: int = 1
 @export var troop_spawn_delay: float = 0.4
 @export var troop_scale: float = 0.05
 
@@ -125,7 +125,14 @@ func _spawn_single_ship(target: Vector3) -> void:
 	if sail_dir.dot(to_plane) < 0:
 		sail_dir = -sail_dir
 
-	var stop_pos = target
+	# Ship always stops at inner edge of ShipPlane (closest to island)
+	# but lateral position matches where the player clicked
+	var pb = ship_plane.global_transform.basis
+	var lateral_dir = pb.x.normalized()
+	var offset = target - plane_center
+	var lateral = offset.dot(lateral_dir)
+	lateral = clampf(lateral, -plane_extent_x, plane_extent_x)
+	var stop_pos = plane_center + lateral_dir * lateral + sail_dir * (plane_extent_z - 0.5)
 	stop_pos.y = plane_y
 	var spawn_pos = stop_pos + sail_dir * spawn_distance
 	spawn_pos.y = plane_y
@@ -154,7 +161,7 @@ func _spawn_single_ship(target: Vector3) -> void:
 
 	# Main movement
 	var tween = create_tween()
-	tween.tween_property(pivot, "global_position", stop_pos, sail_duration).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(pivot, "global_position", stop_pos, sail_duration).set_trans(Tween.TRANS_LINEAR)
 
 	# When ship arrives → stop rocking, spawn troops
 	var arrived_pos = stop_pos
@@ -178,13 +185,19 @@ func _deploy_troops_from_ship(ship_pos: Vector3, sail_dir: Vector3, ship_idx: in
 		push_warning("AttackSystem: could not load troop: %s" % troop_def.model)
 		return
 
-	# Lateral direction (perpendicular to sail direction) for side offset
-	var lateral = Vector3.UP.cross(sail_dir).normalized()
+	# Spawn position: right at inner edge of ShipPlane
+	var spawn_pos = ship_pos - sail_dir * (plane_extent_z * 0.8)
+	spawn_pos.y = ship_pos.y
+
+	# Get building Y level so troops can reach buildings
+	var building_y = spawn_pos.y
+	for bs in get_tree().get_nodes_in_group("building_systems"):
+		if "grid_y" in bs:
+			building_y = bs.grid_y
+			break
 
 	for i in troops_per_ship:
-		# Stagger spawning with a timer
 		var timer = get_tree().create_timer(troop_spawn_delay * i)
-		var idx = i
 		timer.timeout.connect(func():
 			var troop = model_res.instantiate()
 			troop.set_script(script_res)
@@ -194,13 +207,9 @@ func _deploy_troops_from_ship(ship_pos: Vector3, sail_dir: Vector3, ship_idx: in
 
 			get_tree().current_scene.add_child(troop)
 
-			# Spawn spread out: lateral offset + forward offset so they don't stack
-			var side_offset = lateral * (float(idx) - 2.0) * 0.2
-			var forward_offset = sail_dir * float(idx) * -0.15
-			troop.global_position = ship_pos + side_offset + forward_offset
-			troop.global_position.y = ship_pos.y
+			troop.global_position = spawn_pos
+			troop.global_position.y = building_y
 
-			# Activate immediately — troop finds nearest building
 			troop.visible = true
 			if troop.has_method("activate"):
 				troop.activate()
