@@ -1,3 +1,13 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Server
+server/node_modules/
+server/*.db
+server/*.db-wal
+server/*.db-shm
+
+# MCP
+.mcp.json
+addons/godot_mcp/

@@ -129,6 +129,22 @@ var building_panel_hp: Label
 var building_panel_hp_bar: ProgressBar
 var building_panel_cost: Label
 
+# ── Registration UI ──────────────────────────────────────────
+var register_panel: PanelContainer
+var register_name_input: LineEdit
+var register_status_label: Label
+var player_name_label: Label
+var trophy_label: Label
+
+# ── Enemy attack state ───────────────────────────────────────
+var is_viewing_enemy: bool = false
+var home_buildings_backup: Array[Dictionary] = []
+var home_grid_backup: Array[bool] = []
+var enemy_info: Dictionary = {}
+var return_button: Button
+var enemy_label: Label
+var find_button: Button
+
 # ── Barracks ──────────────────────────────────────────────────
 var barracks_panel: PanelContainer
 var barracks_vbox: VBoxContainer
@@ -202,6 +218,10 @@ func _ready() -> void:
 		_create_barracks_panel()
 	if always_show_grid:
 		_show_grid()
+	# Listen for server auth to load buildings (works for all grids)
+	var net = get_node_or_null("/root/Net")
+	if net:
+		net.auth_ok.connect(_on_server_auth_ok)
 
 
 func _process(_delta: float) -> void:
@@ -244,8 +264,8 @@ func _create_ui() -> void:
 	res_wrapper.anchor_right = 0.5
 	res_wrapper.anchor_top = 0.0
 	res_wrapper.anchor_bottom = 0.0
-	res_wrapper.offset_left = -350
-	res_wrapper.offset_right = 350
+	res_wrapper.offset_left = -420
+	res_wrapper.offset_right = 420
 	res_wrapper.offset_top = 10
 	res_wrapper.offset_bottom = 95
 	var wrapper_style = StyleBoxFlat.new()
@@ -273,12 +293,38 @@ func _create_ui() -> void:
 	res_bar.alignment = BoxContainer.ALIGNMENT_CENTER
 	res_wrapper.add_child(res_bar)
 
-	wood_label = _create_resource_label(res_bar, "Wood", resources.wood, Color(0.45, 0.7, 0.3))
 	gold_label = _create_resource_label(res_bar, "Gold", resources.gold, Color(0.9, 0.75, 0.2))
+	wood_label = _create_resource_label(res_bar, "Wood", resources.wood, Color(0.45, 0.7, 0.3))
 	ore_label = _create_resource_label(res_bar, "Ore", resources.ore, Color(0.6, 0.65, 0.7))
 
+	# ── Player name label (top left) ────────────────────────
+	player_name_label = Label.new()
+	player_name_label.anchor_left = 0.0
+	player_name_label.anchor_top = 0.0
+	player_name_label.offset_left = 20
+	player_name_label.offset_top = 20
+	player_name_label.add_theme_font_size_override("font_size", 20)
+	player_name_label.add_theme_color_override("font_color", Color(0.9, 0.85, 0.5))
+	canvas.add_child(player_name_label)
+
+	# ── Trophy label (below player name) ────────────────────
+	trophy_label = Label.new()
+	trophy_label.anchor_left = 0.0
+	trophy_label.anchor_top = 0.0
+	trophy_label.offset_left = 20
+	trophy_label.offset_top = 48
+	trophy_label.add_theme_font_size_override("font_size", 16)
+	trophy_label.add_theme_color_override("font_color", Color(0.85, 0.7, 0.2))
+	trophy_label.text = ""
+	canvas.add_child(trophy_label)
+
+	_update_player_name_label()
+
+	# ── Registration panel ──────────────────────────────────
+	_create_register_panel()
+
 	# ── Find button (bottom right, above Attack) ─────────────────
-	var find_button = Button.new()
+	find_button = Button.new()
 	find_button.text = "Find Enemy"
 	find_button.custom_minimum_size = Vector2(300, 120)
 	find_button.anchor_left = 1.0
@@ -514,6 +560,11 @@ func _style_button(btn: Button, normal_color: Color, hover_color: Color) -> void
 
 
 func _create_resource_label(parent: Control, res_name: String, amount: int, color: Color) -> Label:
+	var hbox = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 4)
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	parent.add_child(hbox)
+
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(160, 60)
 	var pstyle = StyleBoxFlat.new()
@@ -532,7 +583,7 @@ func _create_resource_label(parent: Control, res_name: String, amount: int, colo
 	pstyle.content_margin_top = 4
 	pstyle.content_margin_bottom = 4
 	panel.add_theme_stylebox_override("panel", pstyle)
-	parent.add_child(panel)
+	hbox.add_child(panel)
 
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 0)
@@ -554,6 +605,31 @@ func _create_resource_label(parent: Control, res_name: String, amount: int, colo
 	amount_lbl.add_theme_font_size_override("font_size", 28)
 	vbox.add_child(amount_lbl)
 
+	# ── "+" Button ──
+	var plus_btn = Button.new()
+	plus_btn.text = "+"
+	plus_btn.custom_minimum_size = Vector2(40, 40)
+	plus_btn.add_theme_font_size_override("font_size", 22)
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = color.darkened(0.3)
+	btn_style.set_border_width_all(2)
+	btn_style.border_color = color.darkened(0.1)
+	btn_style.set_corner_radius_all(8)
+	btn_style.content_margin_left = 4
+	btn_style.content_margin_right = 4
+	btn_style.content_margin_top = 2
+	btn_style.content_margin_bottom = 2
+	plus_btn.add_theme_stylebox_override("normal", btn_style)
+	var btn_hover = btn_style.duplicate()
+	btn_hover.bg_color = color.darkened(0.15)
+	plus_btn.add_theme_stylebox_override("hover", btn_hover)
+	var btn_pressed = btn_style.duplicate()
+	btn_pressed.bg_color = color.darkened(0.45)
+	plus_btn.add_theme_stylebox_override("pressed", btn_pressed)
+	plus_btn.add_theme_color_override("font_color", Color.WHITE)
+	plus_btn.pressed.connect(_on_add_resource.bind(res_name.to_lower()))
+	hbox.add_child(plus_btn)
+
 	return amount_lbl
 
 
@@ -564,6 +640,329 @@ func _update_resource_ui() -> void:
 		gold_label.text = str(resources.gold)
 	if ore_label:
 		ore_label.text = str(resources.ore)
+
+
+func _on_add_resource(res_name: String) -> void:
+	resources[res_name] += 1000
+	_update_resource_ui()
+	# Sync to server
+	var net = get_node_or_null("/root/Net")
+	if net and net.has_token():
+		var args = {"gold": 0, "wood": 0, "ore": 0}
+		args[res_name] = 1000
+		net.add_resources(args.gold, args.wood, args.ore)
+
+
+func _update_player_name_label() -> void:
+	if not player_name_label:
+		return
+	var net = get_node_or_null("/root/Net")
+	if net and net.display_name != "":
+		player_name_label.text = net.display_name
+		if trophy_label:
+			trophy_label.text = "Trophies: %d" % net.trophies
+	else:
+		player_name_label.text = ""
+		if trophy_label:
+			trophy_label.text = ""
+
+
+func _create_register_panel() -> void:
+	var net = get_node_or_null("/root/Net")
+	if net and net.has_token():
+		# Already registered — try to login and load state
+		_auto_login()
+		return
+
+	register_panel = PanelContainer.new()
+	register_panel.custom_minimum_size = Vector2(420, 220)
+	register_panel.anchor_left = 0.5
+	register_panel.anchor_right = 0.5
+	register_panel.anchor_top = 0.5
+	register_panel.anchor_bottom = 0.5
+	register_panel.offset_left = -210
+	register_panel.offset_right = 210
+	register_panel.offset_top = -110
+	register_panel.offset_bottom = 110
+
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.09, 0.14, 0.95)
+	style.set_border_width_all(2)
+	style.border_color = Color(0.4, 0.45, 0.6, 0.8)
+	style.set_corner_radius_all(14)
+	style.content_margin_left = 20
+	style.content_margin_right = 20
+	style.content_margin_top = 16
+	style.content_margin_bottom = 16
+	register_panel.add_theme_stylebox_override("panel", style)
+	canvas.add_child(register_panel)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	register_panel.add_child(vbox)
+
+	var title = Label.new()
+	title.text = "ENTER YOUR NAME"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(0.9, 0.85, 0.5))
+	vbox.add_child(title)
+
+	register_name_input = LineEdit.new()
+	register_name_input.placeholder_text = "Player name..."
+	register_name_input.custom_minimum_size = Vector2(0, 45)
+	register_name_input.add_theme_font_size_override("font_size", 20)
+	register_name_input.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	register_name_input.max_length = 20
+	vbox.add_child(register_name_input)
+
+	var btn = Button.new()
+	btn.text = "PLAY"
+	btn.custom_minimum_size = Vector2(0, 50)
+	btn.add_theme_font_size_override("font_size", 22)
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.15, 0.45, 0.25, 0.95)
+	btn_style.set_border_width_all(2)
+	btn_style.border_color = Color(0.2, 0.6, 0.3)
+	btn_style.set_corner_radius_all(10)
+	btn.add_theme_stylebox_override("normal", btn_style)
+	var btn_hover = btn_style.duplicate()
+	btn_hover.bg_color = Color(0.2, 0.55, 0.3, 0.95)
+	btn.add_theme_stylebox_override("hover", btn_hover)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+	btn.pressed.connect(_on_register_pressed)
+	vbox.add_child(btn)
+
+	register_status_label = Label.new()
+	register_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	register_status_label.add_theme_font_size_override("font_size", 14)
+	register_status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+	vbox.add_child(register_status_label)
+
+	# Also connect Enter key
+	register_name_input.text_submitted.connect(func(_t): _on_register_pressed())
+
+
+func _on_register_pressed() -> void:
+	var net = get_node_or_null("/root/Net")
+	if not net:
+		register_status_label.text = "Network not available (add Net autoload)"
+		return
+	var player_input_name = register_name_input.text.strip_edges()
+	if player_input_name.length() < 2:
+		register_status_label.text = "Name must be at least 2 characters"
+		return
+	register_status_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	register_status_label.text = "Connecting..."
+	var result = await net.register(player_input_name)
+	if result.has("error"):
+		register_status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+		register_status_label.text = str(result.error)
+		return
+	# Success — hide panel (state loaded via auth_ok signal)
+	register_panel.queue_free()
+	register_panel = null
+
+
+func _auto_login() -> void:
+	var net = get_node_or_null("/root/Net")
+	if not net:
+		return
+	var result = await net.login()
+	if not result.has("id"):
+		# Token invalid — show register panel
+		net.token = ""
+		_create_register_panel()
+
+
+func _apply_server_state(state: Dictionary) -> void:
+	if state.has("gold"):
+		resources.gold = state.gold
+	if state.has("wood"):
+		resources.wood = state.wood
+	if state.has("ore"):
+		resources.ore = state.ore
+	_update_resource_ui()
+	var net = get_node_or_null("/root/Net")
+	if net and state.has("trophies"):
+		net.trophies = state.trophies
+	_update_player_name_label()
+	# Load buildings from server
+	if state.has("buildings") and state.buildings is Array:
+		_load_buildings_from_server(state.buildings)
+	# Load troop levels from server
+	if state.has("troop_levels") and state.troop_levels is Array:
+		_load_troop_levels_from_server(state.troop_levels)
+
+
+func _load_buildings_from_server(server_buildings: Array) -> void:
+	var my_grid_index = _get_grid_index()
+	# Filter buildings for this grid
+	var my_buildings: Array = []
+	for b in server_buildings:
+		if b.get("grid_index", 0) == my_grid_index:
+			my_buildings.append(b)
+	if my_buildings.is_empty():
+		return
+	# Clear existing buildings first
+	_destroy_all_buildings()
+	for b in my_buildings:
+		var building_type: String = b["type"]
+		if not building_defs.has(building_type):
+			continue
+		if not _can_build_here(building_type):
+			continue
+		var def = building_defs[building_type]
+		var level: int = b.get("level", 1)
+		var hp: int = b.get("hp", _get_hp_for(def, level))
+		var max_hp: int = b.get("max_hp", hp)
+		var gp = Vector2i(b["grid_x"], b["grid_z"])
+		var server_id: int = b.get("id", -1)
+
+		# Mark grid cells as occupied
+		for x in range(def.cells.x):
+			for z in range(def.cells.y):
+				var cell_idx = (gp.y + z) * grid_width + (gp.x + x)
+				if cell_idx >= 0 and cell_idx < grid.size():
+					grid[cell_idx] = true
+
+		# Determine which scene to load (level-specific model)
+		var scene_path: String = def.get("scene", "")
+		if def.has("scenes"):
+			var scene_idx = clampi(level - 1, 0, def.scenes.size() - 1)
+			scene_path = def.scenes[scene_idx]
+
+		# Create the building node
+		var node = Node3D.new()
+		if building_type == "turret":
+			var turret_script = load("res://scripts/turret.gd")
+			if turret_script:
+				node.set_script(turret_script)
+		if scene_path != "":
+			var scene_res = load(scene_path)
+			if scene_res:
+				var model = scene_res.instantiate()
+				var s = def.get("model_scale", 0.2)
+				model.scale = Vector3(s, s, s)
+				node.add_child(model)
+
+		# Position on grid
+		var sx = def.cells.x * cell_size
+		var sz = def.cells.y * cell_size
+		var local_pos = _grid_to_local(gp)
+		local_pos.x += sx / 2.0
+		local_pos.z += sz / 2.0
+		local_pos.y = 0
+		node.position = local_pos
+		add_child(node)
+
+		# HP bar
+		var hp_bar_data = _create_building_hp_bar(node, def)
+
+		placed_buildings.append({
+			"id": building_type,
+			"grid_pos": gp,
+			"node": node,
+			"level": level,
+			"hp": hp,
+			"max_hp": max_hp,
+			"hp_bar": hp_bar_data.bar,
+			"hp_fill": hp_bar_data.fill,
+			"server_id": server_id,
+		})
+	print("Loaded %d buildings from server (grid %d)" % [my_buildings.size(), my_grid_index])
+
+
+func _load_troop_levels_from_server(server_troops: Array) -> void:
+	for t in server_troops:
+		var troop_type: String = t.get("troop_type", "")
+		var level: int = t.get("level", 1)
+		# Match server lowercase to local capitalized keys
+		var local_name = troop_type.capitalize()
+		if troop_levels.has(local_name):
+			troop_levels[local_name] = level
+			# Apply to troop node
+			var troop = get_tree().current_scene.find_child(local_name, true, false)
+			if troop and troop.has_method("upgrade_to"):
+				troop.upgrade_to(level)
+
+
+func _on_server_auth_ok(player_data: Dictionary) -> void:
+	# Apply full state from server (resources, buildings, troops)
+	if player_data.has("gold"):
+		resources.gold = player_data.gold
+	if player_data.has("wood"):
+		resources.wood = player_data.wood
+	if player_data.has("ore"):
+		resources.ore = player_data.ore
+	_update_resource_ui()
+	if player_data.has("buildings") and player_data.buildings is Array:
+		_load_buildings_from_server(player_data.buildings)
+	if player_data.has("troop_levels") and player_data.troop_levels is Array:
+		_load_troop_levels_from_server(player_data.troop_levels)
+	_update_player_name_label()
+
+
+func _get_grid_index() -> int:
+	var plane = get_node_or_null(grid_plane_path)
+	if plane and plane.name == "gridPlane2":
+		return 1
+	return 0
+
+
+func _sync_place_building(building_data: Dictionary, building_id: String, grid_pos: Vector2i) -> void:
+	var net = get_node_or_null("/root/Net")
+	if not net or not net.has_token():
+		return
+	var result = await net.place_building(building_id, grid_pos.x, grid_pos.y, _get_grid_index())
+	if result.has("id"):
+		building_data["server_id"] = result["id"]
+	if result.has("trophies"):
+		net.trophies = result["trophies"]
+		_update_player_name_label()
+	if result.has("resources"):
+		_apply_server_state(result["resources"])
+
+
+func _sync_upgrade_building(building_data: Dictionary) -> void:
+	var net = get_node_or_null("/root/Net")
+	if not net or not net.has_token():
+		return
+	var sid = building_data.get("server_id", -1)
+	if sid < 0:
+		return
+	var result = await net.upgrade_building(sid)
+	if result.has("trophies"):
+		net.trophies = result["trophies"]
+		_update_player_name_label()
+	if result.has("resources"):
+		_apply_server_state(result["resources"])
+
+
+func _sync_remove_building(building_data: Dictionary) -> void:
+	var net = get_node_or_null("/root/Net")
+	if not net or not net.has_token():
+		return
+	var sid = building_data.get("server_id", -1)
+	if sid < 0:
+		return
+	var result = await net.remove_building(sid)
+	if result.has("trophies"):
+		net.trophies = result["trophies"]
+		_update_player_name_label()
+
+
+func _sync_upgrade_troop(troop_name: String) -> void:
+	var net = get_node_or_null("/root/Net")
+	if not net or not net.has_token():
+		return
+	var result = await net.upgrade_troop(troop_name)
+	if result.has("trophies"):
+		net.trophies = result["trophies"]
+		_update_player_name_label()
+	if result.has("resources"):
+		_apply_server_state(result["resources"])
 
 
 func _toggle_shop() -> void:
@@ -830,7 +1229,7 @@ func _try_place_building() -> bool:
 	add_child(building)
 	var max_hp = _get_hp_for(def, 1)
 	var hp_bar_data = _create_building_hp_bar(building, def)
-	placed_buildings.append({
+	var building_data := {
 		"id": current_building_id,
 		"grid_pos": current_grid_pos,
 		"node": building,
@@ -839,7 +1238,12 @@ func _try_place_building() -> bool:
 		"max_hp": max_hp,
 		"hp_bar": hp_bar_data.bar,
 		"hp_fill": hp_bar_data.fill,
-	})
+		"server_id": -1,
+	}
+	placed_buildings.append(building_data)
+
+	# Sync to server
+	_sync_place_building(building_data, current_building_id, current_grid_pos)
 
 	return true
 
@@ -1006,6 +1410,9 @@ func _upgrade_selected() -> void:
 			model.scale = Vector3(s, s, s)
 			selected_building.node.add_child(model)
 
+	# Sync to server
+	_sync_upgrade_building(selected_building)
+
 
 func _update_upgrade_cost_label(def: Dictionary, current_level: int) -> void:
 	if not building_panel_cost:
@@ -1033,6 +1440,8 @@ func remove_building(b: Dictionary) -> void:
 	var idx = placed_buildings.find(b)
 	if idx < 0:
 		return
+	# Sync to server
+	_sync_remove_building(b)
 	var def = building_defs[b.id]
 	var gp = b.grid_pos as Vector2i
 	for x in range(def.cells.x):
@@ -1354,6 +1763,8 @@ func _upgrade_troop(troop_name: String) -> void:
 		troop.upgrade_to(next_lvl)
 	_update_resource_ui()
 	_refresh_barracks_panel()
+	# Sync to server
+	_sync_upgrade_troop(troop_name)
 
 
 func _on_attack_pressed() -> void:
@@ -1363,4 +1774,155 @@ func _on_attack_pressed() -> void:
 
 
 func _on_find_pressed() -> void:
-	print("Find pressed")
+	if is_viewing_enemy:
+		return
+	var net = get_node_or_null("/root/Net")
+	if not net or not net.has_token():
+		print("Not logged in")
+		return
+
+	# Disable button while searching
+	if find_button:
+		find_button.disabled = true
+		find_button.text = "Searching..."
+
+	var result = await net.find_enemy()
+
+	if find_button:
+		find_button.disabled = false
+		find_button.text = "Find Enemy"
+
+	if result.has("error"):
+		print("No enemy found: ", result.error)
+		return
+
+	enemy_info = result
+	_switch_to_enemy_island()
+
+
+func _switch_to_enemy_island() -> void:
+	is_viewing_enemy = true
+
+	# Backup home state
+	home_buildings_backup = placed_buildings.duplicate(true)
+	home_grid_backup = grid.duplicate()
+
+	# Clear current buildings visually (keep backup)
+	for b in placed_buildings:
+		if b.has("hp_bar") and is_instance_valid(b.hp_bar):
+			b.hp_bar.queue_free()
+		if is_instance_valid(b.node):
+			b.node.queue_free()
+	placed_buildings.clear()
+	grid.fill(false)
+
+	# Load enemy buildings
+	if enemy_info.has("buildings") and enemy_info.buildings is Array:
+		_load_buildings_from_server(enemy_info.buildings)
+
+	# Hide home UI, show enemy UI
+	if build_button:
+		build_button.visible = false
+	if find_button:
+		find_button.visible = false
+	if shop_panel:
+		shop_panel.visible = false
+	_deselect_building()
+
+	# Show enemy name label
+	enemy_label = Label.new()
+	enemy_label.text = "Attacking: %s  [%d trophies]" % [enemy_info.get("name", "???"), enemy_info.get("trophies", 0)]
+	enemy_label.anchor_left = 0.5
+	enemy_label.anchor_right = 0.5
+	enemy_label.anchor_top = 1.0
+	enemy_label.anchor_bottom = 1.0
+	enemy_label.offset_left = -200
+	enemy_label.offset_right = 200
+	enemy_label.offset_top = -50
+	enemy_label.offset_bottom = -20
+	enemy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	enemy_label.add_theme_font_size_override("font_size", 22)
+	enemy_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	canvas.add_child(enemy_label)
+
+	# Show return button
+	return_button = Button.new()
+	return_button.text = "Return Home"
+	return_button.custom_minimum_size = Vector2(300, 120)
+	return_button.anchor_left = 1.0
+	return_button.anchor_right = 1.0
+	return_button.anchor_top = 1.0
+	return_button.anchor_bottom = 1.0
+	return_button.offset_left = -320
+	return_button.offset_right = -20
+	return_button.offset_top = -140
+	return_button.offset_bottom = -20
+	_style_button(return_button, Color(0.5, 0.35, 0.1), Color(0.6, 0.45, 0.15))
+	return_button.pressed.connect(_return_home)
+	canvas.add_child(return_button)
+
+	# Auto enter attack mode
+	var attack_system = get_node_or_null("../AttackSystem")
+	if attack_system and attack_system.has_method("enter_attack_mode"):
+		attack_system.enter_attack_mode()
+
+
+func _return_home() -> void:
+	if not is_viewing_enemy:
+		return
+	is_viewing_enemy = false
+
+	# Kill all spawned troops
+	for troop in get_tree().get_nodes_in_group("troops"):
+		if is_instance_valid(troop):
+			troop.queue_free()
+
+	# Exit attack mode
+	var attack_system = get_node_or_null("../AttackSystem")
+	if attack_system and attack_system.has_method("exit_attack_mode"):
+		attack_system.exit_attack_mode()
+
+	# Clear enemy buildings
+	for b in placed_buildings:
+		if b.has("hp_bar") and is_instance_valid(b.hp_bar):
+			b.hp_bar.queue_free()
+		if is_instance_valid(b.node):
+			b.node.queue_free()
+	placed_buildings.clear()
+	grid.fill(false)
+
+	# Restore home buildings
+	# We need to reload from server since backup has freed nodes
+	var net = get_node_or_null("/root/Net")
+	if net and net.has_token():
+		var state = await net.login()
+		if state.has("buildings") and state.buildings is Array:
+			_load_buildings_from_server(state.buildings)
+		if state.has("gold"):
+			resources.gold = state.gold
+		if state.has("wood"):
+			resources.wood = state.wood
+		if state.has("ore"):
+			resources.ore = state.ore
+		_update_resource_ui()
+		if state.has("trophies"):
+			net.trophies = state.trophies
+		_update_player_name_label()
+
+	# Restore home UI
+	if build_button:
+		build_button.visible = true
+	if find_button:
+		find_button.visible = true
+	if attack_button:
+		attack_button.visible = true
+
+	# Clean up enemy UI
+	if enemy_label and is_instance_valid(enemy_label):
+		enemy_label.queue_free()
+		enemy_label = null
+	if return_button and is_instance_valid(return_button):
+		return_button.queue_free()
+		return_button = null
+
+	enemy_info = {}

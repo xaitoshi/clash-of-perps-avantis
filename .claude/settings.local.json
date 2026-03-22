@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__godot__get_project_info",
+      "mcp__godot__get_current_scene"
+    ]
+  }
+}
