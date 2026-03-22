@@ -916,13 +916,20 @@ func _sync_place_building(building_data: Dictionary, building_id: String, grid_p
 	if not net or not net.has_token():
 		return
 	var result = await net.place_building(building_id, grid_pos.x, grid_pos.y, _get_grid_index())
+	if result.has("error"):
+		print("Server rejected building: ", result.error)
+		return
 	if result.has("id"):
 		building_data["server_id"] = result["id"]
 	if result.has("trophies"):
 		net.trophies = result["trophies"]
 		_update_player_name_label()
 	if result.has("resources"):
-		_apply_server_state(result["resources"])
+		var res = result["resources"]
+		resources.gold = res.gold
+		resources.wood = res.wood
+		resources.ore = res.ore
+		_update_resource_ui()
 
 
 func _sync_upgrade_building(building_data: Dictionary) -> void:
@@ -933,11 +940,18 @@ func _sync_upgrade_building(building_data: Dictionary) -> void:
 	if sid < 0:
 		return
 	var result = await net.upgrade_building(sid)
+	if result.has("error"):
+		print("Server rejected upgrade: ", result.error)
+		return
 	if result.has("trophies"):
 		net.trophies = result["trophies"]
 		_update_player_name_label()
 	if result.has("resources"):
-		_apply_server_state(result["resources"])
+		var res = result["resources"]
+		resources.gold = res.gold
+		resources.wood = res.wood
+		resources.ore = res.ore
+		_update_resource_ui()
 
 
 func _sync_remove_building(building_data: Dictionary) -> void:
@@ -958,11 +972,18 @@ func _sync_upgrade_troop(troop_name: String) -> void:
 	if not net or not net.has_token():
 		return
 	var result = await net.upgrade_troop(troop_name)
+	if result.has("error"):
+		print("Server rejected troop upgrade: ", result.error)
+		return
 	if result.has("trophies"):
 		net.trophies = result["trophies"]
 		_update_player_name_label()
 	if result.has("resources"):
-		_apply_server_state(result["resources"])
+		var res = result["resources"]
+		resources.gold = res.gold
+		resources.wood = res.wood
+		resources.ore = res.ore
+		_update_resource_ui()
 
 
 func _toggle_shop() -> void:
@@ -1199,18 +1220,7 @@ func _try_place_building() -> bool:
 			print("Max %s limit reached (%d)" % [def.name, def.max_count])
 			return false
 
-	# Check and deduct building cost
-	var cost: Dictionary = def.get("cost", {})
-	print("Placing %s, cost: %s, resources before: %s" % [def.name, cost, resources])
-	for res_name in cost:
-		if resources.get(res_name, 0) < cost[res_name]:
-			print("Not enough %s! Need %d, have %d" % [res_name, cost[res_name], resources.get(res_name, 0)])
-			return false
-	for res_name in cost:
-		resources[res_name] -= cost[res_name]
-	print("Resources after: %s" % [resources])
-	_update_resource_ui()
-
+	# Resources are checked and deducted by the server
 	for x in range(def.cells.x):
 		for z in range(def.cells.y):
 			var idx = (current_grid_pos.y + z) * grid_width + (current_grid_pos.x + x)
@@ -1371,17 +1381,7 @@ func _upgrade_selected() -> void:
 	var max_level = def.hp_levels.size() if def.has("hp_levels") else 3
 	if level >= max_level:
 		return
-	# Check and deduct upgrade cost (same as build cost per level)
-	var cost: Dictionary = def.get("cost", {})
-	var multiplier = level + 1
-	for res_name in cost:
-		var needed = cost[res_name] * multiplier
-		if resources.get(res_name, 0) < needed:
-			print("Not enough %s for upgrade! Need %d, have %d" % [res_name, needed, resources.get(res_name, 0)])
-			return
-	for res_name in cost:
-		resources[res_name] -= cost[res_name] * multiplier
-	_update_resource_ui()
+	# Resources are checked and deducted by the server
 	selected_building["level"] = level + 1
 	var new_max_hp = _get_hp_for(def, selected_building.level)
 	selected_building["max_hp"] = new_max_hp
@@ -1750,12 +1750,7 @@ func _upgrade_troop(troop_name: String) -> void:
 	if lvl >= 3:
 		return
 	var next_lvl = lvl + 1
-	var costs = troop_defs[troop_name].costs[next_lvl]
-	if not _can_afford(costs):
-		return
-	# Deduct resources
-	for res_name in costs:
-		resources[res_name] -= costs[res_name]
+	# Resources are checked and deducted by the server
 	troop_levels[troop_name] = next_lvl
 	# Apply to troop node
 	var troop = get_tree().current_scene.find_child(troop_name, true, false)
