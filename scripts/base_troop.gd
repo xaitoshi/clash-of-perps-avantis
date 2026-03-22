@@ -153,10 +153,14 @@ func _create_hp_bar() -> void:
 func _update_hp_bar() -> void:
 	if not _hp_bar or not _hp_fill:
 		return
-	_hp_bar.global_position = global_position + Vector3(0, 0.18, 0)
+	_hp_bar.global_position = global_position + Vector3(0, 0.25, 0)
 	var cam = get_viewport().get_camera_3d()
 	if cam:
-		_hp_bar.global_transform.basis = cam.global_transform.basis
+		var cam_pos = cam.global_position
+		var bar_pos = _hp_bar.global_position
+		var dir = Vector3(cam_pos.x - bar_pos.x, 0, cam_pos.z - bar_pos.z).normalized()
+		if dir.length_squared() > 0.001:
+			_hp_bar.global_transform.basis = Basis.looking_at(-dir, Vector3.UP)
 	var ratio = clamp(float(hp) / float(max_hp), 0.0, 1.0)
 	var fill_w = HP_BAR_W * ratio
 	(_hp_fill.mesh as QuadMesh).size.x = fill_w

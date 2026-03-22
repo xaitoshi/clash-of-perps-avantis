@@ -635,6 +635,16 @@ func _create_resource_label(parent: Control, res_name: String, amount: int, colo
 	return amount_lbl
 
 
+func _apply_resources_from_server(res: Dictionary) -> void:
+	if res.has("gold"):
+		resources.gold = res.gold
+	if res.has("wood"):
+		resources.wood = res.wood
+	if res.has("ore"):
+		resources.ore = res.ore
+	_update_resource_ui()
+
+
 func _update_resource_ui() -> void:
 	if wood_label:
 		wood_label.text = str(resources.wood)
@@ -645,14 +655,16 @@ func _update_resource_ui() -> void:
 
 
 func _on_add_resource(res_name: String) -> void:
-	resources[res_name] += 1000
-	_update_resource_ui()
-	# Sync to server
 	var net = get_node_or_null("/root/Net")
 	if net and net.has_token():
 		var args = {"gold": 0, "wood": 0, "ore": 0}
 		args[res_name] = 1000
-		net.add_resources(args.gold, args.wood, args.ore)
+		var result = await net.add_resources(args.gold, args.wood, args.ore)
+		if not result.has("error"):
+			_apply_resources_from_server(result)
+	else:
+		resources[res_name] += 1000
+		_update_resource_ui()
 
 
 func _update_player_name_label() -> void:
@@ -779,13 +791,7 @@ func _auto_login() -> void:
 
 
 func _apply_server_state(state: Dictionary) -> void:
-	if state.has("gold"):
-		resources.gold = state.gold
-	if state.has("wood"):
-		resources.wood = state.wood
-	if state.has("ore"):
-		resources.ore = state.ore
-	_update_resource_ui()
+	_apply_resources_from_server(state)
 	var net = get_node_or_null("/root/Net")
 	if net and state.has("trophies"):
 		net.trophies = state.trophies
@@ -1215,11 +1221,7 @@ func _request_place_building(building_id: String, grid_pos: Vector2i, def: Dicti
 		net.trophies = result["trophies"]
 		_update_player_name_label()
 	if result.has("resources"):
-		var res = result["resources"]
-		resources.gold = res.gold
-		resources.wood = res.wood
-		resources.ore = res.ore
-		_update_resource_ui()
+		_apply_resources_from_server(result["resources"])
 
 
 func _spawn_building_locally(building_id: String, grid_pos: Vector2i, def: Dictionary, server_id: int) -> void:
@@ -1549,8 +1551,9 @@ func _create_building_hp_bar(building: Node3D, def: Dictionary) -> Dictionary:
 	fill.material_override = _make_bldg_hp_mat(Color(0.1, 0.85, 0.1, 0.9), Vector2(BLDG_BAR_W, BLDG_BAR_H), 11)
 	fill.position.z = -0.001
 	bar.add_child(fill)
-	var height = def.get("height", 0.3)
-	bar.global_position = building.global_position + Vector3(0, height + 0.05, 0)
+	var model_scale = def.get("model_scale", 0.2)
+	var bar_height = model_scale * 1.5 + 0.05
+	bar.global_position = building.global_position + Vector3(0, bar_height, 0)
 	return {"bar": bar, "fill": fill}
 
 
@@ -1562,10 +1565,14 @@ func _update_building_hp_bars() -> void:
 		if not is_instance_valid(b.node):
 			continue
 		var def = building_defs.get(b.id, {})
-		var height = def.get("height", 0.3)
-		b.hp_bar.global_position = b.node.global_position + Vector3(0, height + 0.05, 0)
+		var model_scale = def.get("model_scale", 0.2)
+		var bar_height = model_scale * 1.5 + 0.05
+		b.hp_bar.global_position = b.node.global_position + Vector3(0, bar_height, 0)
 		if cam:
-			b.hp_bar.global_transform.basis = cam.global_transform.basis
+			var cam_pos = cam.global_position
+			var bar_pos = b.hp_bar.global_position
+			var dir = Vector3(cam_pos.x - bar_pos.x, 0, cam_pos.z - bar_pos.z).normalized()
+			b.hp_bar.global_transform.basis = Basis.looking_at(-dir, Vector3.UP)
 		var ratio = clamp(float(b.hp) / float(b.max_hp), 0.0, 1.0)
 		var fill_w = BLDG_BAR_W * ratio
 		(b.hp_fill.mesh as QuadMesh).size.x = fill_w
@@ -1978,13 +1985,7 @@ func _return_home() -> void:
 		if state.has("buildings") and state.buildings is Array:
 			for bs in get_tree().get_nodes_in_group("building_systems"):
 				bs._load_buildings_from_server(state.buildings)
-		if state.has("gold"):
-			resources.gold = state.gold
-		if state.has("wood"):
-			resources.wood = state.wood
-		if state.has("ore"):
-			resources.ore = state.ore
-		_update_resource_ui()
+		_apply_resources_from_server(state)
 		if state.has("trophies"):
 			net.trophies = state.trophies
 		_update_player_name_label()
