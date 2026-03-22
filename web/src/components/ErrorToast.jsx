@@ -1,0 +1,26 @@
+export default function ErrorToast({ message }) {
+  if (!message) return null;
+
+  return (
+    <div style={styles.toast}>{message}</div>
+  );
+}
+
+const styles = {
+  toast: {
+    position: 'fixed',
+    top: 80,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'rgba(200, 40, 40, 0.92)',
+    color: '#fff',
+    padding: '10px 24px',
+    borderRadius: 10,
+    fontSize: 15,
+    fontWeight: 600,
+    zIndex: 25,
+    pointerEvents: 'none',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+    animation: 'fadeIn 0.2s ease',
+  },
+};

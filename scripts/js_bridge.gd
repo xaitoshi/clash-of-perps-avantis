@@ -1,0 +1,174 @@
+extends Node
+## Autoload "Bridge" — communicates between Godot and React via JavaScriptBridge.
+## Works only in web export. Silently ignored in editor/native builds.
+
+signal react_message(action: String, data: Dictionary)
+
+var _callbacks: Dictionary = {}
+var _is_web: bool = false
+
+func _ready() -> void:
+	_is_web = OS.has_feature("web")
+	if not _is_web:
+		return
+
+	var cb = JavaScriptBridge.create_callback(_on_react_call)
+	_callbacks["_on_react_call"] = cb
+	JavaScriptBridge.get_interface("window").set("godotBridge", cb)
+
+	await get_tree().create_timer(0.5).timeout
+	_send_initial_state()
+
+
+func send_to_react(action: String, data: Dictionary) -> void:
+	if not _is_web:
+		return
+	var payload = JSON.stringify({"action": action, "data": data})
+	JavaScriptBridge.eval("window.onGodotMessage && window.onGodotMessage(%s)" % payload)
+
+
+func _send_initial_state() -> void:
+	send_to_react("godot_ready", {})
+	# Send building/troop definitions so React can render shop & barracks
+	var bs = _get_building_system()
+	if bs:
+		var defs := {}
+		for key in bs.building_defs:
+			var d = bs.building_defs[key]
+			defs[key] = {
+				"name": d.name,
+				"cells": [d.cells.x, d.cells.y],
+				"cost": d.get("cost", {}),
+				"hp_levels": d.get("hp_levels", []),
+				"max_count": d.get("max_count", 0),
+			}
+		var troop_defs := {}
+		for key in bs.troop_defs:
+			var td = bs.troop_defs[key]
+			troop_defs[key] = {"display": td.display, "costs": {}}
+			for lvl in td.costs:
+				troop_defs[key].costs[str(lvl)] = td.costs[lvl]
+		send_to_react("building_defs", {"buildings": defs, "troops": troop_defs})
+		send_to_react("resources", {
+			"gold": bs.resources.gold,
+			"wood": bs.resources.wood,
+			"ore": bs.resources.ore,
+		})
+		send_to_react("troop_levels", bs.troop_levels)
+	# Check if need to register
+	var net = get_node_or_null("/root/Net")
+	if net and not net.has_token():
+		send_to_react("show_register", {})
+	elif net:
+		send_to_react("state", {
+			"player_name": net.display_name,
+			"trophies": net.trophies,
+			"player_id": net.player_id,
+		})
+
+
+func _on_react_call(args: Array) -> void:
+	if args.size() == 0:
+		return
+	var json = JSON.new()
+	if json.parse(str(args[0])) != OK:
+		return
+	var msg = json.data
+	if msg is Dictionary and msg.has("action"):
+		react_message.emit(msg.action, msg.get("data", {}))
+		_handle_react_action(msg.action, msg.get("data", {}))
+
+
+func _handle_react_action(action: String, data: Dictionary) -> void:
+	var bs = _get_building_system()
+	match action:
+		"get_state":
+			_send_full_state()
+		"add_resources":
+			if bs:
+				bs._on_add_resource(data.get("resource", "gold"))
+		"open_shop":
+			if bs:
+				send_to_react("shop_toggled", {"open": true})
+		"close_shop":
+			send_to_react("shop_toggled", {"open": false})
+		"start_placement":
+			if bs:
+				var bid = data.get("building_id", "")
+				bs._start_placement(bid)
+				send_to_react("shop_toggled", {"open": false})
+				send_to_react("placement_started", {"building_id": bid})
+		"find_enemy":
+			if bs:
+				bs._on_find_pressed()
+		"attack":
+			if bs:
+				bs._on_attack_pressed()
+		"return_home":
+			if bs:
+				bs._return_home()
+		"upgrade_building":
+			if bs:
+				bs._upgrade_selected()
+		"upgrade_troop":
+			if bs:
+				var tn = data.get("troop_name", "")
+				bs._upgrade_troop(tn)
+		"register":
+			_do_register(data.get("name", ""))
+		"deselect_building":
+			if bs:
+				bs._deselect_building()
+
+
+func _do_register(player_name: String) -> void:
+	var net = get_node_or_null("/root/Net")
+	if not net:
+		send_to_react("error", {"message": "Network not available"})
+		return
+	if player_name.length() < 2:
+		send_to_react("error", {"message": "Name must be at least 2 characters"})
+		return
+	var result = await net.register(player_name)
+	if result.has("error"):
+		send_to_react("error", {"message": str(result.error)})
+		return
+	send_to_react("registered", {"success": true})
+	send_to_react("state", {
+		"player_name": net.display_name,
+		"trophies": net.trophies,
+		"player_id": net.player_id,
+	})
+
+
+func _send_full_state() -> void:
+	var net = get_node_or_null("/root/Net")
+	if net and net.display_name != "":
+		send_to_react("state", {
+			"player_name": net.display_name,
+			"trophies": net.trophies,
+			"player_id": net.player_id,
+		})
+	var bs = _get_building_system()
+	if bs:
+		send_to_react("resources", {
+			"gold": bs.resources.gold,
+			"wood": bs.resources.wood,
+			"ore": bs.resources.ore,
+		})
+		send_to_react("troop_levels", bs.troop_levels)
+
+
+func _get_building_system() -> Node:
+	var systems = get_tree().get_nodes_in_group("building_systems")
+	# Find the main grid (not the port grid)
+	for s in systems:
+		if s.name == "BuildingSystem":
+			return s
+	# Fallback: return first with blocked_buildings (main grid blocks port)
+	for s in systems:
+		if s.blocked_buildings.size() > 0:
+			return s
+	if systems.size() > 0:
+		return systems[0]
+	return null

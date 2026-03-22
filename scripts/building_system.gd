@@ -215,15 +215,20 @@ func _ready() -> void:
 		blocked_buildings = PackedStringArray(["port"])
 	if create_ui:
 		_create_ui()
-	_create_building_panel()
-	if create_ui:
+		_create_building_panel()
 		_create_barracks_panel()
+		# In web builds — hide Godot UI, React renders its own
+		if OS.has_feature("web") and canvas:
+			canvas.visible = false
 	if always_show_grid:
 		_show_grid()
 	# Listen for server auth to load buildings (works for all grids)
 	var net = get_node_or_null("/root/Net")
 	if net:
 		net.auth_ok.connect(_on_server_auth_ok)
+	# Auto-login (always, not just when UI is created)
+	if net and net.has_token():
+		_auto_login()
 
 
 func _process(_delta: float) -> void:
@@ -652,6 +657,12 @@ func _update_resource_ui() -> void:
 		gold_label.text = str(resources.gold)
 	if ore_label:
 		ore_label.text = str(resources.ore)
+	# Send to React
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("resources", {
+			"gold": resources.gold, "wood": resources.wood, "ore": resources.ore,
+		})
 
 
 func _on_add_resource(res_name: String) -> void:
@@ -672,11 +683,20 @@ func _update_player_name_label() -> void:
 		return
 	var net = get_node_or_null("/root/Net")
 	if net and net.display_name != "":
-		player_name_label.text = net.display_name
+		if player_name_label:
+			player_name_label.text = net.display_name
 		if trophy_label:
 			trophy_label.text = "Trophies: %d" % net.trophies
+		var bridge = get_node_or_null("/root/Bridge")
+		if bridge:
+			bridge.send_to_react("state", {
+				"player_name": net.display_name,
+				"trophies": net.trophies,
+				"player_id": net.player_id,
+			})
 	else:
-		player_name_label.text = ""
+		if player_name_label:
+			player_name_label.text = ""
 		if trophy_label:
 			trophy_label.text = ""
 
@@ -785,9 +805,13 @@ func _auto_login() -> void:
 		return
 	var result = await net.login()
 	if not result.has("id"):
-		# Token invalid — show register panel
+		# Token invalid
 		net.token = ""
-		_create_register_panel()
+		if create_ui:
+			_create_register_panel()
+		var bridge = get_node_or_null("/root/Bridge")
+		if bridge:
+			bridge.send_to_react("show_register", {})
 
 
 func _apply_server_state(state: Dictionary) -> void:
@@ -913,6 +937,9 @@ func _on_server_auth_ok(player_data: Dictionary) -> void:
 
 
 func _show_error(msg: String) -> void:
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("error", {"message": msg})
 	if not canvas:
 		return
 	var lbl = Label.new()
@@ -1079,8 +1106,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			var gp = _local_to_grid(local_hit)
 			var found = _find_building_at(gp)
 			if found.size() > 0:
+				# Deselect on all other building systems first
+				for bs in get_tree().get_nodes_in_group("building_systems"):
+					if bs != self:
+						bs.selected_building = {}
 				_select_building(found)
-			else:
+				get_viewport().set_input_as_handled()
+			elif _is_in_grid(local_hit):
 				_deselect_building()
 
 
@@ -1338,12 +1370,29 @@ func _find_building_at(gp: Vector2i) -> Dictionary:
 func _select_building(b: Dictionary) -> void:
 	selected_building = b
 	var def = building_defs[b.id]
+	var level = b.get("level", 1)
+	var hp = b.get("hp", _get_hp_for(def, level))
+	var max_hp = b.get("max_hp", hp)
+	var max_level = def.hp_levels.size() if def.has("hp_levels") else 3
+	# Send to React
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		var cost = def.get("cost", {})
+		var multiplier = level + 1
+		var upgrade_cost := {}
+		if level < max_level:
+			for res_name in cost:
+				upgrade_cost[res_name] = cost[res_name] * multiplier
+		bridge.send_to_react("building_selected", {
+			"id": b.id, "name": def.name, "level": level,
+			"hp": hp, "max_hp": max_hp, "max_level": max_level,
+			"upgrade_cost": upgrade_cost,
+			"is_enemy": is_viewing_enemy,
+			"is_sawmill": b.id == "sawmill",
+		})
 
 	# When viewing enemy — only show HP info, no upgrade/barracks
 	if is_viewing_enemy:
-		var level = b.get("level", 1)
-		var hp = b.get("hp", _get_hp_for(def, level))
-		var max_hp = b.get("max_hp", hp)
 		if building_panel_title:
 			building_panel_title.text = "%s (Lv. %d)" % [def.name, level]
 		if building_panel_hp:
@@ -1370,9 +1419,6 @@ func _select_building(b: Dictionary) -> void:
 			cam.zoom_blocked = true
 		return
 
-	var level = b.get("level", 1)
-	var hp = b.get("hp", _get_hp_for(def, level))
-	var max_hp = b.get("max_hp", hp)
 	if building_panel_title:
 		building_panel_title.text = "%s (Lv. %d)" % [def.name, level]
 	if building_panel_hp:
@@ -1391,6 +1437,9 @@ func _select_building(b: Dictionary) -> void:
 
 func _deselect_building() -> void:
 	selected_building = {}
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("building_deselected", {})
 	if building_panel:
 		building_panel.visible = false
 	if barracks_panel:
@@ -1839,6 +1888,9 @@ func _upgrade_troop(troop_name: String) -> void:
 	if troop and troop.has_method("upgrade_to"):
 		troop.upgrade_to(next_lvl)
 	_refresh_barracks_panel()
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("troop_levels", troop_levels)
 
 
 func _on_attack_pressed() -> void:
@@ -1890,6 +1942,13 @@ func _get_or_create_cloud() -> Node:
 
 func _switch_to_enemy_island() -> void:
 	is_viewing_enemy = true
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("enemy_mode", {
+			"active": true,
+			"name": enemy_info.get("name", "???"),
+			"trophies": enemy_info.get("trophies", 0),
+		})
 
 	# Cloud close animation
 	var cloud = _get_or_create_cloud()
@@ -1914,37 +1973,38 @@ func _switch_to_enemy_island() -> void:
 		shop_panel.visible = false
 	_deselect_building()
 
-	# Show enemy name label
-	enemy_label = Label.new()
-	enemy_label.text = "Attacking: %s  [%d trophies]" % [enemy_info.get("name", "???"), enemy_info.get("trophies", 0)]
-	enemy_label.anchor_left = 0.5
-	enemy_label.anchor_right = 0.5
-	enemy_label.anchor_top = 1.0
-	enemy_label.anchor_bottom = 1.0
-	enemy_label.offset_left = -200
-	enemy_label.offset_right = 200
-	enemy_label.offset_top = -50
-	enemy_label.offset_bottom = -20
-	enemy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	enemy_label.add_theme_font_size_override("font_size", 22)
-	enemy_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
-	canvas.add_child(enemy_label)
+	if canvas:
+		# Show enemy name label
+		enemy_label = Label.new()
+		enemy_label.text = "Attacking: %s  [%d trophies]" % [enemy_info.get("name", "???"), enemy_info.get("trophies", 0)]
+		enemy_label.anchor_left = 0.5
+		enemy_label.anchor_right = 0.5
+		enemy_label.anchor_top = 1.0
+		enemy_label.anchor_bottom = 1.0
+		enemy_label.offset_left = -200
+		enemy_label.offset_right = 200
+		enemy_label.offset_top = -50
+		enemy_label.offset_bottom = -20
+		enemy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		enemy_label.add_theme_font_size_override("font_size", 22)
+		enemy_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+		canvas.add_child(enemy_label)
 
-	# Show return button
-	return_button = Button.new()
-	return_button.text = "Return Home"
-	return_button.custom_minimum_size = Vector2(300, 120)
-	return_button.anchor_left = 1.0
-	return_button.anchor_right = 1.0
-	return_button.anchor_top = 1.0
-	return_button.anchor_bottom = 1.0
-	return_button.offset_left = -320
-	return_button.offset_right = -20
-	return_button.offset_top = -140
-	return_button.offset_bottom = -20
-	_style_button(return_button, Color(0.5, 0.35, 0.1), Color(0.6, 0.45, 0.15))
-	return_button.pressed.connect(_return_home)
-	canvas.add_child(return_button)
+		# Show return button
+		return_button = Button.new()
+		return_button.text = "Return Home"
+		return_button.custom_minimum_size = Vector2(300, 120)
+		return_button.anchor_left = 1.0
+		return_button.anchor_right = 1.0
+		return_button.anchor_top = 1.0
+		return_button.anchor_bottom = 1.0
+		return_button.offset_left = -320
+		return_button.offset_right = -20
+		return_button.offset_top = -140
+		return_button.offset_bottom = -20
+		_style_button(return_button, Color(0.5, 0.35, 0.1), Color(0.6, 0.45, 0.15))
+		return_button.pressed.connect(_return_home)
+		canvas.add_child(return_button)
 
 	# Cloud reveal animation
 	cloud.reveal()
@@ -1960,6 +2020,9 @@ func _return_home() -> void:
 	if not is_viewing_enemy:
 		return
 	is_viewing_enemy = false
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("enemy_mode", {"active": false})
 
 	# Kill all spawned troops and ships
 	for troop in get_tree().get_nodes_in_group("troops"):
