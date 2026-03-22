@@ -179,4 +179,40 @@ router.get('/state', auth, (req, res) => {
   res.json(state);
 });
 
+// ==================== ADMIN ====================
+
+// List all players
+router.get('/admin/players', (req, res) => {
+  const players = db.db.prepare('SELECT id, name, trophies, level, gold, wood, ore, created_at FROM players ORDER BY trophies DESC').all();
+  res.json(players);
+});
+
+// Delete a player by name
+router.delete('/admin/players/:name', (req, res) => {
+  const player = db.db.prepare('SELECT id FROM players WHERE name = ?').get(req.params.name);
+  if (!player) return res.status(404).json({ error: 'Player not found' });
+  db.db.prepare('DELETE FROM buildings WHERE player_id = ?').run(player.id);
+  db.db.prepare('DELETE FROM troop_levels WHERE player_id = ?').run(player.id);
+  db.db.prepare('DELETE FROM players WHERE id = ?').run(player.id);
+  res.json({ deleted: req.params.name });
+});
+
+// Reset a player (keep account, clear buildings & reset resources)
+router.post('/admin/players/:name/reset', (req, res) => {
+  const player = db.db.prepare('SELECT id FROM players WHERE name = ?').get(req.params.name);
+  if (!player) return res.status(404).json({ error: 'Player not found' });
+  db.db.prepare('DELETE FROM buildings WHERE player_id = ?').run(player.id);
+  db.db.prepare('UPDATE players SET gold = 10000, wood = 10000, ore = 10000, trophies = 0 WHERE id = ?').run(player.id);
+  db.db.prepare('UPDATE troop_levels SET level = 1 WHERE player_id = ?').run(player.id);
+  res.json({ reset: req.params.name });
+});
+
+// Wipe entire database
+router.post('/admin/wipe', (req, res) => {
+  db.db.prepare('DELETE FROM buildings').run();
+  db.db.prepare('DELETE FROM troop_levels').run();
+  db.db.prepare('DELETE FROM players').run();
+  res.json({ wiped: true });
+});
+
 module.exports = { router, auth };
