@@ -933,51 +933,6 @@ func _get_grid_index() -> int:
 	return 0
 
 
-func _sync_place_building(building_data: Dictionary, building_id: String, grid_pos: Vector2i) -> void:
-	var net = get_node_or_null("/root/Net")
-	if not net or not net.has_token():
-		return
-	var result = await net.place_building(building_id, grid_pos.x, grid_pos.y, _get_grid_index())
-	if result.has("error"):
-		_show_error(str(result.error))
-		# Rollback local placement
-		remove_building(building_data)
-		return
-	if result.has("id"):
-		building_data["server_id"] = result["id"]
-	if result.has("trophies"):
-		net.trophies = result["trophies"]
-		_update_player_name_label()
-	if result.has("resources"):
-		var res = result["resources"]
-		resources.gold = res.gold
-		resources.wood = res.wood
-		resources.ore = res.ore
-		_update_resource_ui()
-
-
-func _sync_upgrade_building(building_data: Dictionary) -> void:
-	var net = get_node_or_null("/root/Net")
-	if not net or not net.has_token():
-		return
-	var sid = building_data.get("server_id", -1)
-	if sid < 0:
-		return
-	var result = await net.upgrade_building(sid)
-	if result.has("error"):
-		_show_error(str(result.error))
-		return
-	if result.has("trophies"):
-		net.trophies = result["trophies"]
-		_update_player_name_label()
-	if result.has("resources"):
-		var res = result["resources"]
-		resources.gold = res.gold
-		resources.wood = res.wood
-		resources.ore = res.ore
-		_update_resource_ui()
-
-
 func _sync_remove_building(building_data: Dictionary) -> void:
 	var net = get_node_or_null("/root/Net")
 	if not net or not net.has_token():
@@ -991,23 +946,6 @@ func _sync_remove_building(building_data: Dictionary) -> void:
 		_update_player_name_label()
 
 
-func _sync_upgrade_troop(troop_name: String) -> void:
-	var net = get_node_or_null("/root/Net")
-	if not net or not net.has_token():
-		return
-	var result = await net.upgrade_troop(troop_name)
-	if result.has("error"):
-		_show_error(str(result.error))
-		return
-	if result.has("trophies"):
-		net.trophies = result["trophies"]
-		_update_player_name_label()
-	if result.has("resources"):
-		var res = result["resources"]
-		resources.gold = res.gold
-		resources.wood = res.wood
-		resources.ore = res.ore
-		_update_resource_ui()
 
 
 func _toggle_shop() -> void:
@@ -1244,17 +1182,58 @@ func _try_place_building() -> bool:
 			print("Max %s limit reached (%d)" % [def.name, def.max_count])
 			return false
 
-	# Resources are checked and deducted by the server
+	# Save placement params before async call
+	var place_id = current_building_id
+	var place_pos = current_grid_pos
+	var place_def = def
+
+	# Ask server first
+	_request_place_building(place_id, place_pos, place_def)
+	return true
+
+
+func _request_place_building(building_id: String, grid_pos: Vector2i, def: Dictionary) -> void:
+	var net = get_node_or_null("/root/Net")
+	if not net or not net.has_token():
+		_spawn_building_locally(building_id, grid_pos, def, -1)
+		return
+
+	var result = await net.place_building(building_id, grid_pos.x, grid_pos.y, _get_grid_index())
+	if result.has("error"):
+		_show_error(str(result.error))
+		return
+
+	# Server OK — place locally
+	var server_id: int = result.get("id", -1)
+	_spawn_building_locally(building_id, grid_pos, def, server_id)
+
+	if result.has("trophies"):
+		net.trophies = result["trophies"]
+		_update_player_name_label()
+	if result.has("resources"):
+		var res = result["resources"]
+		resources.gold = res.gold
+		resources.wood = res.wood
+		resources.ore = res.ore
+		_update_resource_ui()
+
+
+func _spawn_building_locally(building_id: String, grid_pos: Vector2i, def: Dictionary, server_id: int) -> void:
+	# Mark grid
 	for x in range(def.cells.x):
 		for z in range(def.cells.y):
-			var idx = (current_grid_pos.y + z) * grid_width + (current_grid_pos.x + x)
+			var idx = (grid_pos.y + z) * grid_width + (grid_pos.x + x)
 			grid[idx] = true
 
+	# Save current_building_id temporarily for _create_placed_building
+	var prev_id = current_building_id
+	current_building_id = building_id
 	var building = _create_placed_building(def)
+	current_building_id = prev_id
 
 	var sx = def.cells.x * cell_size
 	var sz = def.cells.y * cell_size
-	var local_pos = _grid_to_local(current_grid_pos)
+	var local_pos = _grid_to_local(grid_pos)
 	local_pos.x += sx / 2.0
 	local_pos.z += sz / 2.0
 	local_pos.y = 0
@@ -1263,23 +1242,17 @@ func _try_place_building() -> bool:
 	add_child(building)
 	var max_hp = _get_hp_for(def, 1)
 	var hp_bar_data = _create_building_hp_bar(building, def)
-	var building_data := {
-		"id": current_building_id,
-		"grid_pos": current_grid_pos,
+	placed_buildings.append({
+		"id": building_id,
+		"grid_pos": grid_pos,
 		"node": building,
 		"level": 1,
 		"hp": max_hp,
 		"max_hp": max_hp,
 		"hp_bar": hp_bar_data.bar,
 		"hp_fill": hp_bar_data.fill,
-		"server_id": -1,
-	}
-	placed_buildings.append(building_data)
-
-	# Sync to server
-	_sync_place_building(building_data, current_building_id, current_grid_pos)
-
-	return true
+		"server_id": server_id,
+	})
 
 
 func _cancel_all_placement() -> void:
@@ -1405,37 +1378,56 @@ func _upgrade_selected() -> void:
 	var max_level = def.hp_levels.size() if def.has("hp_levels") else 3
 	if level >= max_level:
 		return
-	# Resources are checked and deducted by the server
-	selected_building["level"] = level + 1
-	var new_max_hp = _get_hp_for(def, selected_building.level)
-	selected_building["max_hp"] = new_max_hp
-	selected_building["hp"] = new_max_hp
+
+	var b = selected_building
+	var net = get_node_or_null("/root/Net")
+
+	# Ask server first
+	if net and net.has_token():
+		var sid = b.get("server_id", -1)
+		if sid < 0:
+			_show_error("Building not synced to server")
+			return
+		var result = await net.upgrade_building(sid)
+		if result.has("error"):
+			_show_error(str(result.error))
+			return
+		if result.has("trophies"):
+			net.trophies = result["trophies"]
+			_update_player_name_label()
+		if result.has("resources"):
+			var res = result["resources"]
+			resources.gold = res.gold
+			resources.wood = res.wood
+			resources.ore = res.ore
+			_update_resource_ui()
+
+	# Server OK — apply locally
+	b["level"] = level + 1
+	var new_max_hp = _get_hp_for(def, b.level)
+	b["max_hp"] = new_max_hp
+	b["hp"] = new_max_hp
 	if building_panel_title:
-		building_panel_title.text = "%s (Lv. %d)" % [def.name, selected_building.level]
+		building_panel_title.text = "%s (Lv. %d)" % [def.name, b.level]
 	if building_panel_hp:
 		building_panel_hp.text = "HP: %d / %d" % [new_max_hp, new_max_hp]
 	if building_panel_hp_bar:
 		building_panel_hp_bar.max_value = new_max_hp
 		building_panel_hp_bar.value = new_max_hp
-	_update_upgrade_cost_label(def, selected_building.level)
+	_update_upgrade_cost_label(def, b.level)
 	# Swap model if scenes array exists
 	if def.has("scenes"):
-		var new_level = selected_building.level
+		var new_level = b.level
 		var scene_idx = clampi(new_level - 1, 0, def.scenes.size() - 1)
 		var scene_path = def.scenes[scene_idx]
 		var scene_res = load(scene_path)
-		if scene_res and is_instance_valid(selected_building.node):
-			# Remove old model
-			for child in selected_building.node.get_children():
+		if scene_res and is_instance_valid(b.node):
+			for child in b.node.get_children():
 				child.queue_free()
-			# Add new model
 			var model = scene_res.instantiate()
 			var s = def.get("model_scale", 0.2)
 			model.scale = Vector3(s, s, s)
-			selected_building.node.add_child(model)
-
-	# Sync to server
-	_sync_upgrade_building(selected_building)
+			b.node.add_child(model)
 
 
 func _update_upgrade_cost_label(def: Dictionary, current_level: int) -> void:
@@ -1774,16 +1766,30 @@ func _upgrade_troop(troop_name: String) -> void:
 	if lvl >= 3:
 		return
 	var next_lvl = lvl + 1
-	# Resources are checked and deducted by the server
+
+	# Ask server first
+	var net = get_node_or_null("/root/Net")
+	if net and net.has_token():
+		var result = await net.upgrade_troop(troop_name)
+		if result.has("error"):
+			_show_error(str(result.error))
+			return
+		if result.has("trophies"):
+			net.trophies = result["trophies"]
+			_update_player_name_label()
+		if result.has("resources"):
+			var res = result["resources"]
+			resources.gold = res.gold
+			resources.wood = res.wood
+			resources.ore = res.ore
+			_update_resource_ui()
+
+	# Server OK — apply locally
 	troop_levels[troop_name] = next_lvl
-	# Apply to troop node
 	var troop = get_tree().current_scene.find_child(troop_name, true, false)
 	if troop and troop.has_method("upgrade_to"):
 		troop.upgrade_to(next_lvl)
-	_update_resource_ui()
 	_refresh_barracks_panel()
-	# Sync to server
-	_sync_upgrade_troop(troop_name)
 
 
 func _on_attack_pressed() -> void:
