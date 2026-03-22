@@ -42,6 +42,13 @@ func _process(delta: float) -> void:
 	_update_projectiles(delta)
 
 
+func _exit_tree() -> void:
+	for p in _projectiles:
+		if is_instance_valid(p.node):
+			p.node.queue_free()
+	_projectiles.clear()
+
+
 func _do_attack(delta: float) -> void:
 	if target_building.size() == 0 or not is_instance_valid(target_building.get("node")):
 		_find_next_target()

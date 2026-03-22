@@ -172,6 +172,13 @@ func _update_bullets(delta: float) -> void:
 		i -= 1
 
 
+func _exit_tree() -> void:
+	for b in _bullets:
+		if is_instance_valid(b.node):
+			b.node.queue_free()
+	_bullets.clear()
+
+
 func _find_node_by_name(node: Node, target_name: String) -> Node3D:
 	if node.name == target_name and node is Node3D:
 		return node

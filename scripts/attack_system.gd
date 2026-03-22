@@ -10,7 +10,7 @@ extends Node3D
 @export var max_ships: int = 5
 @export var troops_per_ship: int = 3
 @export var troop_spawn_delay: float = 0.2
-@export var troop_scale: float = 0.05
+@export var troop_scale: float = 0.1
 
 const SHIP_TROOPS = [
 	{"model": "res://Model/Characters/Model/Knight.glb", "script": "res://scripts/knight.gd"},

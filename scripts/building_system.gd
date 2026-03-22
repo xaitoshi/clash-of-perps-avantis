@@ -20,7 +20,7 @@ var building_defs: Dictionary = {
 		"color": Color(0.55, 0.45, 0.2, 0.5),
 		"height": 0.3,
 		"scene": "res://Model/Mine/1.gltf",
-		"model_scale": 0.2,
+		"model_scale": 0.25,
 		"hp_levels": [1200, 2200, 3800],
 		"cost": {"gold": 400, "wood": 150},
 	},
@@ -31,18 +31,18 @@ var building_defs: Dictionary = {
 		"height": 0.4,
 		"scene": "res://Model/Barn/1.glb",
 		"scenes": ["res://Model/Barn/1.glb", "res://Model/Barn/2.glb", "res://Model/Barn/3.glb"],
-		"model_scale": 0.2,
+		"model_scale": 0.25,
 		"hp_levels": [2000, 3500, 6000],
 		"cost": {"gold": 200, "wood": 200, "ore": 100},
 	},
 	"port": {
 		"name": "Port",
-		"cells": Vector2i(3, 3),
+		"cells": Vector2i(4, 3),
 		"color": Color(0.2, 0.45, 0.7, 0.5),
 		"height": 0.3,
 		"scene": "res://Model/Port/1.glb",
 		"scenes": ["res://Model/Port/1.glb", "res://Model/Port/2.glb", "res://Model/Port/3.glb"],
-		"model_scale": 0.2,
+		"model_scale": 0.25,
 		"hp_levels": [1800, 3200, 5500],
 		"cost": {"gold": 800, "wood": 300, "ore": 200},
 	},
@@ -52,7 +52,7 @@ var building_defs: Dictionary = {
 		"color": Color(0.45, 0.65, 0.25, 0.5),
 		"height": 0.35,
 		"scene": "res://Model/Sawmill/1.glb",
-		"model_scale": 0.1,
+		"model_scale": 0.15,
 		"hp_levels": [1200, 2200, 3800],
 		"cost": {"gold": 300},
 	},
@@ -63,7 +63,7 @@ var building_defs: Dictionary = {
 		"height": 0.5,
 		"scene": "res://Model/Town_Hall/1.gltf",
 		"scenes": ["res://Model/Town_Hall/1.gltf", "res://Model/Town_Hall/2.gltf", "res://Model/Town_Hall/3.gltf"],
-		"model_scale": 0.2,
+		"model_scale": 0.25,
 		"hp_levels": [3500, 6000, 10000],
 		"is_main": true,
 		"max_count": 1,
@@ -75,7 +75,7 @@ var building_defs: Dictionary = {
 		"color": Color(0.5, 0.5, 0.55, 0.5),
 		"height": 0.45,
 		"scene": "res://Model/Turret/scene.gltf",
-		"model_scale": 0.2,
+		"model_scale": 0.25,
 		"hp_levels": [900, 1600, 2800],
 		"cost": {"gold": 600, "wood": 350, "ore": 200},
 	},
@@ -184,6 +184,17 @@ func _ready() -> void:
 	grid.resize(grid_width * grid_height)
 	grid.fill(false)
 	_setup_from_grid_plane()
+	# Auto-configure grid restrictions based on grid plane
+	var plane_name = ""
+	var plane = get_node_or_null(grid_plane_path)
+	if plane:
+		plane_name = plane.name
+	if plane_name == "gridPlane2":
+		# Grid 2: only port allowed
+		allowed_buildings = PackedStringArray(["port"])
+	elif plane_name == "gridPlane":
+		# Grid 1: everything except port
+		blocked_buildings = PackedStringArray(["port"])
 	if create_ui:
 		_create_ui()
 	_create_building_panel()
@@ -202,6 +213,7 @@ func _process(_delta: float) -> void:
 		if building_panel_hp_bar:
 			building_panel_hp_bar.max_value = max_hp
 			building_panel_hp_bar.value = hp
+	_update_building_hp_bars()
 
 
 func _setup_from_grid_plane() -> void:
@@ -817,6 +829,7 @@ func _try_place_building() -> bool:
 
 	add_child(building)
 	var max_hp = _get_hp_for(def, 1)
+	var hp_bar_data = _create_building_hp_bar(building, def)
 	placed_buildings.append({
 		"id": current_building_id,
 		"grid_pos": current_grid_pos,
@@ -824,6 +837,8 @@ func _try_place_building() -> bool:
 		"level": 1,
 		"hp": max_hp,
 		"max_hp": max_hp,
+		"hp_bar": hp_bar_data.bar,
+		"hp_fill": hp_bar_data.fill,
 	})
 
 	return true
@@ -1025,10 +1040,88 @@ func remove_building(b: Dictionary) -> void:
 			var cell_idx = (gp.y + z) * grid_width + (gp.x + x)
 			if cell_idx >= 0 and cell_idx < grid.size():
 				grid[cell_idx] = false
+	if b.has("hp_bar") and is_instance_valid(b.hp_bar):
+		b.hp_bar.queue_free()
 	if is_instance_valid(b.node):
 		b.node.queue_free()
 	placed_buildings.remove_at(idx)
 	_deselect_building()
+
+
+const BLDG_BAR_W = 0.18
+const BLDG_BAR_H = 0.015
+const BLDG_BAR_SHADER = "shader_type spatial;
+render_mode unshaded, blend_mix, depth_test_disabled, cull_disabled;
+uniform vec4 albedo : source_color = vec4(1.0, 1.0, 1.0, 1.0);
+uniform vec2 bar_size = vec2(0.18, 0.015);
+void fragment() {
+	vec2 pos = (UV - 0.5) * bar_size;
+	float r = bar_size.y * 0.45;
+	vec2 q = abs(pos) - bar_size * 0.5 + r;
+	float d = length(max(q, 0.0)) - r;
+	float aa = fwidth(d);
+	ALBEDO = albedo.rgb;
+	ALPHA = albedo.a * (1.0 - smoothstep(-aa, aa, d));
+}"
+
+func _make_bldg_hp_mat(color: Color, size: Vector2, priority: int) -> ShaderMaterial:
+	var shader = Shader.new()
+	shader.code = BLDG_BAR_SHADER
+	var mat = ShaderMaterial.new()
+	mat.shader = shader
+	mat.set_shader_parameter("albedo", color)
+	mat.set_shader_parameter("bar_size", size)
+	mat.render_priority = priority
+	return mat
+
+func _create_building_hp_bar(building: Node3D, def: Dictionary) -> Dictionary:
+	var bar = Node3D.new()
+	bar.top_level = true
+	building.add_child(bar)
+	var bg = MeshInstance3D.new()
+	var bg_mesh = QuadMesh.new()
+	bg_mesh.size = Vector2(BLDG_BAR_W, BLDG_BAR_H)
+	bg.mesh = bg_mesh
+	bg.material_override = _make_bldg_hp_mat(Color(0.15, 0.15, 0.15, 0.75), Vector2(BLDG_BAR_W, BLDG_BAR_H), 10)
+	bar.add_child(bg)
+	var fill = MeshInstance3D.new()
+	var fill_mesh = QuadMesh.new()
+	fill_mesh.size = Vector2(BLDG_BAR_W, BLDG_BAR_H)
+	fill.mesh = fill_mesh
+	fill.material_override = _make_bldg_hp_mat(Color(0.1, 0.85, 0.1, 0.9), Vector2(BLDG_BAR_W, BLDG_BAR_H), 11)
+	fill.position.z = -0.001
+	bar.add_child(fill)
+	var height = def.get("height", 0.3)
+	bar.global_position = building.global_position + Vector3(0, height + 0.05, 0)
+	return {"bar": bar, "fill": fill}
+
+
+func _update_building_hp_bars() -> void:
+	var cam = get_viewport().get_camera_3d()
+	for b in placed_buildings:
+		if not b.has("hp_fill") or not is_instance_valid(b.hp_fill):
+			continue
+		if not is_instance_valid(b.node):
+			continue
+		var def = building_defs.get(b.id, {})
+		var height = def.get("height", 0.3)
+		b.hp_bar.global_position = b.node.global_position + Vector3(0, height + 0.05, 0)
+		if cam:
+			b.hp_bar.global_transform.basis = cam.global_transform.basis
+		var ratio = clamp(float(b.hp) / float(b.max_hp), 0.0, 1.0)
+		var fill_w = BLDG_BAR_W * ratio
+		(b.hp_fill.mesh as QuadMesh).size.x = fill_w
+		b.hp_fill.position.x = -(BLDG_BAR_W - fill_w) * 0.5
+		var mat = b.hp_fill.material_override as ShaderMaterial
+		mat.set_shader_parameter("bar_size", Vector2(fill_w, BLDG_BAR_H))
+		var color: Color
+		if ratio > 0.5:
+			color = Color(0.1, 0.85, 0.1, 0.9)
+		elif ratio > 0.25:
+			color = Color(0.9, 0.8, 0.1, 0.9)
+		else:
+			color = Color(0.9, 0.1, 0.1, 0.9)
+		mat.set_shader_parameter("albedo", color)
 
 
 func _get_hp_for(def: Dictionary, level: int) -> int:

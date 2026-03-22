@@ -5,11 +5,12 @@ extends Node3D
 
 @export var move_speed: float = 0.5
 @export var attack_range: float = 0.15
-@export var separation_radius: float = 0.2
-@export var separation_force: float = 0.5
+@export var separation_radius: float = 0.15
+@export var separation_force: float = 0.4
 
 var level: int = 1
 var hp: int = 100
+var max_hp: int = 100
 var damage: int = 10
 var atk_speed: float = 1.0
 
@@ -22,10 +23,13 @@ var attack_timer: float = 0.0
 var anim_player: AnimationPlayer
 var anim_files: Array = []
 var attack_anim: String = ""
+var _hp_bar: Node3D
+var _hp_fill: MeshInstance3D
 
 
 func _ready() -> void:
 	_init_stats()
+	max_hp = hp
 	_setup_animations()
 	_setup_weapons()
 
@@ -51,12 +55,14 @@ func activate() -> void:
 	visible = true
 	state = State.IDLE
 	add_to_group("troops")
+	_create_hp_bar()
 	_find_next_target()
 
 
 func _process(delta: float) -> void:
 	if state == State.INACTIVE or state == State.VICTORY:
 		return
+	_update_hp_bar()
 	match state:
 		State.RUNNING:
 			_move_to_target(delta)
@@ -97,6 +103,74 @@ func _setup_animations() -> void:
 
 	if anim_player.has_animation("Idle_A"):
 		anim_player.play("Idle_A")
+
+
+const HP_BAR_W = 0.12
+const HP_BAR_H = 0.012
+const HP_BAR_SHADER = "shader_type spatial;
+render_mode unshaded, blend_mix, depth_test_disabled, cull_disabled;
+uniform vec4 albedo : source_color = vec4(1.0, 1.0, 1.0, 1.0);
+uniform vec2 bar_size = vec2(0.12, 0.012);
+void fragment() {
+	vec2 pos = (UV - 0.5) * bar_size;
+	float r = bar_size.y * 0.45;
+	vec2 q = abs(pos) - bar_size * 0.5 + r;
+	float d = length(max(q, 0.0)) - r;
+	float aa = fwidth(d);
+	ALBEDO = albedo.rgb;
+	ALPHA = albedo.a * (1.0 - smoothstep(-aa, aa, d));
+}"
+
+static func _make_hp_shader_mat(color: Color, size: Vector2, priority: int) -> ShaderMaterial:
+	var shader = Shader.new()
+	shader.code = HP_BAR_SHADER
+	var mat = ShaderMaterial.new()
+	mat.shader = shader
+	mat.set_shader_parameter("albedo", color)
+	mat.set_shader_parameter("bar_size", size)
+	mat.render_priority = priority
+	return mat
+
+func _create_hp_bar() -> void:
+	_hp_bar = Node3D.new()
+	_hp_bar.top_level = true
+	add_child(_hp_bar)
+	var bg = MeshInstance3D.new()
+	var bg_mesh = QuadMesh.new()
+	bg_mesh.size = Vector2(HP_BAR_W, HP_BAR_H)
+	bg.mesh = bg_mesh
+	bg.material_override = _make_hp_shader_mat(Color(0.15, 0.15, 0.15, 0.75), Vector2(HP_BAR_W, HP_BAR_H), 10)
+	_hp_bar.add_child(bg)
+	_hp_fill = MeshInstance3D.new()
+	var fill_mesh = QuadMesh.new()
+	fill_mesh.size = Vector2(HP_BAR_W, HP_BAR_H)
+	_hp_fill.mesh = fill_mesh
+	_hp_fill.material_override = _make_hp_shader_mat(Color(0.1, 0.85, 0.1, 0.9), Vector2(HP_BAR_W, HP_BAR_H), 11)
+	_hp_fill.position.z = -0.001
+	_hp_bar.add_child(_hp_fill)
+
+
+func _update_hp_bar() -> void:
+	if not _hp_bar or not _hp_fill:
+		return
+	_hp_bar.global_position = global_position + Vector3(0, 0.18, 0)
+	var cam = get_viewport().get_camera_3d()
+	if cam:
+		_hp_bar.global_transform.basis = cam.global_transform.basis
+	var ratio = clamp(float(hp) / float(max_hp), 0.0, 1.0)
+	var fill_w = HP_BAR_W * ratio
+	(_hp_fill.mesh as QuadMesh).size.x = fill_w
+	_hp_fill.position.x = -(HP_BAR_W - fill_w) * 0.5
+	var mat = _hp_fill.material_override as ShaderMaterial
+	mat.set_shader_parameter("bar_size", Vector2(fill_w, HP_BAR_H))
+	var color: Color
+	if ratio > 0.5:
+		color = Color(0.1, 0.85, 0.1, 0.9)
+	elif ratio > 0.25:
+		color = Color(0.9, 0.8, 0.1, 0.9)
+	else:
+		color = Color(0.9, 0.1, 0.1, 0.9)
+	mat.set_shader_parameter("albedo", color)
 
 
 func _find_next_target() -> void:
