@@ -138,6 +138,7 @@ var trophy_label: Label
 
 # ── Enemy attack state ───────────────────────────────────────
 var is_viewing_enemy: bool = false
+var _server_busy: bool = false
 var home_buildings_backup: Array[Dictionary] = []
 var home_grid_backup: Array[bool] = []
 var enemy_info: Dictionary = {}
@@ -803,10 +804,10 @@ func _load_buildings_from_server(server_buildings: Array) -> void:
 	for b in server_buildings:
 		if b.get("grid_index", 0) == my_grid_index:
 			my_buildings.append(b)
+	# Always clear existing buildings first (even if no new ones to load)
+	_destroy_all_buildings()
 	if my_buildings.is_empty():
 		return
-	# Clear existing buildings first
-	_destroy_all_buildings()
 	for b in my_buildings:
 		var building_type: String = b["type"]
 		if not building_defs.has(building_type):
@@ -1198,7 +1199,9 @@ func _request_place_building(building_id: String, grid_pos: Vector2i, def: Dicti
 		_spawn_building_locally(building_id, grid_pos, def, -1)
 		return
 
+	_server_busy = true
 	var result = await net.place_building(building_id, grid_pos.x, grid_pos.y, _get_grid_index())
+	_server_busy = false
 	if result.has("error"):
 		_show_error(str(result.error))
 		return
@@ -1371,7 +1374,7 @@ func _deselect_building() -> void:
 
 
 func _upgrade_selected() -> void:
-	if selected_building.size() == 0:
+	if selected_building.size() == 0 or _server_busy:
 		return
 	var def = building_defs[selected_building.id]
 	var level = selected_building.get("level", 1)
@@ -1388,7 +1391,9 @@ func _upgrade_selected() -> void:
 		if sid < 0:
 			_show_error("Building not synced to server")
 			return
+		_server_busy = true
 		var result = await net.upgrade_building(sid)
+		_server_busy = false
 		if result.has("error"):
 			_show_error(str(result.error))
 			return
@@ -1401,6 +1406,9 @@ func _upgrade_selected() -> void:
 			resources.wood = res.wood
 			resources.ore = res.ore
 			_update_resource_ui()
+		# Use level from server response
+		if result.has("level"):
+			level = result["level"] - 1
 
 	# Server OK — apply locally
 	b["level"] = level + 1
@@ -1762,6 +1770,8 @@ func _can_afford(costs: Dictionary) -> bool:
 
 
 func _upgrade_troop(troop_name: String) -> void:
+	if _server_busy:
+		return
 	var lvl = troop_levels[troop_name]
 	if lvl >= 3:
 		return
@@ -1770,7 +1780,9 @@ func _upgrade_troop(troop_name: String) -> void:
 	# Ask server first
 	var net = get_node_or_null("/root/Net")
 	if net and net.has_token():
+		_server_busy = true
 		var result = await net.upgrade_troop(troop_name)
+		_server_busy = false
 		if result.has("error"):
 			_show_error(str(result.error))
 			return
@@ -1847,22 +1859,14 @@ func _switch_to_enemy_island() -> void:
 	cloud.close()
 	await cloud.close_finished
 
-	# Backup home state
-	home_buildings_backup = placed_buildings.duplicate(true)
-	home_grid_backup = grid.duplicate()
+	# Clear ALL building systems (including port grid)
+	for bs in get_tree().get_nodes_in_group("building_systems"):
+		bs._destroy_all_buildings()
 
-	# Clear current buildings visually (keep backup)
-	for b in placed_buildings:
-		if b.has("hp_bar") and is_instance_valid(b.hp_bar):
-			b.hp_bar.queue_free()
-		if is_instance_valid(b.node):
-			b.node.queue_free()
-	placed_buildings.clear()
-	grid.fill(false)
-
-	# Load enemy buildings
+	# Load enemy buildings on all grids
 	if enemy_info.has("buildings") and enemy_info.buildings is Array:
-		_load_buildings_from_server(enemy_info.buildings)
+		for bs in get_tree().get_nodes_in_group("building_systems"):
+			bs._load_buildings_from_server(enemy_info.buildings)
 
 	# Hide home UI, show enemy UI
 	if build_button:
@@ -1935,21 +1939,17 @@ func _return_home() -> void:
 	cloud.close()
 	await cloud.close_finished
 
-	# Clear enemy buildings
-	for b in placed_buildings:
-		if b.has("hp_bar") and is_instance_valid(b.hp_bar):
-			b.hp_bar.queue_free()
-		if is_instance_valid(b.node):
-			b.node.queue_free()
-	placed_buildings.clear()
-	grid.fill(false)
+	# Clear ALL building systems
+	for bs in get_tree().get_nodes_in_group("building_systems"):
+		bs._destroy_all_buildings()
 
-	# Restore home buildings from server
+	# Restore home buildings from server on all grids
 	var net = get_node_or_null("/root/Net")
 	if net and net.has_token():
 		var state = await net.login()
 		if state.has("buildings") and state.buildings is Array:
-			_load_buildings_from_server(state.buildings)
+			for bs in get_tree().get_nodes_in_group("building_systems"):
+				bs._load_buildings_from_server(state.buildings)
 		if state.has("gold"):
 			resources.gold = state.gold
 		if state.has("wood"):
