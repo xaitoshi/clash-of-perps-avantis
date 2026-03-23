@@ -21,7 +21,7 @@ const SHIP_TROOPS = [
 ]
 
 ## Minimum lateral distance between ship landing positions (world units)
-const SHIP_MIN_SEPARATION: float = 0.21
+const SHIP_MIN_SEPARATION: float = 0.252
 ## Radius within which ships push each other apart while sailing
 const SHIP_PUSH_RADIUS: float = 0.4
 
