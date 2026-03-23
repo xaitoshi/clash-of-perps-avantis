@@ -1,8 +1,15 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 
 const GODOT_FILES = '/godot'; // Path to exported Godot files
 
-export default function GodotCanvas({ onEngineReady }) {
+const canvasStyle = {
+  width: '100%',
+  height: '100%',
+  display: 'block',
+  outline: 'none',
+};
+
+export default memo(function GodotCanvas({ onEngineReady }) {
   const canvasRef = useRef(null);
   const loadedRef = useRef(false);
 
@@ -39,12 +46,7 @@ export default function GodotCanvas({ onEngineReady }) {
       ref={canvasRef}
       id="godot-canvas"
       tabIndex={0}
-      style={{
-        width: '100%',
-        height: '100%',
-        display: 'block',
-        outline: 'none',
-      }}
+      style={canvasStyle}
     />
   );
-}
+});

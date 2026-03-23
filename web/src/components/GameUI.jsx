@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import ResourceBar from './ResourceBar';
 import PlayerInfo from './PlayerInfo';
 import ActionButtons from './ActionButtons';
@@ -20,15 +20,27 @@ export default function GameUI({
     if (!selectedBuilding) setShowTroops(false);
   }, [selectedBuilding]);
 
+  const handleCloseShop = useCallback(() => {
+    setShopOpen(false);
+    sendToGodot('close_shop');
+  }, [setShopOpen, sendToGodot]);
+
+  const handleCloseTroops = useCallback(() => setShowTroops(false), []);
+  const handleDeselectBuilding = useCallback(() => sendToGodot('deselect_building'), [sendToGodot]);
+  const handleOpenTroops = useCallback(() => setShowTroops(true), []);
+
+  const barnAsTroops = useMemo(() => {
+    if (showTroops && selectedBuilding?.id === 'barn') {
+      return { ...selectedBuilding, is_barracks: true };
+    }
+    return null;
+  }, [showTroops, selectedBuilding]);
+
   if (!ready) return null;
 
   if (showRegister) {
     return <RegisterPanel sendToGodot={sendToGodot} />;
   }
-
-  const barnAsTroops = showTroops && selectedBuilding?.id === 'barn'
-    ? { ...selectedBuilding, is_barracks: true }
-    : null;
 
   return (
     <div style={styles.overlay}>
@@ -41,10 +53,7 @@ export default function GameUI({
         <ShopPanel
           buildingDefs={buildingDefs}
           sendToGodot={sendToGodot}
-          onClose={() => {
-            setShopOpen(false);
-            sendToGodot('close_shop');
-          }}
+          onClose={handleCloseShop}
         />
       )}
 
@@ -54,7 +63,7 @@ export default function GameUI({
           buildingDefs={buildingDefs}
           troopLevels={troopLevels}
           sendToGodot={sendToGodot}
-          onClose={() => setShowTroops(false)}
+          onClose={handleCloseTroops}
         />
       ) : selectedBuilding && selectedBuilding.is_barracks && !selectedBuilding.is_enemy ? (
         <BarracksPanel
@@ -62,13 +71,13 @@ export default function GameUI({
           buildingDefs={buildingDefs}
           troopLevels={troopLevels}
           sendToGodot={sendToGodot}
-          onClose={() => sendToGodot('deselect_building')}
+          onClose={handleDeselectBuilding}
         />
       ) : (
         <BuildingInfoPanel
           building={selectedBuilding}
           sendToGodot={sendToGodot}
-          onOpenTroops={() => setShowTroops(true)}
+          onOpenTroops={handleOpenTroops}
         />
       )}
     </div>

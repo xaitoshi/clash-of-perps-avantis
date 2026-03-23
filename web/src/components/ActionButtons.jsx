@@ -1,8 +1,13 @@
+import { memo, useCallback } from 'react';
 import { cartoonBtn } from '../styles/theme';
 import buildIcon from '../assets/resources/Gemini_Generated_Image_dl9plxdl9plxdl9p-removebg-preview.png';
 import attackIcon from '../assets/resources/Gemini_Generated_Image_qgf6o5qgf6o5qgf6-removebg-preview.png';
 
-export default function ActionButtons({ enemyMode, sendToGodot }) {
+export default memo(function ActionButtons({ enemyMode, sendToGodot }) {
+  const handleReturnHome = useCallback(() => sendToGodot('return_home'), [sendToGodot]);
+  const handleFindEnemy = useCallback(() => sendToGodot('find_enemy'), [sendToGodot]);
+  const handleOpenShop = useCallback(() => sendToGodot('open_shop'), [sendToGodot]);
+
   if (enemyMode.active) {
     return (
       <div style={styles.wrapRight}>
@@ -11,7 +16,7 @@ export default function ActionButtons({ enemyMode, sendToGodot }) {
         </div>
         <button
           style={cartoonBtn('#FF8F00', '#E65100')}
-          onClick={() => sendToGodot('return_home')}
+          onClick={handleReturnHome}
         >
           🏠 Return Home
         </button>
@@ -24,7 +29,7 @@ export default function ActionButtons({ enemyMode, sendToGodot }) {
       <div style={styles.wrapLeft}>
         <button
           style={styles.attackBtn}
-          onClick={() => sendToGodot('find_enemy')}
+          onClick={handleFindEnemy}
         >
           <img src={attackIcon} alt="attack" style={styles.attackIconImg} />
           <span style={styles.btnText}>ATTACK</span>
@@ -33,7 +38,7 @@ export default function ActionButtons({ enemyMode, sendToGodot }) {
       <div style={styles.wrapRight}>
         <button
           style={styles.buildBtn}
-          onClick={() => sendToGodot('open_shop')}
+          onClick={handleOpenShop}
         >
           <img src={buildIcon} alt="build" style={styles.buildIconImg} />
           <span style={styles.btnText}>BUILD</span>
@@ -41,11 +46,11 @@ export default function ActionButtons({ enemyMode, sendToGodot }) {
       </div>
     </>
   );
-}
+});
 
 const base = {
   position: 'fixed',
-  bottom: 20, 
+  bottom: 20,
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
@@ -57,7 +62,7 @@ const styles = {
   wrapLeft: { ...base, left: 20 },
   wrapRight: { ...base, right: 20 },
   buildBtn: {
-    width: 120, 
+    width: 120,
     height: 110,
     borderRadius: 24,
     border: '4px solid #fff',
@@ -70,16 +75,16 @@ const styles = {
     boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
     transition: 'transform 0.1s, box-shadow 0.1s',
     userSelect: 'none',
-    padding: 0, 
+    padding: 0,
     outline: 'none',
     overflow: 'hidden',
   },
   attackBtn: {
-    width: 120, 
+    width: 120,
     height: 110,
     borderRadius: 24,
-    border: '4px solid #fff', 
-    background: 'linear-gradient(180deg, #1976D2 0%, #0D47A1 100%)', 
+    border: '4px solid #fff',
+    background: 'linear-gradient(180deg, #1976D2 0%, #0D47A1 100%)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -88,22 +93,22 @@ const styles = {
     boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
     transition: 'transform 0.1s, box-shadow 0.1s',
     userSelect: 'none',
-    padding: 0, 
+    padding: 0,
     outline: 'none',
     overflow: 'hidden',
   },
   buildIconImg: {
-    width: 115, 
+    width: 115,
     height: 115,
     objectFit: 'contain',
     filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.4))',
-    marginBottom: -25, 
-    marginTop: -10, 
-    marginLeft: -10, 
-    transform: 'translate(-4px, -6px)', 
+    marginBottom: -25,
+    marginTop: -10,
+    marginLeft: -10,
+    transform: 'translate(-4px, -6px)',
   },
   attackIconImg: {
-    width: 85, 
+    width: 85,
     height: 85,
     objectFit: 'contain',
     filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.4))',
@@ -112,7 +117,7 @@ const styles = {
   },
   btnText: {
     color: '#fff',
-    fontSize: 14, 
+    fontSize: 14,
     fontWeight: 900,
     WebkitTextStroke: '1px #000',
     textShadow: '0 2px 0 rgba(0,0,0,0.5)',

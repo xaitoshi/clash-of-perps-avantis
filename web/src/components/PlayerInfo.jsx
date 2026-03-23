@@ -1,18 +1,18 @@
+import { memo } from 'react';
 import { colors } from '../styles/theme';
 import trophyIcon from '../assets/resources/free-icon-cup-with-star-109765.png';
 
-export default function PlayerInfo({ playerState }) {
+const formatNumber = (n) => (n || 0).toLocaleString().replace(/,/g, ' ');
+
+export default memo(function PlayerInfo({ playerState }) {
   if (!playerState) return null;
 
-  // Use town hall level or default
   const townHallLevel = playerState.buildings?.town_hall?.level || 1;
 
   return (
     <div style={styles.wrap}>
-      {/* Level Circle with mock progress */}
       <div style={styles.levelCircleContainer}>
         <div style={styles.levelCircle}>
-          {/* Inner blue circle with number */}
           <div style={styles.innerCircle}>
             <div style={styles.gloss} />
             <span style={styles.levelText}>{townHallLevel}</span>
@@ -20,32 +20,28 @@ export default function PlayerInfo({ playerState }) {
         </div>
       </div>
 
-      {/* Info Stack */}
       <div style={styles.infoStack}>
         <span style={styles.name}>{playerState.player_name}</span>
-        
-        {/* Trophies Display: Square box + Attached transparent bar */}
+
         <div style={styles.trophyContainer}>
-          {/* Square Box for Icon */}
           <div style={styles.trophyBox}>
-            <img 
-              src={trophyIcon} 
-              alt="trophy" 
-              style={styles.trophyImg} 
+            <img
+              src={trophyIcon}
+              alt="trophy"
+              style={styles.trophyImg}
             />
           </div>
 
-          {/* Transparent Bar for Text */}
           <div style={styles.trophyBar}>
             <span style={styles.trophiesText}>
-              {(playerState.trophies || 0).toLocaleString().replace(/,/g, ' ')}
+              {formatNumber(playerState.trophies)}
             </span>
           </div>
         </div>
       </div>
     </div>
   );
-}
+});
 
 const styles = {
   wrap: {
@@ -54,7 +50,7 @@ const styles = {
     left: 20,
     display: 'flex',
     alignItems: 'center',
-    gap: 12, 
+    gap: 12,
     pointerEvents: 'none',
     zIndex: 10,
     fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
@@ -67,30 +63,27 @@ const styles = {
     width: 68,
     height: 68,
     borderRadius: '50%',
-    // Better progress ring: Use a subtle grey "trough" and a bright white "filled" part
-    background: 'conic-gradient(#ffffff 0% 65%, #2c333a 65% 100%)', 
-    border: '3.5px solid #1a1a1a', 
-    boxShadow: '0 4px 8px rgba(0,0,0,0.6), inset 0 2px 2px rgba(255,255,255,0.2)', 
+    background: 'conic-gradient(#ffffff 0% 65%, #2c333a 65% 100%)',
+    border: '3.5px solid #1a1a1a',
+    boxShadow: '0 4px 8px rgba(0,0,0,0.6), inset 0 2px 2px rgba(255,255,255,0.2)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   innerCircle: {
-    width: '74%', 
+    width: '74%',
     height: '74%',
     borderRadius: '50%',
-    // Improved depth with a gradient + inner shadow
-    background: 'radial-gradient(circle at 30% 30%, #7bd9ff 0%, #46b8e8 70%, #2a9ccb 100%)', 
+    background: 'radial-gradient(circle at 30% 30%, #7bd9ff 0%, #46b8e8 70%, #2a9ccb 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: '2px solid #1a1a1a', 
+    border: '2px solid #1a1a1a',
     boxShadow: 'inset 0 4px 6px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.2)',
     position: 'relative',
     overflow: 'hidden',
   },
-  // Adding a glossy reflection for that "premium" feel
   gloss: {
     position: 'absolute',
     top: '-30%',
@@ -103,7 +96,7 @@ const styles = {
   },
   levelText: {
     color: '#fff',
-    fontSize: 30, 
+    fontSize: 30,
     fontWeight: 900,
     WebkitTextStroke: '2px #0a0a0a',
     textShadow: '0 3px 2px rgba(0,0,0,0.9)',
@@ -113,7 +106,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
-    gap: 2, 
+    gap: 2,
   },
   name: {
     color: '#fff',
@@ -121,8 +114,8 @@ const styles = {
     fontWeight: 900,
     WebkitTextStroke: '1px #1a1a1a',
     textShadow: '0 2px 2px rgba(0,0,0,0.8)',
-    marginLeft: 4, 
-    letterSpacing: '0.5px', 
+    marginLeft: 4,
+    letterSpacing: '0.5px',
   },
   trophyContainer: {
     position: 'relative',
@@ -132,11 +125,11 @@ const styles = {
     marginLeft: 4,
   },
   trophyBox: {
-    width: 34, 
+    width: 34,
     height: 34,
-    borderRadius: 8, 
-    background: 'linear-gradient(180deg, #ffa22a 0%, #d87b1c 100%)', 
-    border: '2.5px solid #1a1a1a', 
+    borderRadius: 8,
+    background: 'linear-gradient(180deg, #ffa22a 0%, #d87b1c 100%)',
+    border: '2.5px solid #1a1a1a',
     boxShadow: 'inset 0 1.5px 1px rgba(255, 255, 255, 0.7), 0 3px 4px rgba(0, 0, 0, 0.5)',
     display: 'flex',
     alignItems: 'center',
@@ -145,31 +138,31 @@ const styles = {
     position: 'relative',
   },
   trophyImg: {
-    width: '75%', 
+    width: '75%',
     height: '75%',
     objectFit: 'contain',
     filter: 'invert(88%) sepia(87%) saturate(2224%) hue-rotate(334deg) brightness(105%) contrast(106%) drop-shadow(0 1px 1px rgba(0,0,0,0.4))',
   },
   trophyBar: {
-    height: 26, 
+    height: 26,
     minWidth: 80,
-    background: 'rgba(0, 0, 0, 0.35)', 
-    border: '1.5px solid #1a1a1a', 
-    borderRadius: '0 13px 13px 0', 
+    background: 'rgba(0, 0, 0, 0.35)',
+    border: '1.5px solid #1a1a1a',
+    borderRadius: '0 13px 13px 0',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -4, 
+    marginLeft: -4,
     padding: '0 12px 0 12px',
     zIndex: 2,
     boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
   },
   trophiesText: {
-    fontSize: 16, 
+    fontSize: 16,
     fontWeight: 900,
     color: '#fff',
-    WebkitTextStroke: '1px #000', 
-    textShadow: '0 2px 1px rgba(0,0,0,1)', 
+    WebkitTextStroke: '1px #000',
+    textShadow: '0 2px 1px rgba(0,0,0,1)',
     letterSpacing: '0.5px',
     width: '100%',
     textAlign: 'center',

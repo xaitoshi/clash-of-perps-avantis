@@ -1,6 +1,10 @@
+import { memo, useCallback } from 'react';
 import { colors, cartoonPanel, cartoonBtn } from '../styles/theme';
 
-export default function BuildingInfoPanel({ building, sendToGodot, onOpenTroops }) {
+export default memo(function BuildingInfoPanel({ building, sendToGodot, onOpenTroops }) {
+  const handleDeselect = useCallback(() => sendToGodot('deselect_building'), [sendToGodot]);
+  const handleUpgrade = useCallback(() => sendToGodot('upgrade_building'), [sendToGodot]);
+
   if (!building || building.is_barracks) return null;
 
   const ratio = building.max_hp > 0 ? building.hp / building.max_hp : 1;
@@ -10,7 +14,7 @@ export default function BuildingInfoPanel({ building, sendToGodot, onOpenTroops 
   return (
     <div style={styles.wrap}>
       <div style={styles.panel}>
-        <button style={styles.closeBtn} onClick={() => sendToGodot('deselect_building')}>✕</button>
+        <button style={styles.closeBtn} onClick={handleDeselect}>✕</button>
 
         <div style={styles.title}>{building.name} (Lv. {building.level})</div>
 
@@ -33,7 +37,7 @@ export default function BuildingInfoPanel({ building, sendToGodot, onOpenTroops 
               </div>
               <button
                 style={cartoonBtn('#43A047', '#2E7D32')}
-                onClick={() => sendToGodot('upgrade_building')}
+                onClick={handleUpgrade}
               >
                 ⬆️ Upgrade
               </button>
@@ -52,7 +56,7 @@ export default function BuildingInfoPanel({ building, sendToGodot, onOpenTroops 
       </div>
     </div>
   );
-}
+});
 
 const styles = {
   wrap: {

@@ -1,12 +1,18 @@
+import { memo, useCallback } from 'react';
 import { colors, cartoonPanel, cartoonBtn } from '../styles/theme';
 
-export default function BarracksPanel({ building, buildingDefs, troopLevels, sendToGodot, onClose }) {
+const stopPropagation = (e) => e.stopPropagation();
+
+export default memo(function BarracksPanel({ building, buildingDefs, troopLevels, sendToGodot, onClose }) {
+  const handleUpgradeBuilding = useCallback(() => sendToGodot('upgrade_building'), [sendToGodot]);
+  const handleUpgradeTroop = useCallback((name) => sendToGodot('upgrade_troop', { troop_name: name }), [sendToGodot]);
+
   if (!building || !building.is_barracks) return null;
   const troops = buildingDefs?.troops || {};
 
   return (
     <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.panel} onClick={e => e.stopPropagation()}>
+      <div style={styles.panel} onClick={stopPropagation}>
         <div style={styles.header}>
           <span style={styles.title}>⚔️ Barracks</span>
           <button style={styles.closeBtn} onClick={onClose}>✕</button>
@@ -15,7 +21,7 @@ export default function BarracksPanel({ building, buildingDefs, troopLevels, sen
         {!building.is_enemy && building.level < building.max_level && (
           <button
             style={{ ...cartoonBtn('#43A047', '#2E7D32'), width: '100%', marginBottom: 10 }}
-            onClick={() => sendToGodot('upgrade_building')}
+            onClick={handleUpgradeBuilding}
           >
             ⬆️ Upgrade Barracks
           </button>
@@ -48,7 +54,7 @@ export default function BarracksPanel({ building, buildingDefs, troopLevels, sen
                     </span>
                     <button
                       style={cartoonBtn('#1565C0', '#0D47A1')}
-                      onClick={() => sendToGodot('upgrade_troop', { troop_name: name })}
+                      onClick={() => handleUpgradeTroop(name)}
                     >
                       ⬆️
                     </button>
@@ -61,7 +67,7 @@ export default function BarracksPanel({ building, buildingDefs, troopLevels, sen
       </div>
     </div>
   );
-}
+});
 
 const styles = {
   overlay: {

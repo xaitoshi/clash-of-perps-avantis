@@ -1,3 +1,4 @@
+import { memo, useCallback } from 'react';
 import { colors } from '../styles/theme';
 
 import goldIcon from '../assets/resources/gold_bar.png';
@@ -10,41 +11,32 @@ const ITEMS = [
   { key: 'ore', icon: stoneIcon, bg: '#3e372b', indicator: '#8a8a8a' },
 ];
 
-export default function ResourceBar({ resources, sendToGodot }) {
+const formatNumber = (n) => (n || 0).toLocaleString().replace(/,/g, ' ');
+
+export default memo(function ResourceBar({ resources, sendToGodot }) {
+  const handleClick = useCallback((key) => {
+    sendToGodot('add_resources', { resource: key });
+  }, [sendToGodot]);
+
   return (
     <div style={styles.bar}>
-      {ITEMS.map(({ key, icon, bg, indicator }) => {
-        return (
-          <div key={key} style={styles.container}>
-            {/* Main Bar Background */}
-            <div style={{ 
-              ...styles.pill, 
-              background: bg,
-            }}>
-              {/* Indicator block behind icon */}
-              <div style={{ ...styles.indicator, background: indicator }} />
-              
-              {/* Resource Value */}
-              <span style={styles.value}>
-                {(resources[key] || 0).toLocaleString().replace(/,/g, ' ')}
-              </span>
-
-              {/* Hidden Add Button (accessible via click on the bar) */}
-              <button
-                style={styles.hiddenButton}
-                onClick={() => sendToGodot('add_resources', { resource: key })}
-                title={`Add ${key}`}
-              />
-            </div>
-
-            {/* Overlapping Icon */}
-            <img src={icon} alt={key} style={styles.icon} />
+      {ITEMS.map(({ key, icon, bg, indicator }) => (
+        <div key={key} style={styles.container}>
+          <div style={{ ...styles.pill, background: bg }}>
+            <div style={{ ...styles.indicator, background: indicator }} />
+            <span style={styles.value}>{formatNumber(resources[key])}</span>
+            <button
+              style={styles.hiddenButton}
+              onClick={() => handleClick(key)}
+              title={`Add ${key}`}
+            />
           </div>
-        );
-      })}
+          <img src={icon} alt={key} style={styles.icon} />
+        </div>
+      ))}
     </div>
   );
-}
+});
 
 const styles = {
   bar: {
@@ -52,7 +44,7 @@ const styles = {
     top: 16,
     right: 20,
     display: 'flex',
-    gap: 16, // Space between resources
+    gap: 16,
     pointerEvents: 'all',
     zIndex: 10,
     fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
@@ -66,12 +58,12 @@ const styles = {
   pill: {
     display: 'flex',
     alignItems: 'center',
-    padding: '0 20px 0 50px', // Normal padding
-    height: 32, // Adjusted thickness
-    border: '2px solid #1a1a1a', 
+    padding: '0 20px 0 50px',
+    height: 32,
+    border: '2px solid #1a1a1a',
     boxShadow: '0 3px 5px rgba(0,0,0,0.5), inset 0 2px 2px rgba(255,255,255,0.06)',
-    minWidth: 120, 
-    borderRadius: 16, // Fully rounded for separated pills
+    minWidth: 120,
+    borderRadius: 16,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -80,28 +72,28 @@ const styles = {
     left: 0,
     top: 0,
     bottom: 0,
-    width: 35, // Wider accent block
-    opacity: 1, // Solid color
-    borderRight: '1.5px solid #1a1a1a', 
+    width: 35,
+    opacity: 1,
+    borderRight: '1.5px solid #1a1a1a',
   },
   icon: {
     position: 'absolute',
-    left: -12, // Sticks out to the left
+    left: -12,
     top: '50%',
     transform: 'translateY(-50%)',
-    width: 56, // Sized cleanly
+    width: 56,
     height: 56,
     objectFit: 'contain',
-    filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.6))', // Stronger shadow so it pops above the gap
+    filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.6))',
     pointerEvents: 'none',
     zIndex: 4,
   },
   value: {
-    fontSize: 18, 
+    fontSize: 18,
     fontWeight: 900,
     color: '#fff',
-    WebkitTextStroke: '1px #111', 
-    textShadow: '0 2px 1px rgba(0,0,0,1)', 
+    WebkitTextStroke: '1px #111',
+    textShadow: '0 2px 1px rgba(0,0,0,1)',
     letterSpacing: '0.5px',
     zIndex: 2,
     width: '100%',

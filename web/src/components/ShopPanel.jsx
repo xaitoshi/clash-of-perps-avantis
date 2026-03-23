@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo, useCallback, useMemo } from 'react';
 
 import goldIcon from '../assets/resources/gold_bar.png';
 import woodIcon from '../assets/resources/wood_bar.png';
@@ -46,23 +46,109 @@ const RES_ICONS = {
   ore: stoneIcon,
 };
 
-const WoodIcon = () => (
-  <div style={{ position: 'relative', width: 28, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.1))' }}>
-    <div style={{ position: 'absolute', width: 24, height: 6, background: '#a05a2c', borderRadius: 2, transform: 'rotate(-15deg) translateY(-4px)', border: '1.5px solid #5c3012' }}></div>
-    <div style={{ position: 'absolute', width: 24, height: 6, background: '#b86b35', borderRadius: 2, transform: 'rotate(10deg) translateY(2px)', border: '1.5px solid #5c3012' }}></div>
-    <div style={{ position: 'absolute', width: 24, height: 6, background: '#c97a3f', borderRadius: 2, border: '1.5px solid #5c3012', zIndex: 10 }}></div>
-  </div>
-);
+// Pre-computed tab styles to avoid recreating objects every render
+const TAB_STYLE_ACTIVE = {
+  ...(() => {
+    const s = {
+      padding: '0 24px',
+      fontSize: 15,
+      fontWeight: 900,
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'all 0.1s',
+      outline: 'none',
+      border: 'none',
+    };
+    return s;
+  })(),
+  background: '#fdf8e7',
+  color: '#333',
+  marginTop: -4,
+  height: 56,
+  zIndex: 20,
+  borderBottom: 'none',
+  boxShadow: '0 4px 4px rgba(0,0,0,0.2)',
+  borderRadius: '0 0 12px 12px',
+  borderColor: '#d4c8b0',
+  borderLeft: '2px solid',
+  borderRight: '2px solid',
+};
 
-export default function ShopPanel({ buildingDefs, sendToGodot, onClose }) {
+const TAB_STYLE_INACTIVE = {
+  padding: '0 24px',
+  fontSize: 15,
+  fontWeight: 900,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  transition: 'all 0.1s',
+  outline: 'none',
+  border: 'none',
+  background: '#78909C',
+  color: '#fff',
+  marginTop: 0,
+  height: 52,
+  zIndex: 10,
+  borderBottom: 'none',
+  boxShadow: 'none',
+  borderRadius: '0 0 12px 12px',
+  borderColor: '#d4c8b0',
+  borderLeft: '2px solid',
+  borderRight: '2px solid',
+};
+
+const TAB_CONTENT_ACTIVE = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  textShadow: 'none',
+  WebkitTextStroke: 'none',
+};
+
+const TAB_CONTENT_INACTIVE = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  textShadow: '0px 1px 2px rgba(0,0,0,0.6)',
+  WebkitTextStroke: '0.5px #455A64',
+};
+
+const stopPropagation = (e) => e.stopPropagation();
+
+const WoodIcon = memo(() => (
+  <div style={woodIconStyles.wrap}>
+    <div style={woodIconStyles.log1} />
+    <div style={woodIconStyles.log2} />
+    <div style={woodIconStyles.log3} />
+  </div>
+));
+
+const woodIconStyles = {
+  wrap: { position: 'relative', width: 28, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.1))' },
+  log1: { position: 'absolute', width: 24, height: 6, background: '#a05a2c', borderRadius: 2, transform: 'rotate(-15deg) translateY(-4px)', border: '1.5px solid #5c3012' },
+  log2: { position: 'absolute', width: 24, height: 6, background: '#b86b35', borderRadius: 2, transform: 'rotate(10deg) translateY(2px)', border: '1.5px solid #5c3012' },
+  log3: { position: 'absolute', width: 24, height: 6, background: '#c97a3f', borderRadius: 2, border: '1.5px solid #5c3012', zIndex: 10 },
+};
+
+export default memo(function ShopPanel({ buildingDefs, sendToGodot, onClose }) {
   const [activeTab, setActiveTab] = useState('Economy');
   const buildings = buildingDefs?.buildings || {};
 
-  const filteredBuildings = Object.entries(buildings).filter(([id]) => getCategory(id) === activeTab);
+  const filteredBuildings = useMemo(
+    () => Object.entries(buildings).filter(([id]) => getCategory(id) === activeTab),
+    [buildings, activeTab]
+  );
+
+  const handlePlacement = useCallback((id) => {
+    sendToGodot('start_placement', { building_id: id });
+  }, [sendToGodot]);
 
   return (
     <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.container} onClick={e => e.stopPropagation()}>
+      <div style={styles.container} onClick={stopPropagation}>
         {/* Buildings Grid / Scroll Area */}
         <div style={styles.cardArea}>
           <div style={styles.cardScroll}>
@@ -70,10 +156,10 @@ export default function ShopPanel({ buildingDefs, sendToGodot, onClose }) {
               <div
                 key={id}
                 style={styles.card}
-                onClick={() => sendToGodot('start_placement', { building_id: id })}
+                onClick={() => handlePlacement(id)}
               >
                 <div style={styles.cardImgTop}>
-                  <div style={styles.iconHighlight}></div>
+                  <div style={styles.iconHighlight} />
                   {THUMBNAIL_MAP[id] ? (
                     <img src={THUMBNAIL_MAP[id]} style={styles.thumbnail} alt={def.name} />
                   ) : (
@@ -116,27 +202,10 @@ export default function ShopPanel({ buildingDefs, sendToGodot, onClose }) {
               return (
                 <button
                   key={tab.id}
-                  style={{
-                    ...styles.tab,
-                    background: isActive ? '#fdf8e7' : '#78909C',
-                    color: isActive ? '#333' : '#fff',
-                    marginTop: isActive ? -4 : 0,
-                    height: isActive ? 56 : 52,
-                    zIndex: isActive ? 20 : 10,
-                    borderBottom: 'none',
-                    boxShadow: isActive ? '0 4px 4px rgba(0,0,0,0.2)' : 'none',
-                    borderRadius: '0 0 12px 12px',
-                    borderColor: '#d4c8b0',
-                    borderLeft: '2px solid',
-                    borderRight: '2px solid',
-                  }}
+                  style={isActive ? TAB_STYLE_ACTIVE : TAB_STYLE_INACTIVE}
                   onClick={() => setActiveTab(tab.id)}
                 >
-                  <div style={{
-                    ...styles.tabContent,
-                    textShadow: isActive ? 'none' : '0px 1px 2px rgba(0,0,0,0.6)',
-                    WebkitTextStroke: isActive ? 'none' : '0.5px #455A64',
-                  }}>
+                  <div style={isActive ? TAB_CONTENT_ACTIVE : TAB_CONTENT_INACTIVE}>
                     {tab.label}
                   </div>
                 </button>
@@ -150,7 +219,7 @@ export default function ShopPanel({ buildingDefs, sendToGodot, onClose }) {
       </div>
     </div>
   );
-}
+});
 
 const styles = {
   overlay: {
@@ -304,23 +373,6 @@ const styles = {
   tabContainer: {
     display: 'flex',
     gap: 4,
-  },
-  tab: {
-    padding: '0 24px',
-    fontSize: 15,
-    fontWeight: 900,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.1s',
-    outline: 'none',
-    border: 'none',
-  },
-  tabContent: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
   },
   closeBtn: {
     position: 'absolute',

@@ -1,10 +1,12 @@
-export default function ErrorToast({ message }) {
+import { memo } from 'react';
+
+export default memo(function ErrorToast({ message }) {
   if (!message) return null;
 
   return (
     <div style={styles.toast}>⚠️ {message}</div>
   );
-}
+});
 
 const styles = {
   toast: {

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 export function useGodot() {
   const [ready, setReady] = useState(false);
@@ -11,6 +11,7 @@ export function useGodot() {
   const [enemyMode, setEnemyMode] = useState({ active: false });
   const [error, setError] = useState(null);
   const [showRegister, setShowRegister] = useState(false);
+  const errorTimerRef = useRef(null);
 
   useEffect(() => {
     window.onGodotMessage = (msg) => {
@@ -46,7 +47,8 @@ export function useGodot() {
           break;
         case 'error':
           setError(data.message);
-          setTimeout(() => setError(null), 3000);
+          if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+          errorTimerRef.current = setTimeout(() => setError(null), 3000);
           break;
         case 'show_register':
           setShowRegister(true);
@@ -59,7 +61,10 @@ export function useGodot() {
           break;
       }
     };
-    return () => { window.onGodotMessage = null; };
+    return () => {
+      window.onGodotMessage = null;
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    };
   }, []);
 
   const sendToGodot = useCallback((action, data = {}) => {
