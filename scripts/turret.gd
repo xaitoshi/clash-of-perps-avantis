@@ -96,12 +96,21 @@ func _build_pool() -> void:
 		trail.visible           = false
 		scene_root.add_child(trail)
 
-		# Muzzle flash VFX (pre-instantiated, reused from pool)
-		var flash = MUZZLE_FLASH_SCENE.instantiate()
-		flash.autoplay = false
-		flash.scale = Vector3(0.075, 0.294, 0.294)
-		flash.light_energy = 0.05
-		flash.speed_scale = 2.5
+		# Muzzle flash — lightweight emissive sphere (no VFX scene)
+		var flash_mesh = SphereMesh.new()
+		flash_mesh.radius = 0.06
+		flash_mesh.height = 0.12
+		var flash_mat = StandardMaterial3D.new()
+		flash_mat.albedo_color = Color(1.0, 0.95, 0.4, 1.0)
+		flash_mat.emission_enabled = true
+		flash_mat.emission = Color(1.0, 0.85, 0.2, 1.0)
+		flash_mat.emission_energy_multiplier = 16.0
+		flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		flash_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		var flash = MeshInstance3D.new()
+		flash.mesh = flash_mesh
+		flash.material_override = flash_mat
 		flash.visible = false
 		scene_root.add_child(flash)
 
@@ -109,6 +118,7 @@ func _build_pool() -> void:
 			"node": bullet,
 			"trail": trail,
 			"flash": flash,
+			"flash_mat": flash_mat,
 			"active": false,
 			"target": null,
 			"spawn_pos": Vector3.ZERO,
@@ -233,7 +243,7 @@ func _spawn_bullet() -> void:
 	b.active = true
 	b.target = _target
 	b.spawn_pos = spawn_pos
-	b.flash_timer = 0.12
+	b.flash_timer = 0.08
 
 	# Activate bullet node
 	b.node.global_position = spawn_pos
@@ -242,13 +252,10 @@ func _spawn_bullet() -> void:
 	# Reset trail
 	b.trail.visible = false
 
-	# Muzzle flash VFX
-	b.flash.global_position = spawn_pos + Vector3(0, -0.01, 0)
-	if _aim_node:
-		b.flash.global_rotation = _aim_node.global_rotation
-		b.flash.rotate_y(-PI / 2)
+	# Muzzle flash sphere
+	b.flash.global_position = spawn_pos
 	b.flash.visible = true
-	b.flash.play()
+	b.flash_mat.albedo_color.a = 1.0
 
 	_active_bullets.append(b)
 
@@ -258,9 +265,10 @@ func _update_bullets(delta: float) -> void:
 	while i >= 0:
 		var b = _active_bullets[i]
 
-		# Hide muzzle flash after timer
+		# Fade muzzle flash
 		if b.flash_timer > 0:
 			b.flash_timer -= delta
+			b.flash_mat.albedo_color.a = clampf(b.flash_timer / 0.08, 0.0, 1.0)
 			if b.flash_timer <= 0:
 				b.flash.visible = false
 
