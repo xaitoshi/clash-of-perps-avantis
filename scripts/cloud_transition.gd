@@ -9,7 +9,7 @@ signal close_finished
 # ── Config ───────────────────────────────────────────────────────
 @export var reveal_duration := 1.2
 @export var close_duration := 1.0
-@export var auto_reveal := true
+@export var auto_reveal := false
 
 const CLOUD_COUNT := 6
 
