@@ -128,7 +128,7 @@ router.post('/buildings/:id/move', auth, (req, res) => {
   const building = db.db.prepare('SELECT * FROM buildings WHERE id = ? AND player_id = ?').get(buildingId, req.player.id);
   if (!building) return res.status(404).json({ error: 'Building not found' });
   db.db.prepare('UPDATE buildings SET grid_x = ?, grid_z = ? WHERE id = ?').run(grid_x, grid_z, buildingId);
-  const resources = db.stmts.getResources.get(req.player.id);
+  const resources = db.getResources(req.player.id);
   res.json({ success: true, resources });
 });
 
