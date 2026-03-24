@@ -11,3 +11,6 @@ server/*.db-shm
 # MCP
 .mcp.json
 addons/godot_mcp/
+
+# Godot Builds
+web/public/godot/*.pck

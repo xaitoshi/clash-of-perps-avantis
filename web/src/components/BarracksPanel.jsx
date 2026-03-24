@@ -8,12 +8,15 @@ import stoneIcon from '../assets/resources/stone_bar.png';
 import knightImg from '../assets/units/knight.png';
 import mageImg from '../assets/units/mage.png';
 import arbaletImg from '../assets/units/arbalet.png';
+import archerImg from '../assets/units/archer.png';
+import berserkImg from '../assets/units/berserk.png';
 
 const UNIT_IMAGES = {
   Knight: knightImg,
   Mage: mageImg,
-  Archer: arbaletImg,
+  Archer: archerImg,
   Ranger: arbaletImg,
+  Barbarian: berserkImg,
 };
 
 const RES_ICONS = {
@@ -310,14 +313,35 @@ function BarracksPanel({ building, onClose }) {
                   </div>
                 )}
 
-                {hasImage && (
-                  <img 
-                    src={UNIT_IMAGES[currentTroopName]} 
-                    alt={currentTroopName} 
-                    className={isAnimatingUpgrade ? "upgrade-anim-char" : ""}
-                    style={styles.characterImg} 
-                  />
-                )}
+                {/* Preload and crossfade all characters */}
+                {troopNames.map(name => {
+                  if (!UNIT_IMAGES[name]) return null;
+                  const isActive = name === currentTroopName;
+                  
+                  let imgSize = 550;
+                  if (name === 'Knight' || name === 'Mage') {
+                    imgSize = 750;
+                  } else if (name === 'Archer' || name === 'Barbarian') {
+                    imgSize = 480;
+                  }
+                  
+                  return (
+                    <img 
+                      key={name}
+                      src={UNIT_IMAGES[name]} 
+                      alt={name} 
+                      className={isActive && isAnimatingUpgrade ? "upgrade-anim-char" : ""}
+                      style={{
+                        ...styles.characterImg,
+                        width: imgSize,
+                        height: imgSize,
+                        opacity: isActive ? 1 : 0,
+                        transition: 'opacity 0.35s ease-in-out',
+                        pointerEvents: isActive ? 'auto' : 'none'
+                      }} 
+                    />
+                  );
+                })}
               </div>
 
               {/* Removed total cost pill per user request */}
