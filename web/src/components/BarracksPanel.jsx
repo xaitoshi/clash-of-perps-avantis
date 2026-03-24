@@ -264,7 +264,7 @@ function BarracksPanel({ building, onClose }) {
                 <div style={styles.upgradeBadge}>
                   <div style={styles.badgeBigPart}>
                     <span style={styles.badgeLvlText}>Lvl</span>
-                    <span style={styles.badgeLvlNumber}>MAX</span>
+                    <span style={styles.badgeLvlNumber}>3</span>
                   </div>
                 </div>
               )}
