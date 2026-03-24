@@ -142,32 +142,7 @@ var grid_visual: MeshInstance3D = null
 
 # ── Selection State ───────────────────────────────────────────
 var selected_building: Dictionary = {}
-var _outline_material: ShaderMaterial
 var _cel_shader: Shader
-
-# ── Outline Shader ───────────────────────────────────────────
-const OUTLINE_SHADER_CODE = """
-shader_type spatial;
-render_mode cull_front, unshaded;
-
-uniform vec4 outline_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
-uniform float outline_width = 1.0;
-
-void vertex() {
-	vec4 clip_position = PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
-	vec3 clip_normal = mat3(PROJECTION_MATRIX) * (mat3(MODELVIEW_MATRIX) * NORMAL);
-	vec2 offset = normalize(clip_normal.xy) / VIEWPORT_SIZE * clip_position.w * outline_width * 2.0;
-	clip_position.xy += offset;
-	POSITION = clip_position;
-}
-
-void fragment() {
-	ALBEDO = outline_color.rgb;
-	if (outline_color.a < 1.0) {
-		ALPHA = outline_color.a;
-	}
-}
-"""
 
 # ── UI ────────────────────────────────────────────────────────
 var canvas: CanvasLayer
@@ -320,52 +295,6 @@ func _process(_delta: float) -> void:
 			building_panel_hp_bar.value = hp
 	_update_building_hp_bars()
 
-
-func _apply_outline(b: Dictionary) -> void:
-	var node = b.get("node", null)
-	if not is_instance_valid(node):
-		return
-	if _outline_material == null:
-		var shader = Shader.new()
-		shader.code = OUTLINE_SHADER_CODE
-		_outline_material = ShaderMaterial.new()
-		_outline_material.shader = shader
-		_outline_material.set_shader_parameter("outline_color", Color(1.0, 1.0, 1.0, 1.0))
-		_outline_material.set_shader_parameter("outline_width", 3.0)
-	# Apply outline via surface_override with unique material copies
-	for mesh in _get_all_mesh_instances(node):
-		var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
-		for s in surface_count:
-			var mat = mesh.get_active_material(s)
-			if mat:
-				# Duplicate so we don't affect other buildings sharing same material
-				var unique_mat = mat.duplicate()
-				unique_mat.next_pass = _outline_material
-				mesh.set_surface_override_material(s, unique_mat)
-			else:
-				var base_mat = StandardMaterial3D.new()
-				base_mat.next_pass = _outline_material
-				mesh.set_surface_override_material(s, base_mat)
-
-
-func _remove_outline(node: Node3D = null) -> void:
-	if node == null:
-		node = selected_building.get("node", null)
-	if not is_instance_valid(node):
-		return
-	for mesh in _get_all_mesh_instances(node):
-		var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
-		for s in surface_count:
-			# Clear the override to restore original shared material
-			mesh.set_surface_override_material(s, null)
-
-
-## Remove outline from ALL buildings across all building systems
-static func _remove_all_outlines() -> void:
-	for bs in Engine.get_main_loop().root.get_tree().get_nodes_in_group("building_systems"):
-		var old_node = bs.selected_building.get("node", null)
-		if is_instance_valid(old_node):
-			bs._remove_outline(old_node)
 
 
 func _get_all_mesh_instances(node: Node) -> Array:
@@ -1064,7 +993,7 @@ func _load_buildings_from_server(server_buildings: Array) -> void:
 		# HP bar
 		var hp_bar_data = _create_building_hp_bar(node, def)
 
-		placed_buildings.append({
+		var b_data := {
 			"id": building_type,
 			"grid_pos": gp,
 			"node": node,
@@ -1074,7 +1003,11 @@ func _load_buildings_from_server(server_buildings: Array) -> void:
 			"hp_bar": hp_bar_data.bar,
 			"hp_fill": hp_bar_data.fill,
 			"server_id": server_id,
-		})
+		}
+		placed_buildings.append(b_data)
+		# Tombstone → spawn skeleton guards
+		if building_type == "tombstone":
+			_spawn_tombstone_skeletons(b_data, level)
 	print("Loaded %d buildings from server (grid %d)" % [my_buildings.size(), my_grid_index])
 
 
@@ -1472,7 +1405,7 @@ func _spawn_building_locally(building_id: String, grid_pos: Vector2i, def: Dicti
 	add_child(building)
 	var max_hp = _get_hp_for(def, 1)
 	var hp_bar_data = _create_building_hp_bar(building, def)
-	placed_buildings.append({
+	var b_data := {
 		"id": building_id,
 		"grid_pos": grid_pos,
 		"node": building,
@@ -1482,7 +1415,11 @@ func _spawn_building_locally(building_id: String, grid_pos: Vector2i, def: Dicti
 		"hp_bar": hp_bar_data.bar,
 		"hp_fill": hp_bar_data.fill,
 		"server_id": server_id,
-	})
+	}
+	placed_buildings.append(b_data)
+	# Tombstone → spawn skeleton guards
+	if building_id == "tombstone":
+		_spawn_tombstone_skeletons(b_data, 1)
 
 
 func _cancel_all_placement() -> void:
@@ -1571,14 +1508,7 @@ func _find_building_at(gp: Vector2i) -> Dictionary:
 
 
 func _select_building(b: Dictionary) -> void:
-	# Remove outline from ALL buildings (across all grids)
-	for bs in get_tree().get_nodes_in_group("building_systems"):
-		var old_node = bs.selected_building.get("node", null)
-		if is_instance_valid(old_node):
-			bs._remove_outline(old_node)
 	selected_building = b
-	# Add outline to new selection
-	_apply_outline(b)
 	var def = building_defs[b.id]
 	var level = b.get("level", 1)
 	var hp = b.get("hp", _get_hp_for(def, level))
@@ -1674,7 +1604,6 @@ func _select_building(b: Dictionary) -> void:
 func _deselect_building() -> void:
 	if _is_moving:
 		_cancel_move(false)
-	_remove_outline()
 	selected_building = {}
 	_hide_range_indicator()
 	_hide_move_arrows()
@@ -1756,6 +1685,9 @@ func _upgrade_selected() -> void:
 			model.scale = Vector3(s, s, s)
 			b.node.add_child(model)
 			_apply_cel_shader(model)
+	# Tombstone → update skeleton count on upgrade
+	if b.id == "tombstone":
+		_spawn_tombstone_skeletons(b, b.level)
 	# Notify React with updated building data
 	_select_building(b)
 
@@ -1786,6 +1718,9 @@ func remove_building(b: Dictionary) -> void:
 	var idx = placed_buildings.find(b)
 	if idx < 0:
 		return
+	# Tombstone → kill all its skeleton guards
+	if b.id == "tombstone":
+		_remove_tombstone_skeletons(b)
 	# Only sync removal of OWN buildings, not enemy's during attack
 	if not is_viewing_enemy:
 		_sync_remove_building(b)
@@ -1802,6 +1737,44 @@ func remove_building(b: Dictionary) -> void:
 		b.node.queue_free()
 	placed_buildings.remove_at(idx)
 	_deselect_building()
+
+
+# ── Tombstone Skeleton Guards ─────────────────────────────────
+
+const SKELETON_MODEL = "res://Model/Characters/Skelet/characters/gltf/Skeleton_Minion.glb"
+const SKELETON_SCRIPT = "res://scripts/skeleton_guard.gd"
+const SKELETON_SCALE = 0.1
+
+func _spawn_tombstone_skeletons(b: Dictionary, target_count: int) -> void:
+	# Remove existing skeletons first
+	_remove_tombstone_skeletons(b)
+	var skeletons: Array = []
+	var tomb_pos = b.node.global_position
+	var script_res = load(SKELETON_SCRIPT)
+	var model_res = load(SKELETON_MODEL)
+	if not model_res or not script_res:
+		return
+	for i in target_count:
+		var skel = model_res.instantiate()
+		skel.set_script(script_res)
+		skel.scale = Vector3(SKELETON_SCALE, SKELETON_SCALE, SKELETON_SCALE)
+		# Place around tombstone with slight offset
+		var angle = (float(i) / float(target_count)) * TAU
+		var offset = Vector3(cos(angle) * 0.08, 0, sin(angle) * 0.08)
+		get_tree().current_scene.add_child(skel)
+		skel.global_position = tomb_pos + offset
+		skel.tombstone_pos = tomb_pos
+		_apply_cel_shader(skel)
+		skeletons.append(skel)
+	b["skeletons"] = skeletons
+
+
+func _remove_tombstone_skeletons(b: Dictionary) -> void:
+	var skeletons = b.get("skeletons", []) as Array
+	for skel in skeletons:
+		if is_instance_valid(skel):
+			skel.queue_free()
+	b["skeletons"] = []
 
 
 const BLDG_BAR_W = 0.18
