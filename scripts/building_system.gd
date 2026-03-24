@@ -482,7 +482,7 @@ func _create_ui() -> void:
 	# ── Shop panel (center) ────────────────────────────────────
 	shop_panel = PanelContainer.new()
 	shop_panel.visible = false
-	shop_panel.custom_minimum_size = Vector2(500, 700)
+	shop_panel.custom_minimum_size = Vector2(400, 550)
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.12, 0.14, 0.2, 1.0)
 	panel_style.corner_radius_top_left = 12
@@ -499,10 +499,10 @@ func _create_ui() -> void:
 	shop_panel.anchor_right = 0.5
 	shop_panel.anchor_top = 0.5
 	shop_panel.anchor_bottom = 0.5
-	shop_panel.offset_left = -250
-	shop_panel.offset_right = 250
-	shop_panel.offset_top = -350
-	shop_panel.offset_bottom = 350
+	shop_panel.offset_left = -200
+	shop_panel.offset_right = 200
+	shop_panel.offset_top = -275
+	shop_panel.offset_bottom = 275
 	canvas.add_child(shop_panel)
 
 	var margin = MarginContainer.new()
@@ -512,9 +512,15 @@ func _create_ui() -> void:
 	margin.add_theme_constant_override("margin_bottom", 16)
 	shop_panel.add_child(margin)
 
+	var scroll = ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	margin.add_child(scroll)
+
 	var vbox = VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 14)
-	margin.add_child(vbox)
+	scroll.add_child(vbox)
 
 	var title = Label.new()
 	title.text = "Buildings"
@@ -537,7 +543,7 @@ func _create_ui() -> void:
 		var cost_text = "  ".join(cost_parts) if cost_parts.size() > 0 else "Free"
 		var btn = Button.new()
 		btn.text = "%s (%dx%d)\n%s" % [def.name, def.cells.x, def.cells.y, cost_text]
-		btn.custom_minimum_size = Vector2(0, 100)
+		btn.custom_minimum_size = Vector2(0, 80)
 		_style_button(btn, Color(0.18, 0.22, 0.35), Color(0.25, 0.3, 0.45))
 		var building_id = id
 		btn.pressed.connect(func(): _start_placement(building_id))
