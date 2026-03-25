@@ -312,8 +312,20 @@ func _deploy_troops_from_ship(ship_pos: Vector3, sail_dir: Vector3, ship_idx: in
 			building_y = bs.grid_y
 			break
 
+	# Get troop levels from building system for this troop type
+	var troop_level = 1
+	var troop_script_name = troop_def.script.get_file().get_basename()
+	for bs in get_tree().get_nodes_in_group("building_systems"):
+		if "troop_levels" in bs:
+			# Map script name to troop level key
+			var level_key = _script_to_troop_key(troop_def.script)
+			if bs.troop_levels.has(level_key):
+				troop_level = bs.troop_levels[level_key]
+			break
+
 	for i in troops_per_ship:
 		var timer = get_tree().create_timer(troop_spawn_delay * i)
+		var lvl = troop_level  # capture for closure
 		timer.timeout.connect(func():
 			var troop = model_res.instantiate()
 			troop.set_script(script_res)
@@ -328,6 +340,21 @@ func _deploy_troops_from_ship(ship_pos: Vector3, sail_dir: Vector3, ship_idx: in
 			troop.global_position.y = building_y
 
 			troop.visible = true
+			# Apply troop level before activating
+			if lvl > 1 and troop.has_method("upgrade_to"):
+				troop.upgrade_to(lvl)
 			if troop.has_method("activate"):
 				troop.activate()
 		)
+
+
+## Map script path to troop_levels dictionary key
+static func _script_to_troop_key(script_path: String) -> String:
+	var file = script_path.get_file().get_basename()
+	match file:
+		"knight": return "Knight"
+		"mage": return "Mage"
+		"barbarian": return "Barbarian"
+		"archer": return "Archer"
+		"ranger": return "Ranger"
+	return file.capitalize()

@@ -193,6 +193,10 @@ func _handle_react_action(action: String, data: Dictionary) -> void:
 			var active = _get_active_building_system()
 			if active:
 				active._deselect_building()
+		"collect_resource":
+			var sid = data.get("server_id", -1)
+			for bsys in get_tree().get_nodes_in_group("building_systems"):
+				bsys._collect_building_resource(sid)
 
 
 func _do_register(player_name: String) -> void:

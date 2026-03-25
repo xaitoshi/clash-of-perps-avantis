@@ -21,8 +21,12 @@ var building_defs: Dictionary = {
 		"height": 0.3,
 		"scene": "res://Model/Mine/1.gltf",
 		"model_scale": 0.25,
+		"model_rotation_y": 270.0,
 		"hp_levels": [1200, 2200, 3800],
 		"cost": {"gold": 400, "wood": 150},
+		"produces": "ore",
+		"produce_rate": [10, 18, 30],   # per minute per level
+		"produce_max": [200, 400, 800],  # max stored before collection
 	},
 	"barn": {
 		"name": "Barn",
@@ -43,6 +47,7 @@ var building_defs: Dictionary = {
 		"scene": "res://Model/Port/1.glb",
 		"scenes": ["res://Model/Port/1.glb", "res://Model/Port/2.glb", "res://Model/Port/3.glb"],
 		"model_scale": 0.25,
+		"model_rotation_y": 0.0,
 		"hp_levels": [1800, 3200, 5500],
 		"cost": {"gold": 800, "wood": 300, "ore": 200},
 	},
@@ -55,6 +60,9 @@ var building_defs: Dictionary = {
 		"model_scale": 0.1,
 		"hp_levels": [1200, 2200, 3800],
 		"cost": {"gold": 300},
+		"produces": "wood",
+		"produce_rate": [12, 22, 35],
+		"produce_max": [250, 500, 1000],
 	},
 	"barracks": {
 		"name": "Barracks",
@@ -294,6 +302,8 @@ func _ready() -> void:
 
 
 var _bs_frame: int = 0
+var _produce_timer: float = 0.0
+const PRODUCE_TICK: float = 1.0  # update production every second
 
 func _process(_delta: float) -> void:
 	_bs_frame += 1
@@ -311,6 +321,104 @@ func _process(_delta: float) -> void:
 				building_panel_hp_bar.max_value = bmax
 				building_panel_hp_bar.value = bhp
 	_update_building_hp_bars()
+
+	# Resource production tick
+	if not is_viewing_enemy:
+		_produce_timer += _delta
+		if _produce_timer >= PRODUCE_TICK:
+			_produce_timer -= PRODUCE_TICK
+			_tick_production()
+
+
+func _tick_production() -> void:
+	var any_ready = false
+	for b in placed_buildings:
+		var def = building_defs.get(b.id, {})
+		if not def.has("produces"):
+			continue
+		var lvl = b.get("level", 1)
+		var rate_arr = def.get("produce_rate", [0])
+		var max_arr = def.get("produce_max", [100])
+		var rate_idx = clampi(lvl - 1, 0, rate_arr.size() - 1)
+		var max_idx = clampi(lvl - 1, 0, max_arr.size() - 1)
+		var rate_per_sec = rate_arr[rate_idx] / 60.0
+		var max_stored = max_arr[max_idx]
+		var stored = b.get("stored", 0.0)
+		stored = minf(stored + rate_per_sec, max_stored)
+		b["stored"] = stored
+		if stored >= 1.0:
+			any_ready = true
+	if any_ready:
+		_send_collectible_buildings()
+
+
+func _send_collectible_buildings() -> void:
+	var bridge = get_node_or_null("/root/Bridge")
+	if not bridge:
+		return
+	var collectibles = []
+	for b in placed_buildings:
+		var def = building_defs.get(b.id, {})
+		if not def.has("produces"):
+			continue
+		var stored = b.get("stored", 0.0)
+		if stored < 1.0:
+			continue
+		var node = b.get("node")
+		if not is_instance_valid(node):
+			continue
+		collectibles.append({
+			"server_id": b.get("server_id", -1),
+			"building_id": b.id,
+			"resource": def.produces,
+			"amount": int(stored),
+			"position": _get_screen_pos(node),
+		})
+	if collectibles.size() > 0:
+		bridge.send_to_react("collectible_resources", {"buildings": collectibles})
+
+
+func _get_screen_pos(node: Node3D) -> Dictionary:
+	var cam = BaseTroop._get_camera_cached()
+	if not cam:
+		return {"x": 0, "y": 0}
+	var pos3d = node.global_position + Vector3(0, 0.3, 0)
+	if not cam.is_position_behind(pos3d):
+		var pos2d = cam.unproject_position(pos3d)
+		return {"x": int(pos2d.x), "y": int(pos2d.y)}
+	return {"x": -100, "y": -100}
+
+
+func _collect_building_resource(server_id: int) -> void:
+	# Find building by server_id
+	for b in placed_buildings:
+		if b.get("server_id", -1) != server_id:
+			continue
+		var def = building_defs.get(b.id, {})
+		if not def.has("produces"):
+			return
+		var amount = int(b.get("stored", 0.0))
+		if amount <= 0:
+			return
+		b["stored"] = 0.0
+		var res_type = def.produces
+		resources[res_type] = resources.get(res_type, 0) + amount
+		_update_resource_ui()
+		# Send to server
+		var net = get_node_or_null("/root/Net")
+		if net and net.has_token():
+			var add_dict = {"gold": 0, "wood": 0, "ore": 0}
+			add_dict[res_type] = amount
+			net.add_resources(add_dict.gold, add_dict.wood, add_dict.ore)
+		# Update React
+		var bridge = get_node_or_null("/root/Bridge")
+		if bridge:
+			bridge.send_to_react("resources", {
+				"gold": resources.gold,
+				"wood": resources.wood,
+				"ore": resources.ore,
+			})
+		return
 
 
 
@@ -984,6 +1092,7 @@ func _load_buildings_from_server(server_buildings: Array) -> void:
 				var model = scene_res.instantiate()
 				var s = def.get("model_scale", 0.2)
 				model.scale = Vector3(s, s, s)
+				model.rotation_degrees.y = def.get("model_rotation_y", 90.0)
 				node.add_child(model)
 				_apply_cel_shader(model)
 
@@ -1165,6 +1274,7 @@ func _create_ghost() -> void:
 			var model = scene_res.instantiate()
 			var s = def.get("model_scale", 0.2)
 			model.scale = Vector3(s, s, s)
+			model.rotation_degrees.y = def.get("model_rotation_y", 90.0)
 			ghost.add_child(model)
 			_apply_cel_shader(model)
 	add_child(ghost)
@@ -1197,6 +1307,7 @@ func _create_placed_building(def: Dictionary) -> Node3D:
 			var model = scene_res.instantiate()
 			var s = def.get("model_scale", 0.2)
 			model.scale = Vector3(s, s, s)
+			model.rotation_degrees.y = def.get("model_rotation_y", 90.0)
 			node.add_child(model)
 			_apply_cel_shader(model)
 			return node
@@ -1781,6 +1892,7 @@ func _run_upgrade_sequence(b: Dictionary, def: Dictionary, server_new_level: int
 			var new_model = scene_res.instantiate()
 			var s = def.get("model_scale", 0.2)
 			new_model.scale = Vector3(s, s, s)
+			new_model.rotation_degrees.y = def.get("model_rotation_y", 90.0)
 			model.add_child(new_model)
 			
 	# Bounce UP (reveal)
@@ -2387,6 +2499,11 @@ func _upgrade_troop(troop_name: String) -> void:
 	var bridge = get_node_or_null("/root/Bridge")
 	if bridge:
 		bridge.send_to_react("troop_levels", troop_levels)
+		bridge.send_to_react("resources", {
+			"gold": resources.gold,
+			"wood": resources.wood,
+			"ore": resources.ore,
+		})
 
 
 func _on_attack_pressed() -> void:
