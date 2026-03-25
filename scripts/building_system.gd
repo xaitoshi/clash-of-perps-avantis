@@ -111,12 +111,12 @@ var building_defs: Dictionary = {
 	},
 	"tombstone": {
 		"name": "Tombstone",
-		"cells": Vector2i(1, 1),
+		"cells": Vector2i(2, 2),
 		"color": Color(0.4, 0.4, 0.45, 0.5),
 		"height": 0.3,
 		"scene": "res://Model/Tombstone/GLB format/1.glb",
 		"scenes": ["res://Model/Tombstone/GLB format/1.glb", "res://Model/Tombstone/GLB format/2.glb", "res://Model/Tombstone/GLB format/3.glb"],
-		"model_scale": 0.2,
+		"model_scale": 0.3,
 		"hp_levels": [1000, 1500, 2000],
 		"cost": {"gold": 100},
 	},
@@ -2051,7 +2051,11 @@ func _run_upgrade_sequence(b: Dictionary, def: Dictionary, server_new_level: int
 			new_model.scale = Vector3(s, s, s)
 			new_model.rotation_degrees.y = def.get("model_rotation_y", 90.0)
 			model.add_child(new_model)
-			
+			# Recreate HP bar (old one was freed with model children)
+			var hp_bar_data = _create_building_hp_bar(model, def)
+			b["hp_bar"] = hp_bar_data.bar
+			b["hp_fill"] = hp_bar_data.fill
+
 	# Bounce UP (reveal)
 	var tw_up = create_tween()
 	tw_up.tween_property(model, "scale", Vector3.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

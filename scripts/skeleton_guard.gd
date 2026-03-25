@@ -100,9 +100,18 @@ func _ready() -> void:
 	_pick_idle_wait()
 
 
-func _process(_delta: float) -> void:
-	_delta = minf(_delta, 0.1)
+func _process(delta: float) -> void:
+	delta = minf(delta, 0.1)
 	_update_hp_bar()
+	match state:
+		State.IDLE:
+			_do_idle(delta)
+		State.PATROL:
+			_do_patrol(delta)
+		State.CHASE:
+			_do_chase(delta)
+		State.ATTACK:
+			_do_attack(delta)
 
 
 # ── Idle: stand for a bit, then pick patrol target ────────────
@@ -125,8 +134,6 @@ func _do_idle(delta: float) -> void:
 		if anim_player.has_animation("Running_A"):
 			anim_player.play("Running_A")
 		return
-	if _idle_timer >= _idle_duration:
-		_pick_patrol_target()
 
 
 # ── Patrol: walk to random point near tombstone ───────────────
@@ -429,9 +436,7 @@ func _update_hp_bar() -> void:
 	if not _hp_bar or not _hp_fill:
 		return
 	var ratio = clamp(float(hp) / float(max_hp), 0.0, 1.0)
-	_hp_bar.visible = ratio < 1.0
-	if not _hp_bar.visible:
-		return
+	_hp_bar.visible = true
 	_hp_bar.global_position = global_position + Vector3(0, 0.25, 0)
 	var cam = BaseTroop._get_camera_cached()
 	if cam:

@@ -36,7 +36,7 @@ func _setup_weapons() -> void:
 
 
 func _do_attack(delta: float) -> void:
-	if target_building.size() == 0 or not is_instance_valid(target_building.get("node")):
+	if not _has_valid_target():
 		_hit_this_swing = false
 		_find_next_target()
 		return
@@ -50,15 +50,12 @@ func _do_attack(delta: float) -> void:
 			anim_player.play(attack_anim)
 
 	# Hit only after animation passes threshold AND weapon is close
-	if not _hit_this_swing and _sword_attachment and is_instance_valid(target_building.get("node")):
+	if not _hit_this_swing and _sword_attachment and _has_valid_target():
 		if anim_player.is_playing() and anim_player.current_animation == attack_anim:
 			var anim_len = anim_player.current_animation_length
 			if anim_len > 0 and anim_player.current_animation_position / anim_len >= hit_anim_threshold:
 				var sword_pos = _sword_attachment.global_position
-				var building_pos = target_building.node.global_position
-				if sword_pos.distance_to(building_pos) <= hit_distance:
+				var t_pos = _get_target_position()
+				if sword_pos.distance_to(t_pos) <= hit_distance:
 					_hit_this_swing = true
-					target_building["hp"] = target_building.hp - damage
-					if target_building.hp <= 0:
-						_destroy_target()
-						_find_next_target()
+					_deal_target_damage()

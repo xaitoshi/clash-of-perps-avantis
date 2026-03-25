@@ -18,6 +18,7 @@ enum State { INACTIVE, IDLE, RUNNING, ATTACKING, VICTORY }
 var state: State = State.INACTIVE
 var target_building: Dictionary = {}
 var target_bs = null
+var target_guard: Node3D = null
 var attack_timer: float = 0.0
 
 var anim_player: AnimationPlayer
@@ -58,6 +59,19 @@ static func _get_buildings_cached() -> Array:
 						_cached_building_list.append({"b": b, "bs": bs, "pos": b.node.global_position})
 		_buildings_cache_frame = frame
 	return _cached_building_list
+
+
+static var _cached_guards_list: Array = []
+static var _guards_list_cache_frame: int = -1
+
+static func _get_guards_list_cached() -> Array:
+	var frame = Engine.get_process_frames()
+	if frame != _guards_list_cache_frame:
+		var tree = Engine.get_main_loop() as SceneTree
+		if tree:
+			_cached_guards_list = tree.get_nodes_in_group("skeleton_guards")
+		_guards_list_cache_frame = frame
+	return _cached_guards_list
 
 
 static func _get_troops_cached() -> Array:
@@ -261,6 +275,7 @@ func _find_next_target() -> void:
 	var nearest_dist_sq: float = INF
 	var nearest_b: Dictionary = {}
 	var nearest_bs_ref = null
+	var nearest_guard: Node3D = null
 	var my_pos = global_position
 
 	for entry in _get_buildings_cached():
@@ -274,17 +289,40 @@ func _find_next_target() -> void:
 			nearest_dist_sq = d_sq
 			nearest_b = b
 			nearest_bs_ref = entry.bs
+			nearest_guard = null
 
-	if nearest_b.size() > 0:
+	for guard in _get_guards_list_cached():
+		if not is_instance_valid(guard) or not guard.is_inside_tree():
+			continue
+		if guard.hp <= 0:
+			continue
+		var dx = my_pos.x - guard.global_position.x
+		var dz = my_pos.z - guard.global_position.z
+		var d_sq = dx * dx + dz * dz
+		if d_sq < nearest_dist_sq:
+			nearest_dist_sq = d_sq
+			nearest_b = {}
+			nearest_bs_ref = null
+			nearest_guard = guard
+
+	if nearest_guard:
+		target_guard = nearest_guard
+		target_building = {}
+		target_bs = null
+		state = State.RUNNING
+		if anim_player.has_animation("Running_A"):
+			anim_player.play("Running_A")
+	elif nearest_b.size() > 0:
 		target_building = nearest_b
 		target_bs = nearest_bs_ref
+		target_guard = null
 		state = State.RUNNING
 		if anim_player.has_animation("Running_A"):
 			anim_player.play("Running_A")
 	else:
 		target_building = {}
 		target_bs = null
-		# No buildings left — victory!
+		target_guard = null
 		_trigger_victory_all()
 
 
@@ -298,6 +336,7 @@ func _play_victory() -> void:
 	state = State.VICTORY
 	target_building = {}
 	target_bs = null
+	target_guard = null
 	if anim_player.has_animation("Cheering"):
 		anim_player.play("Cheering")
 	elif anim_player.has_animation("Idle_A"):
@@ -312,12 +351,39 @@ func take_damage(dmg: int) -> void:
 		queue_free()
 
 
+func _has_valid_target() -> bool:
+	if target_guard != null and is_instance_valid(target_guard) and target_guard.is_inside_tree():
+		return true
+	return target_building.size() > 0 and is_instance_valid(target_building.get("node"))
+
+
+func _get_target_position() -> Vector3:
+	if target_guard != null and is_instance_valid(target_guard):
+		return target_guard.global_position
+	if target_building.size() > 0 and is_instance_valid(target_building.get("node")):
+		return target_building.node.global_position
+	return global_position
+
+
+func _deal_target_damage() -> void:
+	if target_guard != null and is_instance_valid(target_guard):
+		target_guard.take_damage(damage)
+		if not is_instance_valid(target_guard) or not target_guard.is_inside_tree():
+			target_guard = null
+			_find_next_target()
+	elif target_building.size() > 0:
+		target_building["hp"] = target_building.hp - damage
+		if target_building.hp <= 0:
+			_destroy_target()
+			_find_next_target()
+
+
 func _move_to_target(delta: float) -> void:
-	if target_building.size() == 0 or not is_instance_valid(target_building.node):
+	if not _has_valid_target():
 		_find_next_target()
 		return
 
-	var target_pos = target_building.node.global_position
+	var target_pos = _get_target_position()
 	var diff = Vector3(target_pos.x - global_position.x, 0, target_pos.z - global_position.z)
 	var dist_sq = diff.length_squared()
 
@@ -367,7 +433,7 @@ func _move_to_target(delta: float) -> void:
 
 	move_vec += _last_separation
 	global_position += move_vec
-	global_position.y = target_building.node.global_position.y
+	global_position.y = target_pos.y
 
 	if dist <= attack_range:
 		state = State.ATTACKING
@@ -403,7 +469,7 @@ func _get_separation() -> Vector3:
 
 
 func _do_attack(delta: float) -> void:
-	if target_building.size() == 0 or not is_instance_valid(target_building.get("node")):
+	if not _has_valid_target():
 		_find_next_target()
 		return
 
@@ -415,15 +481,10 @@ func _do_attack(delta: float) -> void:
 	attack_timer += delta
 	if attack_timer >= atk_speed:
 		attack_timer -= atk_speed
-		target_building["hp"] = target_building.hp - damage
-
 		if attack_anim != "" and anim_player.has_animation(attack_anim):
 			anim_player.stop()
 			anim_player.play(attack_anim)
-
-		if target_building.hp <= 0:
-			_destroy_target()
-			_find_next_target()
+		_deal_target_damage()
 
 
 func _destroy_target() -> void:
@@ -431,6 +492,7 @@ func _destroy_target() -> void:
 		target_bs.remove_building(target_building)
 	target_building = {}
 	target_bs = null
+	target_guard = null
 
 
 func _attach_to_bone(bone_name: String, attachment_name: String, scene_path: String, node_name: String, rot_deg: Vector3 = Vector3.ZERO) -> BoneAttachment3D:

@@ -109,6 +109,7 @@ func _build_pool() -> void:
 			"active": false,
 			"target_ref": {},
 			"target_bs_ref": null,
+			"target_guard_ref": null,
 		})
 
 
@@ -123,6 +124,7 @@ func _return_to_pool(b: Dictionary) -> void:
 	b.active = false
 	b.target_ref = {}
 	b.target_bs_ref = null
+	b.target_guard_ref = null
 	b.node.visible = false
 
 
@@ -135,7 +137,7 @@ func _exit_tree() -> void:
 
 
 func _do_attack(delta: float) -> void:
-	if target_building.size() == 0 or not is_instance_valid(target_building.get("node")):
+	if not _has_valid_target():
 		_find_next_target()
 		return
 
@@ -156,6 +158,7 @@ func _spawn_projectile() -> void:
 	b.active = true
 	b.target_ref = target_building
 	b.target_bs_ref = target_bs
+	b.target_guard_ref = target_guard
 	b.node.global_position = global_position + Vector3(0, 0.08, 0)
 	b.node.visible = true
 
@@ -171,28 +174,41 @@ func _update_projectiles(delta: float) -> void:
 			i -= 1
 			continue
 
+		var guard_ref = p.target_guard_ref
 		var target_ref = p.target_ref
-		if target_ref.size() == 0 or not is_instance_valid(target_ref.get("node")):
+		var target_pos: Vector3
+		var has_target: bool = false
+
+		if guard_ref != null and is_instance_valid(guard_ref) and guard_ref.is_inside_tree():
+			target_pos = guard_ref.global_position + Vector3(0, 0.05, 0)
+			has_target = true
+		elif target_ref.size() > 0 and is_instance_valid(target_ref.get("node")):
+			target_pos = target_ref.node.global_position + Vector3(0, 0.05, 0)
+			has_target = true
+
+		if not has_target:
 			_return_to_pool(p)
 			_active.remove_at(i)
 			i -= 1
 			continue
 
-		# Move toward building
-		var target_pos = target_ref.node.global_position + Vector3(0, 0.05, 0)
 		p.node.global_position = p.node.global_position.move_toward(target_pos, projectile_fly_speed * delta)
 
-		# Hit check — squared distance
 		var dx = p.node.global_position.x - target_pos.x
 		var dy = p.node.global_position.y - target_pos.y
 		var dz = p.node.global_position.z - target_pos.z
 		if dx * dx + dy * dy + dz * dz < HIT_DIST_SQ:
-			target_ref["hp"] = target_ref.hp - damage
-			if target_ref.hp <= 0:
-				var bs_ref = p.target_bs_ref
-				if bs_ref and bs_ref.has_method("remove_building"):
-					bs_ref.remove_building(target_ref)
-				_find_next_target()
+			if guard_ref != null and is_instance_valid(guard_ref):
+				guard_ref.take_damage(damage)
+				if not is_instance_valid(guard_ref) or not guard_ref.is_inside_tree():
+					_find_next_target()
+			else:
+				target_ref["hp"] = target_ref.hp - damage
+				if target_ref.hp <= 0:
+					var bs_ref = p.target_bs_ref
+					if bs_ref and bs_ref.has_method("remove_building"):
+						bs_ref.remove_building(target_ref)
+					_find_next_target()
 			_return_to_pool(p)
 			_active.remove_at(i)
 		i -= 1
