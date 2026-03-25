@@ -307,25 +307,9 @@ func _get_all_mesh_instances(node: Node) -> Array:
 
 
 func _apply_cel_shader(node: Node) -> void:
-	if _cel_shader == null:
-		_cel_shader = load("res://shaders/cel.gdshader")
-	if _cel_shader == null:
-		return
-	for mesh in _get_all_mesh_instances(node):
-		var surface_count = mesh.mesh.get_surface_count() if mesh.mesh else 0
-		for s in surface_count:
-			var mat = mesh.get_active_material(s)
-			var tex: Texture2D = null
-			var albedo := Color(1, 1, 1, 1)
-			if mat is StandardMaterial3D:
-				tex = mat.albedo_texture
-				albedo = mat.albedo_color
-			var cel_mat = ShaderMaterial.new()
-			cel_mat.shader = _cel_shader
-			cel_mat.set_shader_parameter("color", albedo)
-			if tex:
-				cel_mat.set_shader_parameter("base_texture", tex)
-			mesh.set_surface_override_material(s, cel_mat)
+	# Disabled to prevent unwanted white/red highlights
+	# from the cel shader on the original textures.
+	return
 
 
 func _create_fps_label() -> void:
@@ -1407,6 +1391,14 @@ func _spawn_building_locally(building_id: String, grid_pos: Vector2i, def: Dicti
 	local_pos.z += sz / 2.0
 	local_pos.y = 0
 	building.position = local_pos
+	
+	# --- Build Animation ---
+	building.scale = Vector3.ZERO
+	var tw = create_tween()
+	tw.set_trans(Tween.TRANS_BACK)
+	tw.set_ease(Tween.EASE_OUT)
+	tw.tween_property(building, "scale", Vector3.ONE, 0.4)
+	# -----------------------
 
 	add_child(building)
 	var max_hp = _get_hp_for(def, 1)
@@ -1664,39 +1656,134 @@ func _upgrade_selected() -> void:
 		if result.has("level"):
 			level = result["level"] - 1
 
-	# Server OK — apply locally
-	b["level"] = level + 1
+	# Server OK — start upgrade sequence
+	b["is_upgrading"] = true
+	var target_level = level + 1
+	_run_upgrade_sequence(b, def, target_level)
+
+func _run_upgrade_sequence(b: Dictionary, def: Dictionary, server_new_level: int) -> void:
+	if not is_instance_valid(b.get("node")):
+		b["is_upgrading"] = false
+		return
+		
+	var model = b.node
+	
+	# Spawn Upgrading text
+	var up_lbl = Label3D.new()
+	up_lbl.text = "Upgrading..."
+	up_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	up_lbl.no_depth_test = true
+	up_lbl.render_priority = 10
+	up_lbl.outline_modulate = Color(0, 0, 0, 1)
+	up_lbl.outline_size = 4
+	up_lbl.font_size = 50
+	up_lbl.position = Vector3(0, 1.2, 0)
+	model.add_child(up_lbl)
+
+	# Start Glow on CURRENT model
+	var outline_shader = load("res://shaders/upgrade_outline.gdshader")
+	var mat: ShaderMaterial = null
+	var meshes: Array[MeshInstance3D] = []
+	if outline_shader:
+		mat = ShaderMaterial.new()
+		mat.shader = outline_shader
+		mat.set_shader_parameter("outline_color", Color(0.1, 0.6, 1.0, 1.0))
+		mat.set_shader_parameter("outline_width", 0.035)
+		_get_all_meshes(model, meshes)
+		for m in meshes:
+			if is_instance_valid(m):
+				m.material_overlay = mat
+
+	# Wait for the "glow upgrade" phase (3 seconds)
+	await get_tree().create_timer(3.0).timeout
+	
+	if not is_instance_valid(model):
+		return # building destroyed while waiting
+		
+	# Remove glow and text
+	for m in meshes:
+		if is_instance_valid(m):
+			m.material_overlay = null
+	if is_instance_valid(up_lbl):
+		up_lbl.queue_free()
+
+	# Bounce DOWN (squash)
+	var tw_down = create_tween()
+	tw_down.tween_property(model, "scale", Vector3.ZERO, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	await tw_down.finished
+
+	# --- UPGRADE APPLIED ---
+	b["level"] = server_new_level
 	var new_max_hp = _get_hp_for(def, b.level)
 	b["max_hp"] = new_max_hp
 	b["hp"] = new_max_hp
-	if building_panel_title:
-		building_panel_title.text = "%s (Lv. %d)" % [def.name, b.level]
-	if building_panel_hp:
-		building_panel_hp.text = "HP: %d / %d" % [new_max_hp, new_max_hp]
-	if building_panel_hp_bar:
-		building_panel_hp_bar.max_value = new_max_hp
-		building_panel_hp_bar.value = new_max_hp
-	_update_upgrade_cost_label(def, b.level)
+	
+	# Update UI if this building is still selected
+	if current_building_id == b.id and building_panel and building_panel.visible:
+		if building_panel_title:
+			building_panel_title.text = "%s (Lv. %d)" % [def.name, b.level]
+		if building_panel_hp:
+			building_panel_hp.text = "HP: %d / %d" % [new_max_hp, new_max_hp]
+		if building_panel_hp_bar:
+			building_panel_hp_bar.max_value = new_max_hp
+			building_panel_hp_bar.value = new_max_hp
+		_update_upgrade_cost_label(def, b.level)
+		
 	# Swap model if scenes array exists
 	if def.has("scenes"):
-		var new_level = b.level
-		var scene_idx = clampi(new_level - 1, 0, def.scenes.size() - 1)
+		var scene_idx = clampi(b.level - 1, 0, def.scenes.size() - 1)
 		var scene_path = def.scenes[scene_idx]
 		var scene_res = load(scene_path)
-		if scene_res and is_instance_valid(b.node):
-			for child in b.node.get_children():
+		if scene_res:
+			for child in model.get_children():
 				child.queue_free()
-			var model = scene_res.instantiate()
+			var new_model = scene_res.instantiate()
 			var s = def.get("model_scale", 0.2)
-			model.scale = Vector3(s, s, s)
-			b.node.add_child(model)
-			_apply_cel_shader(model)
-	# Tombstone → update skeleton count on upgrade
+			new_model.scale = Vector3(s, s, s)
+			model.add_child(new_model)
+			
+	# Bounce UP (reveal)
+	var tw_up = create_tween()
+	tw_up.tween_property(model, "scale", Vector3.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	
+	# Tombstone → update skeletons
 	if b.id == "tombstone":
 		_spawn_tombstone_skeletons(b, b.level)
-	# Notify React with updated building data
-	_select_building(b)
 
+	# Update React UI globally
+	if current_building_id == b.id:
+		_select_building(b)
+
+	# Show leveled up text
+	var lbl = Label3D.new()
+	lbl.text = "Your " + def.name + "\nleveled up!"
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.no_depth_test = true
+	lbl.render_priority = 10
+	lbl.outline_modulate = Color(0, 0, 0, 1)
+	lbl.outline_size = 4
+	lbl.modulate = Color(0.1, 0.9, 1.0, 0.0)
+	lbl.font_size = 60
+	lbl.position = Vector3(0, 0.8, 0)
+	model.add_child(lbl)
+	
+	var tw_pos = create_tween()
+	tw_pos.set_parallel(true)
+	tw_pos.tween_property(lbl, "position", Vector3(0, 1.8, 0), 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw_pos.tween_property(lbl, "modulate:a", 1.0, 0.5)
+	
+	var tw_fade = create_tween()
+	tw_fade.tween_interval(1.0)
+	tw_fade.tween_property(lbl, "modulate:a", 0.0, 1.0)
+	tw_fade.tween_callback(lbl.queue_free)
+
+	b["is_upgrading"] = false
+
+func _get_all_meshes(node: Node, arr: Array[MeshInstance3D]) -> void:
+	if node is MeshInstance3D:
+		arr.append(node as MeshInstance3D)
+	for c in node.get_children():
+		_get_all_meshes(c, arr)
 
 func _update_upgrade_cost_label(def: Dictionary, current_level: int) -> void:
 	if not building_panel_cost:
@@ -1799,11 +1886,15 @@ void fragment() {
 	ALPHA = albedo.a * (1.0 - smoothstep(-aa, aa, d));
 }"
 
+## Shared shader for building HP bars — compiled once on GPU
+static var _bldg_hp_shader: Shader = null
+
 func _make_bldg_hp_mat(color: Color, size: Vector2, priority: int) -> ShaderMaterial:
-	var shader = Shader.new()
-	shader.code = BLDG_BAR_SHADER
+	if _bldg_hp_shader == null:
+		_bldg_hp_shader = Shader.new()
+		_bldg_hp_shader.code = BLDG_BAR_SHADER
 	var mat = ShaderMaterial.new()
-	mat.shader = shader
+	mat.shader = _bldg_hp_shader
 	mat.set_shader_parameter("albedo", color)
 	mat.set_shader_parameter("bar_size", size)
 	mat.render_priority = priority
@@ -1833,27 +1924,35 @@ func _create_building_hp_bar(building: Node3D, def: Dictionary) -> Dictionary:
 	return {"bar": bar, "fill": fill}
 
 
+var _bldg_hp_frame: int = 0
+
 func _update_building_hp_bars() -> void:
-	var cam = get_viewport().get_camera_3d()
+	_bldg_hp_frame += 1
+	var update_billboard = (_bldg_hp_frame % 4 == 0)
+	var cam: Camera3D = null
+	if update_billboard:
+		cam = BaseTroop._get_camera_cached()
 	for b in placed_buildings:
 		if not b.has("hp_fill") or not is_instance_valid(b.hp_fill):
 			continue
+		# Early exit — undamaged buildings skip everything
+		if b.hp >= b.max_hp:
+			if b.hp_bar.visible:
+				b.hp_bar.visible = false
+			continue
 		if not is_instance_valid(b.node):
 			continue
+		b.hp_bar.visible = true
 		var def = building_defs.get(b.id, {})
 		var model_scale = def.get("model_scale", 0.2)
 		var bar_height = model_scale * 1.5 + 0.05
 		b.hp_bar.global_position = b.node.global_position + Vector3(0, bar_height, 0)
-		if cam:
-			var cam_pos = cam.global_position
-			var bar_pos = b.hp_bar.global_position
-			var dir = Vector3(cam_pos.x - bar_pos.x, 0, cam_pos.z - bar_pos.z).normalized()
-			b.hp_bar.global_transform.basis = Basis.looking_at(-dir, Vector3.UP)
-		var ratio = clamp(float(b.hp) / float(b.max_hp), 0.0, 1.0)
-		# Show HP bar only when damaged
-		b.hp_bar.visible = ratio < 1.0
-		if not b.hp_bar.visible:
-			continue
+		if update_billboard and cam:
+			var dir = cam.global_position - b.hp_bar.global_position
+			dir.y = 0
+			if dir.length_squared() > 0.001:
+				b.hp_bar.global_transform.basis = Basis.looking_at(-dir.normalized(), Vector3.UP)
+		var ratio = float(b.hp) / float(b.max_hp)
 		var fill_w = BLDG_BAR_W * ratio
 		(b.hp_fill.mesh as QuadMesh).size.x = fill_w
 		b.hp_fill.position.x = -(BLDG_BAR_W - fill_w) * 0.5

@@ -17,6 +17,26 @@ var _map_btn_layer: CanvasLayer
 
 
 func _ready() -> void:
+	# Clamp max delta to prevent huge catch-up spikes after tab switch
+	# Godot Web: browser pauses rAF when tab is hidden, causing huge delta on return
+	Engine.max_fps = 0  # let browser control frame rate
+	Engine.physics_ticks_per_second = 60
+	Engine.max_physics_steps_per_frame = 2  # prevent spiral of death
+
+	# Listen for visibility change to reset timers
+	if OS.has_feature("web"):
+		var cb = JavaScriptBridge.create_callback(_on_visibility_change)
+		JavaScriptBridge.eval("""
+			(function() {
+				document.addEventListener('visibilitychange', function() {
+					if (!document.hidden && window._godotVisibilityCb) {
+						window._godotVisibilityCb(1);
+					}
+				});
+			})();
+		""")
+		JavaScriptBridge.get_interface("window").set("_godotVisibilityCb", cb)
+
 	# Start on island, world map hidden
 	_show_island_immediate()
 
@@ -30,6 +50,16 @@ func _ready() -> void:
 	cloud._set_clouds_covering()
 	await get_tree().process_frame
 	cloud.reveal()
+
+
+## Max allowed delta — prevents huge catch-up after tab switch
+static var max_delta: float = 0.1  # 10 FPS minimum
+
+static func clamped_delta(delta: float) -> float:
+	return minf(delta, max_delta)
+
+func _on_visibility_change(_args: Array) -> void:
+	pass  # reserved for future use
 
 
 func _connect_home_button() -> void:

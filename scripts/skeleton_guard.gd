@@ -47,6 +47,34 @@ var _blade_attachment: BoneAttachment3D
 var _hp_bar: Node3D
 var _hp_fill: MeshInstance3D
 
+## Cached group lookups — refreshed once per frame globally
+static var _cached_guards: Array = []
+static var _guards_cache_frame: int = -1
+static var _cached_buildings_data: Array = []  # [{pos: Vector3, radius: float}]
+static var _buildings_cache_frame: int = -1
+
+static func _get_guards_cached() -> Array:
+	var frame = Engine.get_process_frames()
+	if frame != _guards_cache_frame:
+		var tree = Engine.get_main_loop() as SceneTree
+		if tree:
+			_cached_guards = tree.get_nodes_in_group("skeleton_guards")
+		_guards_cache_frame = frame
+	return _cached_guards
+
+static func _get_buildings_cached() -> Array:
+	var frame = Engine.get_process_frames()
+	if frame != _buildings_cache_frame:
+		var tree = Engine.get_main_loop() as SceneTree
+		if tree:
+			_cached_buildings_data.clear()
+			for bs in tree.get_nodes_in_group("building_systems"):
+				for b in bs.placed_buildings:
+					if is_instance_valid(b.get("node")):
+						_cached_buildings_data.append(b.node.global_position)
+		_buildings_cache_frame = frame
+	return _cached_buildings_data
+
 const HP_BAR_W = 0.12
 const HP_BAR_H = 0.012
 const HP_BAR_SHADER = "shader_type spatial;
@@ -73,6 +101,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	_delta = minf(_delta, 0.1)
 	_update_hp_bar()
 
 
@@ -240,7 +269,7 @@ func take_damage(dmg: int) -> void:
 func _find_nearest_enemy() -> Node3D:
 	var nearest: Node3D = null
 	var nearest_dist: float = detection_radius
-	for troop in get_tree().get_nodes_in_group("troops"):
+	for troop in BaseTroop._get_troops_cached():
 		if not is_instance_valid(troop):
 			continue
 		var d = troop.global_position.distance_to(tombstone_pos)
@@ -262,7 +291,7 @@ func _compute_separation(move_dir: Vector3, delta: float) -> Vector3:
 	var avoidance_range = separation_radius * 2.0
 
 	# Push away from other skeleton guards
-	for other in get_tree().get_nodes_in_group("skeleton_guards"):
+	for other in _get_guards_cached():
 		if other == self or not is_instance_valid(other):
 			continue
 		var to_other = other.global_position - global_position
@@ -284,7 +313,7 @@ func _compute_separation(move_dir: Vector3, delta: float) -> Vector3:
 				steer += lateral * strength
 
 	# Also push away from enemy troops so they don't overlap
-	for other in get_tree().get_nodes_in_group("troops"):
+	for other in BaseTroop._get_troops_cached():
 		if not is_instance_valid(other):
 			continue
 		var to_other = other.global_position - global_position
@@ -299,16 +328,12 @@ func _compute_separation(move_dir: Vector3, delta: float) -> Vector3:
 
 func _compute_building_avoidance(delta: float) -> Vector3:
 	var push = Vector3.ZERO
-	for bs in get_tree().get_nodes_in_group("building_systems"):
-		for b in bs.placed_buildings:
-			if not is_instance_valid(b.get("node")):
-				continue
-			var bpos = b.node.global_position
-			var to_me = global_position - bpos
-			to_me.y = 0
-			var d = to_me.length()
-			if d > 0.001 and d < building_push_radius:
-				push += to_me.normalized() * (building_push_radius - d) / building_push_radius
+	for bpos in _get_buildings_cached():
+		var to_me = global_position - bpos
+		to_me.y = 0
+		var d = to_me.length()
+		if d > 0.001 and d < building_push_radius:
+			push += to_me.normalized() * (building_push_radius - d) / building_push_radius
 	return push * separation_force * delta * 3.0
 
 
@@ -392,10 +417,8 @@ func _create_hp_bar() -> void:
 
 
 func _make_hp_mat(color: Color, size: Vector2, priority: int) -> ShaderMaterial:
-	var shader = Shader.new()
-	shader.code = HP_BAR_SHADER
 	var mat = ShaderMaterial.new()
-	mat.shader = shader
+	mat.shader = BaseTroop._get_hp_shader()
 	mat.set_shader_parameter("albedo", color)
 	mat.set_shader_parameter("bar_size", size)
 	mat.render_priority = priority
@@ -410,7 +433,7 @@ func _update_hp_bar() -> void:
 	if not _hp_bar.visible:
 		return
 	_hp_bar.global_position = global_position + Vector3(0, 0.25, 0)
-	var cam = get_viewport().get_camera_3d()
+	var cam = BaseTroop._get_camera_cached()
 	if cam:
 		var cam_pos = cam.global_position
 		var bar_pos = _hp_bar.global_position

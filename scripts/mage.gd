@@ -1,12 +1,20 @@
 extends BaseTroop
 ## Mage — ranged caster. Damage when magic sphere touches the building.
+## Uses object pooling with shared material. No dynamic lights.
 
 @export var staff_scene: String = "res://Model/Characters/Assets/staff.gltf"
 @export var projectile_fly_speed: float = 1.5
 @export var projectile_color: Color = Color(0.4, 0.6, 1.0)
 @export var hit_distance: float = 0.05
 
-var _projectiles: Array = []
+const POOL_SIZE: int = 6
+
+## Shared material — one for all mage projectiles across all mages
+static var _shared_proj_mat: StandardMaterial3D = null
+
+var _pool: Array = []
+var _active: Array = []
+var _pool_ready: bool = false
 
 
 const LEVEL_STATS = {
@@ -36,15 +44,66 @@ func _setup_weapons() -> void:
 
 
 func _process(delta: float) -> void:
+	delta = minf(delta, 0.1)
 	super(delta)
+	if not _pool_ready and state != State.INACTIVE:
+		_build_pool()
 	_update_projectiles(delta)
 
 
+func _build_pool() -> void:
+	if _pool_ready:
+		return
+	_pool_ready = true
+
+	if _shared_proj_mat == null:
+		_shared_proj_mat = StandardMaterial3D.new()
+		_shared_proj_mat.albedo_color = projectile_color
+		_shared_proj_mat.emission_enabled = true
+		_shared_proj_mat.emission = projectile_color
+		_shared_proj_mat.emission_energy_multiplier = 4.0
+		_shared_proj_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	var scene_root = get_tree().current_scene
+	for i in POOL_SIZE:
+		var projectile = Node3D.new()
+		var mesh_inst = MeshInstance3D.new()
+		var sphere = SphereMesh.new()
+		sphere.radius = 0.035
+		sphere.height = 0.07
+		mesh_inst.mesh = sphere
+		mesh_inst.material_override = _shared_proj_mat
+		projectile.add_child(mesh_inst)
+		projectile.visible = false
+		scene_root.add_child(projectile)
+		_pool.append({
+			"node": projectile,
+			"active": false,
+			"target_ref": {},
+			"target_bs_ref": null,
+		})
+
+
+func _get_pooled() -> Dictionary:
+	for b in _pool:
+		if not b.active:
+			return b
+	return {}
+
+
+func _return_to_pool(b: Dictionary) -> void:
+	b.active = false
+	b.target_ref = {}
+	b.target_bs_ref = null
+	b.node.visible = false
+
+
 func _exit_tree() -> void:
-	for p in _projectiles:
-		if is_instance_valid(p.node):
-			p.node.queue_free()
-	_projectiles.clear()
+	for b in _pool:
+		if is_instance_valid(b.node):
+			b.node.queue_free()
+	_pool.clear()
+	_active.clear()
 
 
 func _do_attack(delta: float) -> void:
@@ -62,50 +121,33 @@ func _do_attack(delta: float) -> void:
 
 
 func _spawn_projectile() -> void:
-	var projectile = Node3D.new()
+	var b = _get_pooled()
+	if b.is_empty():
+		return
 
-	var mesh_inst = MeshInstance3D.new()
-	var sphere = SphereMesh.new()
-	sphere.radius = 0.035
-	sphere.height = 0.07
-	mesh_inst.mesh = sphere
+	b.active = true
+	b.target_ref = target_building
+	b.target_bs_ref = target_bs
+	b.node.global_position = global_position + Vector3(0, 0.08, 0)
+	b.node.visible = true
 
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = projectile_color
-	mat.emission_enabled = true
-	mat.emission = projectile_color
-	mat.emission_energy_multiplier = 4.0
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mesh_inst.material_override = mat
-	projectile.add_child(mesh_inst)
-
-	var light = OmniLight3D.new()
-	light.light_color = projectile_color
-	light.light_energy = 1.5
-	light.omni_range = 0.3
-	projectile.add_child(light)
-
-	get_tree().current_scene.add_child(projectile)
-	projectile.global_position = global_position + Vector3(0, 0.08, 0)
-
-	_projectiles.append({
-		"node": projectile,
-		"target_ref": target_building,
-		"target_bs_ref": target_bs,
-	})
+	_active.append(b)
 
 
 func _update_projectiles(delta: float) -> void:
-	for i in range(_projectiles.size() - 1, -1, -1):
-		var p = _projectiles[i]
+	var i = _active.size() - 1
+	while i >= 0:
+		var p = _active[i]
 		if not is_instance_valid(p.node):
-			_projectiles.remove_at(i)
+			_active.remove_at(i)
+			i -= 1
 			continue
 
 		var target_ref = p.target_ref
 		if target_ref.size() == 0 or not is_instance_valid(target_ref.get("node")):
-			p.node.queue_free()
-			_projectiles.remove_at(i)
+			_return_to_pool(p)
+			_active.remove_at(i)
+			i -= 1
 			continue
 
 		# Move toward building
@@ -120,5 +162,6 @@ func _update_projectiles(delta: float) -> void:
 				if bs_ref and bs_ref.has_method("remove_building"):
 					bs_ref.remove_building(target_ref)
 				_find_next_target()
-			p.node.queue_free()
-			_projectiles.remove_at(i)
+			_return_to_pool(p)
+			_active.remove_at(i)
+		i -= 1

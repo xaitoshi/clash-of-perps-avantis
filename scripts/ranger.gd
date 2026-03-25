@@ -1,5 +1,6 @@
 extends BaseTroop
 ## Ranger — ranged fighter with crossbow. Shoots bolt projectiles.
+## Uses object pooling to avoid per-shot allocations.
 
 @export var crossbow_scene: String = "res://Model/Characters/Assets/crossbow_1handed.gltf"
 @export var bolt_scene: String = "res://Model/Characters/Assets/arrow_crossbow.gltf"
@@ -7,8 +8,12 @@ extends BaseTroop
 @export var hit_distance: float = 0.05
 @export var shoot_threshold: float = 0.4
 
-var _projectiles: Array = []
+const POOL_SIZE: int = 8
+
 var _bolt_res: Resource = null
+var _pool: Array = []
+var _active: Array = []
+var _pool_ready: bool = false
 var _shot_this_cycle: bool = false
 
 
@@ -39,15 +44,58 @@ func _setup_weapons() -> void:
 
 
 func _process(delta: float) -> void:
+	delta = minf(delta, 0.1)
 	super(delta)
+	if not _pool_ready and state != State.INACTIVE:
+		_build_pool()
 	_update_projectiles(delta)
 
 
+func _build_pool() -> void:
+	if _pool_ready:
+		return
+	_pool_ready = true
+	if _bolt_res == null:
+		_bolt_res = load(bolt_scene)
+	if _bolt_res == null:
+		return
+	var scene_root = get_tree().current_scene
+	for i in POOL_SIZE:
+		var projectile = Node3D.new()
+		var bolt = _bolt_res.instantiate()
+		bolt.scale = Vector3(0.1, 0.1, 0.1)
+		bolt.rotation_degrees = Vector3(0, 180, 0)
+		projectile.add_child(bolt)
+		projectile.visible = false
+		scene_root.add_child(projectile)
+		_pool.append({
+			"node": projectile,
+			"active": false,
+			"target_ref": {},
+			"target_bs_ref": null,
+		})
+
+
+func _get_pooled() -> Dictionary:
+	for b in _pool:
+		if not b.active:
+			return b
+	return {}
+
+
+func _return_to_pool(b: Dictionary) -> void:
+	b.active = false
+	b.target_ref = {}
+	b.target_bs_ref = null
+	b.node.visible = false
+
+
 func _exit_tree() -> void:
-	for p in _projectiles:
-		if is_instance_valid(p.node):
-			p.node.queue_free()
-	_projectiles.clear()
+	for b in _pool:
+		if is_instance_valid(b.node):
+			b.node.queue_free()
+	_pool.clear()
+	_active.clear()
 
 
 func _do_attack(delta: float) -> void:
@@ -80,43 +128,37 @@ func _do_attack(delta: float) -> void:
 
 
 func _spawn_bolt() -> void:
-	if _bolt_res == null:
-		_bolt_res = load(bolt_scene)
-	if _bolt_res == null:
+	var b = _get_pooled()
+	if b.is_empty():
 		return
-	var bolt_res = _bolt_res
 
-	var projectile = Node3D.new()
-	var bolt = bolt_res.instantiate()
-	bolt.scale = Vector3(0.1, 0.1, 0.1)
-	bolt.rotation_degrees = Vector3(0, 180, 0)
-	projectile.add_child(bolt)
-
-	get_tree().current_scene.add_child(projectile)
-	projectile.global_position = global_position + Vector3(0, 0.08, 0)
+	b.active = true
+	b.target_ref = target_building
+	b.target_bs_ref = target_bs
+	b.node.global_position = global_position + Vector3(0, 0.08, 0)
+	b.node.visible = true
 
 	# Point bolt toward target
 	var target_pos = target_building.node.global_position + Vector3(0, 0.05, 0)
-	projectile.look_at(target_pos, Vector3.UP)
+	b.node.look_at(target_pos, Vector3.UP)
 
-	_projectiles.append({
-		"node": projectile,
-		"target_ref": target_building,
-		"target_bs_ref": target_bs,
-	})
+	_active.append(b)
 
 
 func _update_projectiles(delta: float) -> void:
-	for i in range(_projectiles.size() - 1, -1, -1):
-		var p = _projectiles[i]
+	var i = _active.size() - 1
+	while i >= 0:
+		var p = _active[i]
 		if not is_instance_valid(p.node):
-			_projectiles.remove_at(i)
+			_active.remove_at(i)
+			i -= 1
 			continue
 
 		var target_ref = p.target_ref
 		if target_ref.size() == 0 or not is_instance_valid(target_ref.get("node")):
-			p.node.queue_free()
-			_projectiles.remove_at(i)
+			_return_to_pool(p)
+			_active.remove_at(i)
+			i -= 1
 			continue
 
 		var target_pos = target_ref.node.global_position + Vector3(0, 0.05, 0)
@@ -130,5 +172,6 @@ func _update_projectiles(delta: float) -> void:
 				if bs_ref and bs_ref.has_method("remove_building"):
 					bs_ref.remove_building(target_ref)
 				_find_next_target()
-			p.node.queue_free()
-			_projectiles.remove_at(i)
+			_return_to_pool(p)
+			_active.remove_at(i)
+		i -= 1

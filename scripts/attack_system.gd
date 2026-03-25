@@ -56,6 +56,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	delta = minf(delta, 0.1)
 	_separate_ships(delta)
 
 

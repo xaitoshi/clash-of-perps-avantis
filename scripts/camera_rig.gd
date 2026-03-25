@@ -88,7 +88,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_target_position.y = 0.0
 
 
-func _process(delta: float) -> void:
+func _process(delta_raw: float) -> void:
+	var delta = minf(delta_raw, 0.1)
 	# ── WASD movement ────────────────────────────────────────────
 	var move_dir := Vector3.ZERO
 	if Input.is_key_pressed(KEY_W):

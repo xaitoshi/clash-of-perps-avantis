@@ -1,13 +1,18 @@
 extends BaseTroop
 ## Archer — ranged fighter with bow. Shoots arrow projectiles.
+## Uses object pooling to avoid per-shot allocations.
 
 @export var bow_scene: String = "res://Model/Characters/Assets/bow_withString.gltf"
 @export var arrow_scene: String = "res://Model/Characters/Assets/arrow_bow.gltf"
 @export var projectile_fly_speed: float = 2.5
 @export var hit_distance: float = 0.05
 
-var _projectiles: Array = []
+const POOL_SIZE: int = 8
+
 var _arrow_res: Resource = null
+var _pool: Array = []
+var _active: Array = []
+var _pool_ready: bool = false
 
 
 const LEVEL_STATS = {
@@ -37,15 +42,58 @@ func _setup_weapons() -> void:
 
 
 func _process(delta: float) -> void:
+	delta = minf(delta, 0.1)
 	super(delta)
+	if not _pool_ready and state != State.INACTIVE:
+		_build_pool()
 	_update_projectiles(delta)
 
 
+func _build_pool() -> void:
+	if _pool_ready:
+		return
+	_pool_ready = true
+	if _arrow_res == null:
+		_arrow_res = load(arrow_scene)
+	if _arrow_res == null:
+		return
+	var scene_root = get_tree().current_scene
+	for i in POOL_SIZE:
+		var projectile = Node3D.new()
+		var arrow = _arrow_res.instantiate()
+		arrow.scale = Vector3(0.1, 0.1, 0.1)
+		arrow.rotation_degrees = Vector3(0, 180, 0)
+		projectile.add_child(arrow)
+		projectile.visible = false
+		scene_root.add_child(projectile)
+		_pool.append({
+			"node": projectile,
+			"active": false,
+			"target_ref": {},
+			"target_bs_ref": null,
+		})
+
+
+func _get_pooled() -> Dictionary:
+	for b in _pool:
+		if not b.active:
+			return b
+	return {}
+
+
+func _return_to_pool(b: Dictionary) -> void:
+	b.active = false
+	b.target_ref = {}
+	b.target_bs_ref = null
+	b.node.visible = false
+
+
 func _exit_tree() -> void:
-	for p in _projectiles:
-		if is_instance_valid(p.node):
-			p.node.queue_free()
-	_projectiles.clear()
+	for b in _pool:
+		if is_instance_valid(b.node):
+			b.node.queue_free()
+	_pool.clear()
+	_active.clear()
 
 
 func _do_attack(delta: float) -> void:
@@ -71,43 +119,37 @@ func _do_attack(delta: float) -> void:
 
 
 func _spawn_arrow() -> void:
-	if _arrow_res == null:
-		_arrow_res = load(arrow_scene)
-	if _arrow_res == null:
+	var b = _get_pooled()
+	if b.is_empty():
 		return
-	var arrow_res = _arrow_res
 
-	var projectile = Node3D.new()
-	var arrow = arrow_res.instantiate()
-	arrow.scale = Vector3(0.1, 0.1, 0.1)
-	arrow.rotation_degrees = Vector3(0, 180, 0)
-	projectile.add_child(arrow)
-
-	get_tree().current_scene.add_child(projectile)
-	projectile.global_position = global_position + Vector3(0, 0.08, 0)
+	b.active = true
+	b.target_ref = target_building
+	b.target_bs_ref = target_bs
+	b.node.global_position = global_position + Vector3(0, 0.08, 0)
+	b.node.visible = true
 
 	# Point arrow toward target
 	var target_pos = target_building.node.global_position + Vector3(0, 0.05, 0)
-	projectile.look_at(target_pos, Vector3.UP)
+	b.node.look_at(target_pos, Vector3.UP)
 
-	_projectiles.append({
-		"node": projectile,
-		"target_ref": target_building,
-		"target_bs_ref": target_bs,
-	})
+	_active.append(b)
 
 
 func _update_projectiles(delta: float) -> void:
-	for i in range(_projectiles.size() - 1, -1, -1):
-		var p = _projectiles[i]
+	var i = _active.size() - 1
+	while i >= 0:
+		var p = _active[i]
 		if not is_instance_valid(p.node):
-			_projectiles.remove_at(i)
+			_active.remove_at(i)
+			i -= 1
 			continue
 
 		var target_ref = p.target_ref
 		if target_ref.size() == 0 or not is_instance_valid(target_ref.get("node")):
-			p.node.queue_free()
-			_projectiles.remove_at(i)
+			_return_to_pool(p)
+			_active.remove_at(i)
+			i -= 1
 			continue
 
 		var target_pos = target_ref.node.global_position + Vector3(0, 0.05, 0)
@@ -121,5 +163,6 @@ func _update_projectiles(delta: float) -> void:
 				if bs_ref and bs_ref.has_method("remove_building"):
 					bs_ref.remove_building(target_ref)
 				_find_next_target()
-			p.node.queue_free()
-			_projectiles.remove_at(i)
+			_return_to_pool(p)
+			_active.remove_at(i)
+		i -= 1

@@ -14,7 +14,8 @@ const TRAIL_LENGTH: float   = 0.18
 const TRAIL_RADIUS: float   = 0.004
 const TRAIL_COLOR: Color    = Color(1.0, 0.88, 0.15, 1.0)
 const TRAIL_EMISSION: float = 6.0
-const POOL_SIZE: int        = 14
+const POOL_SIZE: int        = 6
+const POOL_BATCH: int       = 2   # build this many per frame to avoid spike
 
 @export var detect_range: float = 1.0
 @export var bullet_speed: float = 4.0
@@ -34,13 +35,15 @@ var _barrel: Node3D = null
 var _target_search_timer: float = 0.0
 const TARGET_SEARCH_INTERVAL: float = 0.15
 
-## Shared trail material — one for all turrets
+## Shared materials — one for all turrets
 static var _shared_trail_mat: StandardMaterial3D = null
+static var _shared_flash_mat: StandardMaterial3D = null
 
 ## Object pool
 var _bullet_pool: Array = []   # pre-created {node, trail, flash} dicts
 var _active_bullets: Array = [] # currently flying
 var _pool_ready: bool = false
+var _pool_built: int = 0       # how many pool entries created so far
 
 
 func _ready() -> void:
@@ -77,15 +80,25 @@ func _ready() -> void:
 func _build_pool() -> void:
 	if _pool_ready:
 		return
-	_pool_ready = true
+	# Init shared flash material once
+	if _shared_flash_mat == null:
+		_shared_flash_mat = StandardMaterial3D.new()
+		_shared_flash_mat.albedo_color = Color(1.0, 0.95, 0.4, 1.0)
+		_shared_flash_mat.emission_enabled = true
+		_shared_flash_mat.emission = Color(1.0, 0.85, 0.2, 1.0)
+		_shared_flash_mat.emission_energy_multiplier = 16.0
+		_shared_flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_shared_flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_shared_flash_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+
+	# Build POOL_BATCH entries per frame to spread load
 	var scene_root = get_tree().current_scene
-	for i in POOL_SIZE:
-		# Bullet node (invisible position tracker)
+	var built_this_frame = 0
+	while _pool_built < POOL_SIZE and built_this_frame < POOL_BATCH:
 		var bullet = Node3D.new()
 		bullet.visible = false
 		scene_root.add_child(bullet)
 
-		# Trail mesh
 		var trail_mesh = CylinderMesh.new()
 		trail_mesh.top_radius    = TRAIL_RADIUS
 		trail_mesh.bottom_radius = TRAIL_RADIUS
@@ -96,18 +109,11 @@ func _build_pool() -> void:
 		trail.visible           = false
 		scene_root.add_child(trail)
 
-		# Muzzle flash — lightweight emissive sphere (no VFX scene)
 		var flash_mesh = SphereMesh.new()
 		flash_mesh.radius = 0.06
 		flash_mesh.height = 0.12
-		var flash_mat = StandardMaterial3D.new()
-		flash_mat.albedo_color = Color(1.0, 0.95, 0.4, 1.0)
-		flash_mat.emission_enabled = true
-		flash_mat.emission = Color(1.0, 0.85, 0.2, 1.0)
-		flash_mat.emission_energy_multiplier = 16.0
-		flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		flash_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		# Each flash needs its own material instance for alpha fade
+		var flash_mat = _shared_flash_mat.duplicate()
 		var flash = MeshInstance3D.new()
 		flash.mesh = flash_mesh
 		flash.material_override = flash_mat
@@ -124,6 +130,11 @@ func _build_pool() -> void:
 			"spawn_pos": Vector3.ZERO,
 			"flash_timer": 0.0,
 		})
+		_pool_built += 1
+		built_this_frame += 1
+
+	if _pool_built >= POOL_SIZE:
+		_pool_ready = true
 
 
 func _get_pooled_bullet() -> Dictionary:
@@ -146,6 +157,7 @@ func set_level(lvl: int) -> void:
 
 
 func _process(delta: float) -> void:
+	delta = minf(delta, 0.1)
 	# Lazy init barrel
 	if not _barrel:
 		for child in get_children():

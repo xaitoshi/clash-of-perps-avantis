@@ -6,6 +6,8 @@ signal react_message(action: String, data: Dictionary)
 
 var _callbacks: Dictionary = {}
 var _is_web: bool = false
+var _perf_timer: float = 0.0
+const PERF_INTERVAL: float = 0.25  # send perf data 4x per second
 
 func _ready() -> void:
 	_is_web = OS.has_feature("web")
@@ -18,6 +20,71 @@ func _ready() -> void:
 
 	await get_tree().create_timer(0.5).timeout
 	_send_initial_state()
+
+
+func _process(delta: float) -> void:
+	if not _is_web:
+		return
+	_perf_timer += delta
+	if _perf_timer < PERF_INTERVAL:
+		return
+	_perf_timer = 0.0
+	_send_perf_data()
+
+
+func _send_perf_data() -> void:
+	var fps = Engine.get_frames_per_second()
+	var troops = get_tree().get_nodes_in_group("troops").size()
+	var guards = get_tree().get_nodes_in_group("skeleton_guards").size()
+	var turrets = 0
+	var active_bullets = 0
+	var buildings = 0
+	for bs in get_tree().get_nodes_in_group("building_systems"):
+		buildings += bs.placed_buildings.size()
+		for b in bs.placed_buildings:
+			if b.get("id", "") == "turret" and is_instance_valid(b.get("node")):
+				var turret_node = b.node.get_node_or_null("Turret")
+				if turret_node == null:
+					turret_node = b.node
+				if turret_node and turret_node.has_method("_update_bullets"):
+					turrets += 1
+					active_bullets += turret_node._active_bullets.size()
+
+	# Count active projectiles from troops
+	var troop_projectiles = 0
+	for troop in get_tree().get_nodes_in_group("troops"):
+		if troop.has_method("_update_projectiles") and "_active" in troop:
+			troop_projectiles += troop._active.size()
+
+	var ships = 0
+	var attack_sys = get_tree().current_scene.get_node_or_null("IslandView/AttackSystem")
+	if attack_sys:
+		ships = attack_sys._ships_placed
+
+	var state = "idle"
+	if troops > 0:
+		state = "combat"
+	elif ships > 0:
+		state = "deploying"
+
+	var payload = JSON.stringify({
+		"action": "perf",
+		"data": {
+			"fps": fps,
+			"troops": troops,
+			"guards": guards,
+			"turrets": turrets,
+			"bullets": active_bullets,
+			"projectiles": troop_projectiles,
+			"buildings": buildings,
+			"ships": ships,
+			"state": state,
+			"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+			"objects": Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
+			"nodes": Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+		}
+	})
+	JavaScriptBridge.eval("window.onGodotMessage && window.onGodotMessage(%s)" % payload)
 
 
 func send_to_react(action: String, data: Dictionary) -> void:

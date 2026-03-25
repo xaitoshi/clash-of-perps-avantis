@@ -59,7 +59,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_clamp_position()
 
 
-func _process(delta: float) -> void:
+func _process(delta_raw: float) -> void:
+	var delta = minf(delta_raw, 0.1)
 	# Smoothly interpolate position (pan)
 	global_position = global_position.lerp(_target_position, smoothing * delta)
 

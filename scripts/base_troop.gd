@@ -37,6 +37,27 @@ static var _camera_cache_frame: int = -1
 ## Throttle separation — not every troop needs it every frame
 var _sep_counter: int = 0
 var _last_separation: Vector3 = Vector3.ZERO
+var _hp_bar_frame: int = 0  # throttle HP bar billboard rotation
+
+## Shared animation libraries — one per anim_files key, reused by all troops of same type
+static var _anim_lib_cache: Dictionary = {}  # key(String) -> AnimationLibrary
+
+## Cached building data — refreshed once per frame, used by _find_next_target and avoidance
+static var _cached_building_list: Array = []  # [{dict, bs, pos}]
+static var _buildings_cache_frame: int = -1
+
+static func _get_buildings_cached() -> Array:
+	var frame = Engine.get_process_frames()
+	if frame != _buildings_cache_frame:
+		_cached_building_list.clear()
+		var tree = Engine.get_main_loop() as SceneTree
+		if tree:
+			for bs in tree.get_nodes_in_group("building_systems"):
+				for b in bs.placed_buildings:
+					if b.get("hp", 0) > 0 and is_instance_valid(b.get("node")):
+						_cached_building_list.append({"b": b, "bs": bs, "pos": b.node.global_position})
+		_buildings_cache_frame = frame
+	return _cached_building_list
 
 
 static func _get_troops_cached() -> Array:
@@ -98,6 +119,7 @@ func activate() -> void:
 func _process(delta: float) -> void:
 	if state == State.INACTIVE or state == State.VICTORY:
 		return
+	delta = minf(delta, 0.1)  # cap delta to prevent huge catch-up after tab switch
 	_update_hp_bar()
 	match state:
 		State.RUNNING:
@@ -112,28 +134,35 @@ func _setup_animations() -> void:
 	add_child(anim_player)
 	anim_player.root_node = anim_player.get_path_to(self)
 
-	var lib = AnimationLibrary.new()
-
-	for file_path in anim_files:
-		var res = load(file_path)
-		if res == null:
-			continue
-		var instance = res.instantiate()
-		add_child(instance)
-		_hide_meshes(instance)
-
-		var src = _find_anim_player(instance)
-		if src:
-			for anim_name in src.get_animation_list():
-				if anim_name == "RESET" or anim_name == "T-Pose":
-					continue
-				var anim = src.get_animation(anim_name)
-				if anim and not lib.has_animation(anim_name):
-					var dup = anim.duplicate()
-					if anim_name.begins_with("Running") or anim_name.begins_with("Walking") or anim_name.begins_with("Idle") or anim_name == "Cheering":
-						dup.loop_mode = Animation.LOOP_LINEAR
-					lib.add_animation(anim_name, dup)
-		instance.free()
+	# Build cache key from sorted anim_files paths
+	var cache_key = ",".join(anim_files)
+	var lib: AnimationLibrary
+	if _anim_lib_cache.has(cache_key):
+		lib = _anim_lib_cache[cache_key]
+	else:
+		lib = AnimationLibrary.new()
+		for file_path in anim_files:
+			var res = load(file_path)
+			if res == null:
+				continue
+			var instance = Node3D.new()
+			add_child(instance)
+			var real_inst = res.instantiate()
+			instance.add_child(real_inst)
+			_hide_meshes(instance)
+			var src = _find_anim_player(real_inst)
+			if src:
+				for anim_name in src.get_animation_list():
+					if anim_name == "RESET" or anim_name == "T-Pose":
+						continue
+					var anim = src.get_animation(anim_name)
+					if anim and not lib.has_animation(anim_name):
+						var dup = anim.duplicate()
+						if anim_name.begins_with("Running") or anim_name.begins_with("Walking") or anim_name.begins_with("Idle") or anim_name == "Cheering":
+							dup.loop_mode = Animation.LOOP_LINEAR
+						lib.add_animation(anim_name, dup)
+			instance.free()
+		_anim_lib_cache[cache_key] = lib
 
 	anim_player.add_animation_library("", lib)
 
@@ -143,7 +172,7 @@ func _setup_animations() -> void:
 
 const HP_BAR_W = 0.12
 const HP_BAR_H = 0.012
-const HP_BAR_SHADER = "shader_type spatial;
+const HP_BAR_SHADER_CODE = "shader_type spatial;
 render_mode unshaded, blend_mix, depth_test_disabled, cull_disabled;
 uniform vec4 albedo : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform vec2 bar_size = vec2(0.12, 0.012);
@@ -157,11 +186,18 @@ void fragment() {
 	ALPHA = albedo.a * (1.0 - smoothstep(-aa, aa, d));
 }"
 
+## Shared shader — compiled once on GPU, reused by all HP bars
+static var _hp_shader: Shader = null
+
+static func _get_hp_shader() -> Shader:
+	if _hp_shader == null:
+		_hp_shader = Shader.new()
+		_hp_shader.code = HP_BAR_SHADER_CODE
+	return _hp_shader
+
 static func _make_hp_shader_mat(color: Color, size: Vector2, priority: int) -> ShaderMaterial:
-	var shader = Shader.new()
-	shader.code = HP_BAR_SHADER
 	var mat = ShaderMaterial.new()
-	mat.shader = shader
+	mat.shader = _get_hp_shader()
 	mat.set_shader_parameter("albedo", color)
 	mat.set_shader_parameter("bar_size", size)
 	mat.render_priority = priority
@@ -190,18 +226,22 @@ func _create_hp_bar() -> void:
 func _update_hp_bar() -> void:
 	if not _hp_bar or not _hp_fill:
 		return
-	var ratio = clamp(float(hp) / float(max_hp), 0.0, 1.0)
-	_hp_bar.visible = ratio < 1.0
-	if not _hp_bar.visible:
+	if hp >= max_hp:
+		if _hp_bar.visible:
+			_hp_bar.visible = false
 		return
+	_hp_bar.visible = true
 	_hp_bar.global_position = global_position + Vector3(0, 0.25, 0)
-	var cam = _get_camera_cached()
-	if cam:
-		var cam_pos = cam.global_position
-		var bar_pos = _hp_bar.global_position
-		var dir = Vector3(cam_pos.x - bar_pos.x, 0, cam_pos.z - bar_pos.z).normalized()
-		if dir.length_squared() > 0.001:
-			_hp_bar.global_transform.basis = Basis.looking_at(-dir, Vector3.UP)
+	# Billboard rotation — only every 4th frame (camera barely moves)
+	_hp_bar_frame += 1
+	if _hp_bar_frame % 4 == 0:
+		var cam = _get_camera_cached()
+		if cam:
+			var dir = cam.global_position - _hp_bar.global_position
+			dir.y = 0
+			if dir.length_squared() > 0.001:
+				_hp_bar.global_transform.basis = Basis.looking_at(-dir.normalized(), Vector3.UP)
+	var ratio = float(hp) / float(max_hp)
 	var fill_w = HP_BAR_W * ratio
 	(_hp_fill.mesh as QuadMesh).size.x = fill_w
 	_hp_fill.position.x = -(HP_BAR_W - fill_w) * 0.5
@@ -222,19 +262,15 @@ func _find_next_target() -> void:
 	var nearest_b: Dictionary = {}
 	var nearest_bs_ref = null
 
-	for bs in get_tree().get_nodes_in_group("building_systems"):
-		for b in bs.placed_buildings:
-			var bhp = b.get("hp", 0)
-			if bhp <= 0:
-				continue
-			if not is_instance_valid(b.node):
-				continue
-			var bpos = b.node.global_position
-			var dist = global_position.distance_to(bpos)
-			if dist < nearest_dist:
-				nearest_dist = dist
-				nearest_b = b
-				nearest_bs_ref = bs
+	for entry in _get_buildings_cached():
+		var b = entry.b
+		if b.get("hp", 0) <= 0 or not is_instance_valid(b.get("node")):
+			continue
+		var dist = global_position.distance_to(entry.pos)
+		if dist < nearest_dist:
+			nearest_dist = dist
+			nearest_b = b
+			nearest_bs_ref = entry.bs
 
 	if nearest_b.size() > 0:
 		target_building = nearest_b
@@ -298,23 +334,27 @@ func _move_to_target(delta: float) -> void:
 		var sep = Vector3.ZERO
 		var steer = Vector3.ZERO
 		var avoidance_range = separation_radius * 2.0
+		var avoidance_range_sq = avoidance_range * avoidance_range
+		var sep_radius_sq = separation_radius * separation_radius
 		var troops = _get_troops_cached()
+		var lateral = Vector3.UP.cross(dir).normalized()
 		for other in troops:
 			if other == self or not is_instance_valid(other):
 				continue
 			var to_other = other.global_position - global_position
 			to_other.y = 0
-			var d = to_other.length()
-			if d > avoidance_range or d < 0.001:
+			var d_sq = to_other.length_squared()
+			if d_sq > avoidance_range_sq or d_sq < 0.000001:
 				continue
+			var d = sqrt(d_sq)
+			var to_other_n = to_other / d
 			# Separation push
 			if d < separation_radius:
-				sep += (global_position - other.global_position).normalized() * (separation_radius - d) / separation_radius
+				sep -= to_other_n * (separation_radius - d) / separation_radius
 			# Avoidance steering
-			var dot = to_other.normalized().dot(dir)
+			var dot = to_other_n.dot(dir)
 			if dot > 0.3:
-				var lateral = Vector3.UP.cross(dir).normalized()
-				var side = to_other.normalized().dot(lateral)
+				var side = to_other_n.dot(lateral)
 				var strength = (1.0 - d / avoidance_range) * 0.3 * delta * 3.0
 				if side >= 0:
 					steer -= lateral * strength
@@ -340,15 +380,18 @@ func _get_separation() -> Vector3:
 		return _last_separation
 
 	var push = Vector3.ZERO
+	var sep_sq = separation_radius * separation_radius
 	var troops = _get_troops_cached()
 	for other in troops:
 		if other == self or not is_instance_valid(other):
 			continue
 		var to_me = global_position - other.global_position
 		to_me.y = 0
-		var d = to_me.length()
-		if d > 0.001 and d < separation_radius:
-			push += to_me.normalized() * (separation_radius - d) / separation_radius
+		var d_sq = to_me.length_squared()
+		if d_sq > sep_sq or d_sq < 0.000001:
+			continue
+		var d = sqrt(d_sq)
+		push += (to_me / d) * (separation_radius - d) / separation_radius
 	_last_separation = push
 	return push
 

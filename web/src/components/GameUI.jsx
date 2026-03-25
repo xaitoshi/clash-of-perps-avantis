@@ -7,6 +7,7 @@ import BuildingInfoPanel from './BuildingInfoPanel';
 import BarracksPanel from './BarracksPanel';
 import RegisterPanel from './RegisterPanel';
 import ErrorToast from './ErrorToast';
+import FpsTracker from './FpsTracker';
 import { useSend, useUI, useBuilding } from '../hooks/useGodot';
 
 export default function GameUI() {
@@ -48,6 +49,7 @@ export default function GameUI() {
       <PlayerInfo />
       <ActionButtons />
       <ErrorToast message={error} />
+      <FpsTracker />
 
       {shopOpen && (
         <ShopPanel onClose={handleCloseShop} />

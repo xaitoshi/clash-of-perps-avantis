@@ -66,6 +66,10 @@ export function GodotProvider({ children }) {
         case 'placement_started':
           setShopOpen(false);
           break;
+        case 'perf':
+          // Forward perf data via CustomEvent — FpsTracker subscribes to this
+          window.dispatchEvent(new CustomEvent('godot-perf', { detail: data }));
+          break;
       }
     };
     return () => {
