@@ -5,8 +5,8 @@ extends Node3D
 
 @export var move_speed: float = 0.5
 @export var attack_range: float = 0.15
-@export var separation_radius: float = 0.22
-@export var separation_force: float = 0.6
+@export var separation_radius: float = 0.18
+@export var separation_force: float = 0.5
 
 var level: int = 1
 var hp: int = 100
@@ -403,128 +403,74 @@ func _move_to_target(delta: float) -> void:
 	var target_pos = target_building.node.global_position
 	var diff = Vector3(target_pos.x - global_position.x, 0, target_pos.z - global_position.z)
 	var dist_sq = diff.length_squared()
-
 	if dist_sq < 0.0001:
 		return
 	var dist = sqrt(dist_sq)
-	var dir = diff / dist
+	var dir_to_target = diff / dist
 
-	var lateral = Vector3(-dir.z, 0, dir.x)
-	var look_ahead = 1.2  # scan distance ahead
+	# ── Find attack slot around building (like CoC) ──
+	# Each troop picks a point on a circle around the building at attack_range distance
+	# Slot is based on angle from building to troop — keeps current angle, avoids taken slots
+	var my_angle = atan2(global_position.x - target_pos.x, global_position.z - target_pos.z)
+	# Adjust angle to avoid other troops attacking same building
+	_sep_counter += 1
+	if _sep_counter % 6 == 0:
+		var best_angle = my_angle
+		var best_min_dist = 0.0
+		for test_offset in [-0.0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2]:
+			var test_angle = my_angle + test_offset
+			var min_other_dist = 999.0
+			for other in _get_troops_cached():
+				if other == self or not is_instance_valid(other):
+					continue
+				if not (other is BaseTroop):
+					continue
+				# Only check troops targeting same building
+				if other.target_building.get("node") != target_building.get("node"):
+					continue
+				var other_angle = atan2(other.global_position.x - target_pos.x, other.global_position.z - target_pos.z)
+				var angle_diff = absf(fmod(test_angle - other_angle + PI, TAU) - PI)
+				min_other_dist = minf(min_other_dist, angle_diff)
+			if min_other_dist > best_min_dist:
+				best_min_dist = min_other_dist
+				best_angle = test_angle
+		_orbit_angle = best_angle
 
-	# ── Proactive pathfinding: scan ahead, predict other troop movement ──
-	var best_dir = dir
-	var best_score = -INF
-	var all_troops = _get_troops_cached()
+	# Move toward slot position on circle around building
+	var slot_pos = target_pos + Vector3(sin(_orbit_angle), 0, cos(_orbit_angle)) * attack_range * 0.95
+	var to_slot = slot_pos - global_position
+	to_slot.y = 0
+	var slot_dist = to_slot.length()
+	var dir: Vector3
+	if slot_dist > 0.01:
+		dir = to_slot / slot_dist
+	else:
+		dir = dir_to_target
 
-	# Pre-compute predicted positions of other troops (where they'll be in ~0.3s)
-	var other_positions: Array = []
-	for other in all_troops:
-		if other == self or not is_instance_valid(other):
-			continue
-		var opos = other.global_position
-		opos.y = 0
-		# Predict: if running, extrapolate forward
-		if other is BaseTroop and other.state == State.RUNNING and other.target_building.size() > 0:
-			var other_target = other.target_building.get("node")
-			if is_instance_valid(other_target):
-				var other_dir = (other_target.global_position - opos).normalized()
-				opos += other_dir * other.move_speed * 0.3
-		other_positions.append(opos)
-
-	var angles = [0.0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2]
-	for angle_offset in angles:
-		var test_dir = (dir + lateral * angle_offset).normalized()
-		var test_pos = global_position + test_dir * look_ahead
-		# Prefer target direction
-		var score = test_dir.dot(dir) * 3.0
-
-		# Penalize predicted troop positions blocking this path
-		for opos in other_positions:
-			var to_other = opos - global_position
-			var od = to_other.length()
-			if od > look_ahead or od < 0.001:
-				continue
-			var threat = test_dir.dot(to_other / od)
-			if threat > 0.1:
-				var proximity = 1.0 - od / look_ahead
-				score -= proximity * proximity * threat * 20.0
-
-		# Penalize non-target buildings
-		var target_node = target_building.get("node")
-		for entry in _get_buildings_cached():
-			if entry.b.get("node") == target_node:
-				continue
-			var to_bldg = entry.pos - global_position
-			to_bldg.y = 0
-			var bd = to_bldg.length()
-			if bd > look_ahead or bd < 0.001:
-				continue
-			var threat = test_dir.dot(to_bldg / bd)
-			if threat > 0.2:
-				score -= (1.0 - bd / look_ahead) * threat * 15.0
-
-		# Heavy penalty for water
-		var clamped = _clamp_to_island(test_pos)
-		if test_pos.distance_to(clamped) > 0.01:
-			score -= 40.0
-
-		if score > best_score:
-			best_score = score
-			best_dir = test_dir
-
-	# Responsive steering
-	dir = (dir * 0.25 + best_dir * 0.75).normalized()
-
-	# Stuck detection — if not moving, walk along island edge toward target
-	_stuck_timer += delta
-	if _stuck_timer >= 0.5:
-		var moved = global_position.distance_to(_last_pos)
-		if moved < move_speed * 0.05:
-			_orbit_angle += 1.0
-			# Walk along edge: use lateral direction that gets closer to target
-			var left_pos = _clamp_to_island(global_position + lateral * 0.3)
-			var right_pos = _clamp_to_island(global_position - lateral * 0.3)
-			var left_to_target = left_pos.distance_to(target_pos)
-			var right_to_target = right_pos.distance_to(target_pos)
-			if left_to_target < right_to_target:
-				dir = (lateral * 0.8 + dir * 0.2).normalized()
-			else:
-				dir = (-lateral * 0.8 + dir * 0.2).normalized()
-			if _orbit_angle > 6.0:
-				_orbit_angle = 0.0
-				_find_alternative_target()
-		else:
-			_orbit_angle = maxf(_orbit_angle - 0.5, 0.0)
-		_last_pos = global_position
-		_stuck_timer = 0.0
-
-	look_at(global_position + dir, Vector3.UP)
+	look_at(global_position + dir_to_target, Vector3.UP)
 	rotate_y(PI)
 
 	var move_vec = dir * move_speed * delta
 
-	# Separation: hard push when overlapping
-	_sep_counter += 1
-	if _sep_counter % 3 == 0:
-		var sep = Vector3.ZERO
-		for other in _get_troops_cached():
-			if other == self or not is_instance_valid(other):
-				continue
-			var to_other = other.global_position - global_position
-			to_other.y = 0
-			var d_sq = to_other.length_squared()
-			if d_sq > separation_radius * separation_radius or d_sq < 0.000001:
-				continue
-			var d = sqrt(d_sq)
+	# ── Separation: smooth push away from nearby troops ──
+	var sep = Vector3.ZERO
+	var sep_range_sq = separation_radius * separation_radius * 4.0
+	for other in _get_troops_cached():
+		if other == self or not is_instance_valid(other):
+			continue
+		var to_other = other.global_position - global_position
+		to_other.y = 0
+		var d_sq = to_other.length_squared()
+		if d_sq > sep_range_sq or d_sq < 0.000001:
+			continue
+		var d = sqrt(d_sq)
+		if d < separation_radius:
 			sep -= (to_other / d) * (separation_radius - d) / separation_radius
-		_last_separation = sep * separation_force * delta * 3.0
 
-	move_vec += _last_separation
+	move_vec += sep * separation_force * delta * 3.0
 	global_position += move_vec
 
 	# Push out of non-target buildings
-	var bldg_push_radius = 0.12
 	var target_node = target_building.get("node")
 	for entry in _get_buildings_cached():
 		if entry.b.get("node") == target_node:
@@ -532,20 +478,33 @@ func _move_to_target(delta: float) -> void:
 		var to_me = global_position - entry.pos
 		to_me.y = 0
 		var bd = to_me.length()
-		if bd > 0.001 and bd < bldg_push_radius:
-			global_position += (to_me / bd) * (bldg_push_radius - bd)
+		if bd > 0.001 and bd < 0.12:
+			global_position += (to_me / bd) * (0.12 - bd)
 
 	global_position = _clamp_to_island(global_position)
 	global_position.y = target_building.node.global_position.y
 
-	if dist <= attack_range:
+	# ── Enter attack when close to slot or close to building ──
+	if slot_dist < 0.05 or dist <= attack_range:
 		state = State.ATTACKING
 		attack_timer = 0.0
-		_orbit_angle = 0.0
-		look_at(global_position + (target_pos - global_position).normalized(), Vector3.UP)
+		look_at(global_position + dir_to_target, Vector3.UP)
 		rotate_y(PI)
 		if attack_anim != "" and anim_player.has_animation(attack_anim):
 			anim_player.play(attack_anim)
+		return
+
+	# ── Stuck detection — retarget if not moving for 3s ──
+	_stuck_timer += delta
+	if _stuck_timer >= 1.0:
+		var moved = global_position.distance_to(_last_pos)
+		if moved < move_speed * 0.03:
+			_orbit_angle += 1.5  # try different slot
+			if _orbit_angle > my_angle + PI:
+				_find_alternative_target()
+				_orbit_angle = 0.0
+		_last_pos = global_position
+		_stuck_timer = 0.0
 
 
 func _get_separation() -> Vector3:
