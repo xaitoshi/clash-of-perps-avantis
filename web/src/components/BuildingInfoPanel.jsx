@@ -20,13 +20,9 @@ function BuildingInfoPanel({ onOpenTroops }) {
   const ratio = building.max_hp > 0 ? building.hp / building.max_hp : 1;
   const isMaxLevel = building.level >= building.max_level;
   const barColor = ratio > 0.5 ? '#4CAF50' : ratio > 0.25 ? '#FF9800' : '#F44336';
-  const isUpgrading = building.is_upgrading;
 
   return (
     <div style={styles.wrap}>
-      <style>{`
-        @keyframes fillUp { from { width: 0%; } to { width: 100%; } }
-      `}</style>
       <div style={styles.panel}>
         <button style={styles.closeBtn} onClick={handleDeselect}>✕</button>
 
@@ -51,21 +47,13 @@ function BuildingInfoPanel({ onOpenTroops }) {
                   </div>
                 ))}
               </div>
-              {isUpgrading && (
-                <div style={styles.upgradeProgressWrap}>
-                  <div style={styles.upgradeProgressTitle}>Upgrading...</div>
-                  <div style={styles.barBgSmall}>
-                    <div style={{ ...styles.barFill, background: '#FFC107', animation: 'fillUp 3s linear forwards' }} />
-                  </div>
-                </div>
-              )}
             </>
           )
         )}
 
         {/* --- ACTIONS ROW --- */}
         <div style={styles.actionRow}>
-          {!building.is_enemy && building.level < building.max_level && !isUpgrading && (
+          {!building.is_enemy && building.level < building.max_level && (
             <button
               style={styles.upgradeBtn}
               onClick={handleUpgrade}
@@ -226,22 +214,4 @@ const styles = {
     display: 'flex',
     gap: 12,
   },
-  upgradeProgressWrap: {
-    marginTop: 16,
-  },
-  upgradeProgressTitle: {
-    color: '#FFEB3B',
-    fontSize: 11,
-    fontWeight: 900,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: '1px',
-    WebkitTextStroke: '1px #000',
-  },
-  barBgSmall: {
-    height: 8,
-    borderRadius: 4,
-    background: 'rgba(0,0,0,0.5)',
-    overflow: 'hidden',
-  }
 };

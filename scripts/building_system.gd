@@ -1024,14 +1024,16 @@ func _sync_react_buildings() -> void:
 	if bridge and bridge.has_method("send_to_react"):
 		var arr = []
 		var counts := {}
-		for b in placed_buildings:
-			var bid = b.get("id", "")
-			arr.append({
-				"id": bid,
-				"level": b.get("level", 1),
-				"server_id": b.get("server_id", "")
-			})
-			counts[bid] = counts.get(bid, 0) + 1
+		# Count from ALL building systems so town_hall etc. are tracked globally
+		for bs in get_tree().get_nodes_in_group("building_systems"):
+			for b in bs.placed_buildings:
+				var bid = b.get("id", "")
+				arr.append({
+					"id": bid,
+					"level": b.get("level", 1),
+					"server_id": b.get("server_id", "")
+				})
+				counts[bid] = counts.get(bid, 0) + 1
 		bridge.send_to_react("state", {"buildings": arr})
 		bridge.send_to_react("placed_counts", counts)
 func _load_troop_levels_from_server(server_troops: Array) -> void:
@@ -1789,6 +1791,9 @@ func _run_upgrade_sequence(b: Dictionary, def: Dictionary, server_new_level: int
 	if b.id == "tombstone":
 		_spawn_tombstone_skeletons(b, b.level)
 
+	# Mark upgrade complete before refreshing UI
+	b["is_upgrading"] = false
+
 	# Update React UI globally
 	if typeof(selected_building) == TYPE_DICTIONARY and selected_building == b:
 		_select_building(b)
@@ -1816,7 +1821,6 @@ func _run_upgrade_sequence(b: Dictionary, def: Dictionary, server_new_level: int
 	tw_fade.tween_property(lbl, "modulate:a", 0.0, 1.0)
 	tw_fade.tween_callback(lbl.queue_free)
 
-	b["is_upgrading"] = false
 
 func _get_all_meshes(node: Node, arr: Array[MeshInstance3D]) -> void:
 	if node is MeshInstance3D:

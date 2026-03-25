@@ -40,6 +40,11 @@ func _ready() -> void:
 	# Start on island, world map hidden
 	_show_island_immediate()
 
+	# Boost lighting on web — Compatibility renderer is dimmer than Forward+
+	# Run deferred so all nodes are ready
+	if OS.has_feature("web"):
+		_boost_web_lighting.call_deferred()
+
 	# Build the "Map" button overlay for island view
 	_build_map_button()
 
@@ -60,6 +65,54 @@ static func clamped_delta(delta: float) -> float:
 
 func _on_visibility_change(_args: Array) -> void:
 	pass  # reserved for future use
+
+
+func _boost_web_lighting() -> void:
+	var root = get_tree().current_scene
+	var renderer = str(RenderingServer.get_video_adapter_api_version())
+	print("[WEB] Renderer: ", renderer)
+	print("[WEB] Root scene: ", root.name, " children: ", root.get_child_count())
+
+	# Log all children for debug
+	for child in root.get_children():
+		print("[WEB]   child: ", child.name, " class: ", child.get_class())
+
+	# Find and boost environment
+	var found_env = false
+	for node in _find_all_of_class(root, "WorldEnvironment"):
+		var env = node.environment
+		if env:
+			found_env = true
+			print("[WEB] BEFORE: ambient=", env.ambient_light_energy, " exposure=", env.tonemap_exposure)
+			env.ambient_light_energy = 1.8
+			env.ambient_light_color = Color(0.85, 0.88, 0.96, 1)
+			env.tonemap_exposure = 1.8
+			env.tonemap_white = 12.0
+			# Disable effects that don't work on web
+			env.ssao_enabled = false
+			env.ssil_enabled = false
+			print("[WEB] AFTER: ambient=", env.ambient_light_energy, " exposure=", env.tonemap_exposure)
+
+	if not found_env:
+		print("[WEB] WARNING: No WorldEnvironment found! Trying island_view...")
+		# Try island_view directly
+		for child in island_view.get_children():
+			print("[WEB]   island child: ", child.name, " class: ", child.get_class())
+
+	# Boost all directional lights
+	for node in _find_all_of_class(root, "DirectionalLight3D"):
+		var old_e = node.light_energy
+		node.light_energy *= 3.0
+		print("[WEB] Light: ", node.name, " ", old_e, " -> ", node.light_energy)
+
+
+func _find_all_of_class(node: Node, class_name_str: String) -> Array:
+	var result: Array = []
+	if node.is_class(class_name_str):
+		result.append(node)
+	for child in node.get_children():
+		result.append_array(_find_all_of_class(child, class_name_str))
+	return result
 
 
 func _connect_home_button() -> void:
