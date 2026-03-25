@@ -390,9 +390,6 @@ func _update_collect_icons() -> void:
 				
 				var scaled_size = icon.size * icon.scale
 				icon.position = pos2d - scaled_size / 2.0
-				
-				# Floating bounce effect
-				icon.position.y += sin(Time.get_ticks_msec() * 0.003) * 6.0
 		else:
 			if icon and is_instance_valid(icon):
 				icon.visible = false

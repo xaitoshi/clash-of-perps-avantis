@@ -188,7 +188,17 @@ func _process(delta: float) -> void:
 				_anim_player.play("idle")
 		return
 
-	# Build pool on first frame with barrel ready
+	# Skip everything if no enemies exist (saves CPU in idle)
+	var troops_exist = BaseTroop._get_troops_cached().size() > 0
+	if not troops_exist and _active_bullets.size() == 0:
+		if _is_attacking:
+			_is_attacking = false
+			_target = null
+			if _anim_player and _anim_player.has_animation("idle"):
+				_anim_player.play("idle")
+		return
+
+	# Build pool only when enemies appear (lazy init)
 	if not _pool_ready:
 		_build_pool()
 
