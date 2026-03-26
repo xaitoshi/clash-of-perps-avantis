@@ -98,17 +98,6 @@ var building_defs: Dictionary = {
 		"hp_levels": [900, 1600, 2800],
 		"cost": {"gold": 600, "wood": 350, "ore": 200},
 	},
-	"archtower": {
-		"name": "Archer Tower",
-		"cells": Vector2i(2, 2),
-		"color": Color(0.5, 0.45, 0.55, 0.5),
-		"height": 0.45,
-		"scene": "res://Model/Archer_towers/tower_1.glb",
-		"scenes": ["res://Model/Archer_towers/tower_1.glb", "res://Model/Archer_towers/towerplus_2.fbx", "res://Model/Archer_towers/tower2plus_3.glb"],
-		"model_scale": 0.25,
-		"hp_levels": [800, 1500, 2500],
-		"cost": {"gold": 500, "wood": 400},
-	},
 	"storage": {
 		"name": "Storage",
 		"cells": Vector2i(4, 4),
@@ -1260,6 +1249,7 @@ func _load_buildings_from_server(server_buildings: Array) -> void:
 				var s = def.get("model_scale", 0.2)
 				model.scale = Vector3(s, s, s)
 				model.rotation_degrees.y = def.get("model_rotation_y", 90.0)
+				model.position = def.get("model_offset", Vector3.ZERO)
 				node.add_child(model)
 				_apply_cel_shader(model)
 
@@ -1475,6 +1465,7 @@ func _create_placed_building(def: Dictionary) -> Node3D:
 			var s = def.get("model_scale", 0.2)
 			model.scale = Vector3(s, s, s)
 			model.rotation_degrees.y = def.get("model_rotation_y", 90.0)
+			model.position = def.get("model_offset", Vector3.ZERO)
 			node.add_child(model)
 			_apply_cel_shader(model)
 			return node
@@ -2061,6 +2052,7 @@ func _run_upgrade_sequence(b: Dictionary, def: Dictionary, server_new_level: int
 			var s = def.get("model_scale", 0.2)
 			new_model.scale = Vector3(s, s, s)
 			new_model.rotation_degrees.y = def.get("model_rotation_y", 90.0)
+			new_model.position = def.get("model_offset", Vector3.ZERO)
 			model.add_child(new_model)
 			# Recreate HP bar (old one was freed with model children)
 			var hp_bar_data = _create_building_hp_bar(model, def)
