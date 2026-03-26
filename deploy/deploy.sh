@@ -54,7 +54,7 @@ echo "[5/8] Configuring nginx (HTTP)..."
 cat > /etc/nginx/sites-available/$DOMAIN << HTTPCONF
 server {
     listen 80;
-    server_name $DOMAIN www.$DOMAIN;
+    server_name $DOMAIN $DOMAIN;
     root $WEB_DIST;
     index index.html;
     location / { try_files \$uri \$uri/ /index.html; }
@@ -69,7 +69,7 @@ systemctl reload nginx
 # ── 6. SSL Certificate ──
 echo "[6/8] Setting up SSL certificate..."
 if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-    certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos -m $EMAIL
+    certbot --nginx -d $DOMAIN -d $DOMAIN --non-interactive --agree-tos -m $EMAIL
 fi
 
 # ── 7. Setup nginx — Step 2: Full config with SSL + proxy ──
@@ -77,13 +77,13 @@ echo "[7/8] Configuring nginx (SSL + proxy)..."
 cat > /etc/nginx/sites-available/$DOMAIN << 'SSLCONF'
 server {
     listen 80;
-    server_name clashofperps.fun www.clashofperps.fun;
+    server_name clashofperps.fun;
     location / { return 301 https://$host$request_uri; }
 }
 
 server {
     listen 443 ssl http2;
-    server_name clashofperps.fun www.clashofperps.fun;
+    server_name clashofperps.fun;
 
     ssl_certificate /etc/letsencrypt/live/clashofperps.fun/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/clashofperps.fun/privkey.pem;
