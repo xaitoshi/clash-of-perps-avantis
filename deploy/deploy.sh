@@ -233,14 +233,24 @@ pm2 start index.js --name clash-api --env production
 pm2 save
 pm2 startup systemd -u root --hp /root 2>/dev/null || true
 
+# ── 8. Setup auto-deploy watcher ──
+echo "[8/8] Setting up auto-deploy watcher..."
+cp "$APP_DIR/deploy/clash-autopull.service" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable clash-autopull
+systemctl restart clash-autopull
+
 echo ""
 echo "=== Deploy complete! ==="
-echo "  Frontend: https://$DOMAIN"
-echo "  API:      https://$DOMAIN/api/"
-echo "  Dashboard: https://$DOMAIN/dashboard"
-echo "  WebSocket: wss://$DOMAIN/ws"
+echo "  Frontend:    https://$DOMAIN"
+echo "  API:         https://$DOMAIN/api/"
+echo "  Dashboard:   https://$DOMAIN/dashboard"
+echo "  WebSocket:   wss://$DOMAIN/ws"
+echo "  Auto-deploy: watching git every 30s"
 echo ""
 echo "Useful commands:"
-echo "  pm2 logs clash-api    # View backend logs"
-echo "  pm2 restart clash-api # Restart backend"
-echo "  nginx -t && systemctl reload nginx  # Reload nginx"
+echo "  pm2 logs clash-api                    # Backend logs"
+echo "  pm2 restart clash-api                 # Restart backend"
+echo "  journalctl -u clash-autopull -f       # Auto-deploy logs"
+echo "  systemctl stop clash-autopull          # Stop auto-deploy"
+echo "  nginx -t && systemctl reload nginx    # Reload nginx"
