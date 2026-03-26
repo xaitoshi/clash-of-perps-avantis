@@ -76,7 +76,7 @@ const stmts = {
   // Find enemy (closest trophies, not self)
   findEnemy: db.prepare(`
     SELECT id, name, trophies, level FROM players
-    WHERE id != ?
+    WHERE id != ? AND trophies >= 50
     ORDER BY ABS(trophies - ?) ASC
     LIMIT 1
   `),
