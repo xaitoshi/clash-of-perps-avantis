@@ -93,7 +93,7 @@ server {
     add_header Cross-Origin-Opener-Policy "same-origin" always;
     add_header Cross-Origin-Embedder-Policy "require-corp" always;
 
-    # API proxy → backend port 4000
+    # API proxy → backend port 4000 (gzip off — Godot web can't decompress)
     location /api/ {
         proxy_pass http://127.0.0.1:4000/api/;
         proxy_http_version 1.1;
@@ -101,6 +101,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Accept-Encoding "";
+        gzip off;
     }
 
     # WebSocket proxy
