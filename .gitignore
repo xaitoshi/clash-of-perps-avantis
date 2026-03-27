@@ -12,5 +12,5 @@ server/*.db-shm
 .mcp.json
 addons/godot_mcp/
 
-# Godot Builds
-web/public/godot/*.pck
+# Godot Web Export
+web/public/godot/
