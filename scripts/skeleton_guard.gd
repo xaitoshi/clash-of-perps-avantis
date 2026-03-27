@@ -14,7 +14,7 @@ const ANIM_FILES = [
 	"res://Model/Characters/Animations/Rig_Medium/Rig_Medium_CombatMelee.glb",
 ]
 
-var detection_radius: float = 0.5
+var detection_radius: float = 1.0
 var patrol_radius: float = 0.15
 var move_speed: float = 0.45
 var attack_range: float = 0.15

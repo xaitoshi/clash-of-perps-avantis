@@ -1844,14 +1844,15 @@ func _select_building(b: Dictionary) -> void:
 			"is_upgrading": b.get("is_upgrading", false),
 		})
 
-	# Range indicator for turrets
+	# Range indicator for defense buildings
 	_hide_range_indicator()
-	if b.id == "turret" and is_instance_valid(b.get("node", null)):
-		var turret_node = b["node"]
+	var defense_ids = ["turret", "tombstone", "archtower", "archer_tower", "archertower"]
+	if b.id in defense_ids and is_instance_valid(b.get("node", null)):
+		var bnode = b["node"]
 		var r: float = 1.0
-		if turret_node.get_script() and turret_node.get("detect_range") != null:
-			r = turret_node.detect_range
-		_show_range_indicator(turret_node.global_position, r)
+		if bnode.get_script() and bnode.get("detect_range") != null:
+			r = bnode.detect_range
+		_show_range_indicator(bnode.global_position, r)
 
 	# Move arrows (own island only)
 	if not is_viewing_enemy:
