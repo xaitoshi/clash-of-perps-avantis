@@ -2813,8 +2813,19 @@ func _get_or_create_cloud() -> Node:
 	return cloud
 
 
+func _hide_all_collect_icons() -> void:
+	for b in placed_buildings:
+		var icon = b.get("_collect_icon")
+		if icon and is_instance_valid(icon):
+			icon.visible = false
+			icon.queue_free()
+		b["_collect_icon"] = null
+
+
 func _switch_to_enemy_island() -> void:
+	# Hide collect icons before switching
 	for bs in get_tree().get_nodes_in_group("building_systems"):
+		bs._hide_all_collect_icons()
 		bs.is_viewing_enemy = true
 	var bridge = get_node_or_null("/root/Bridge")
 	if bridge:
@@ -2824,12 +2835,13 @@ func _switch_to_enemy_island() -> void:
 			"trophies": enemy_info.get("trophies", 0),
 		})
 
-	# Cloud close animation
+	# Cloud close animation — hide React UI during transition
+	var bridge2 = get_node_or_null("/root/Bridge")
+	if bridge2:
+		bridge2.send_to_react("cloud_transition", {"visible": true})
 	var cloud = _get_or_create_cloud()
 	cloud.close()
 	await cloud.close_finished
-
-
 
 	# Clear ALL building systems (including port grid)
 	for bs in get_tree().get_nodes_in_group("building_systems"):
@@ -2885,6 +2897,8 @@ func _switch_to_enemy_island() -> void:
 	# Cloud reveal animation
 	cloud.reveal()
 	await cloud.reveal_finished
+	if bridge:
+		bridge.send_to_react("cloud_transition", {"visible": false})
 
 	# Auto enter attack mode
 	var attack_system = get_node_or_null("../AttackSystem")
@@ -2914,7 +2928,9 @@ func _return_home() -> void:
 	if attack_system and attack_system.has_method("exit_attack_mode"):
 		attack_system.exit_attack_mode()
 
-	# Cloud close animation
+	# Cloud close animation — hide React UI
+	if bridge:
+		bridge.send_to_react("cloud_transition", {"visible": true})
 	var cloud = _get_or_create_cloud()
 	cloud.close()
 	await cloud.close_finished
@@ -2956,6 +2972,8 @@ func _return_home() -> void:
 	# Cloud reveal animation
 	cloud.reveal()
 	await cloud.reveal_finished
+	if bridge:
+		bridge.send_to_react("cloud_transition", {"visible": false})
 
 
 func _show_move_arrows(b: Dictionary) -> void:

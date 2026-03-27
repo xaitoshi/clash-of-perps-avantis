@@ -12,7 +12,7 @@ import { useSend, useUI, useBuilding } from '../hooks/useGodot';
 
 export default function GameUI() {
   const { sendToGodot, setShopOpen } = useSend();
-  const { ready, shopOpen, error, showRegister } = useUI();
+  const { ready, shopOpen, error, showRegister, cloudVisible } = useUI();
   const { selectedBuilding } = useBuilding();
 
   const [showTroops, setShowTroops] = useState(false);
@@ -42,6 +42,9 @@ export default function GameUI() {
   if (showRegister) {
     return <RegisterPanel />;
   }
+
+  // Hide all UI during cloud transition
+  if (cloudVisible) return null;
 
   return (
     <div style={styles.overlay}>

@@ -19,6 +19,7 @@ export function GodotProvider({ children }) {
   const [error, setError] = useState(null);
   const [showRegister, setShowRegister] = useState(false);
   const [collectibles, setCollectibles] = useState([]);
+  const [cloudVisible, setCloudVisible] = useState(false);
   const errorTimerRef = useRef(null);
 
   useEffect(() => {
@@ -73,6 +74,9 @@ export function GodotProvider({ children }) {
         case 'collectible_resources':
           setCollectibles(data.buildings || []);
           break;
+        case 'cloud_transition':
+          setCloudVisible(data.visible);
+          break;
         case 'perf':
           // Forward perf data via CustomEvent — FpsTracker subscribes to this
           window.dispatchEvent(new CustomEvent('godot-perf', { detail: data }));
@@ -99,8 +103,8 @@ export function GodotProvider({ children }) {
     buildingDefs, troopLevels, selectedBuilding,
   }), [buildingDefs, troopLevels, selectedBuilding]);
   const uiCtx = useMemo(() => ({
-    ready, shopOpen, enemyMode, error, showRegister, collectibles,
-  }), [ready, shopOpen, enemyMode, error, showRegister, collectibles]);
+    ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible,
+  }), [ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible]);
 
   // Nested providers using createElement (no JSX needed in .js file)
   return createElement(SendContext.Provider, { value: sendCtx },
