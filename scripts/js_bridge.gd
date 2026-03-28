@@ -192,7 +192,7 @@ func _handle_react_action(action: String, data: Dictionary) -> void:
 				var tn = data.get("troop_name", "")
 				bs._upgrade_troop(tn)
 		"register":
-			_do_register(data.get("name", ""))
+			_do_register(data.get("name", ""), data.get("wallet", ""))
 		"deselect_building":
 			var active = _get_active_building_system()
 			if active:
@@ -207,7 +207,7 @@ func _handle_react_action(action: String, data: Dictionary) -> void:
 				bsys._react_resource_positions = data
 
 
-func _do_register(player_name: String) -> void:
+func _do_register(player_name: String, wallet: String = "") -> void:
 	var net = get_node_or_null("/root/Net")
 	if not net:
 		send_to_react("error", {"message": "Network not available"})
@@ -215,7 +215,7 @@ func _do_register(player_name: String) -> void:
 	if player_name.length() < 2:
 		send_to_react("error", {"message": "Name must be at least 2 characters"})
 		return
-	var result = await net.register(player_name)
+	var result = await net.register(player_name, wallet)
 	if result.has("error"):
 		send_to_react("error", {"message": str(result.error)})
 		return

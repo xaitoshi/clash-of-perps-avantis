@@ -28,13 +28,23 @@ function FuturesPanel() {
 
   // Drag state
   const [pos, setPos] = useState({ x: 0, y: 0 });
-  const dragRef = useRef(null);
+  const draggingRef = useRef(false);
   const handleMouseDown = useCallback((e) => {
-    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SVG' || e.target.closest('button')) return;
-    const startX = e.clientX - pos.x;
-    const startY = e.clientY - pos.y;
-    const onMove = (e) => setPos({ x: e.clientX - startX, y: e.clientY - startY });
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    if (e.target.closest('[data-nodrag]')) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origX = pos.x;
+    const origY = pos.y;
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      setPos({ x: origX + dx, y: origY + dy });
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   }, [pos]);
@@ -126,7 +136,7 @@ function FuturesPanel() {
         <div style={{...S.container, transform: `translate(${pos.x}px, ${pos.y}px)`}}>
           <div style={S.header} onMouseDown={handleMouseDown}>
             <span style={S.headerTitle}>Futures Trading</span>
-            <button onClick={handleClose} style={S.closeBtn}>
+            <button data-nodrag onClick={handleClose} style={S.closeBtn}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
@@ -529,8 +539,8 @@ function FuturesPanel() {
   return (
     <>
       <style>{animCSS}</style>
-      <div style={S.container}>
-        <div style={S.header}>
+      <div style={{...S.container, transform: `translate(${pos.x}px, ${pos.y}px)`}}>
+        <div style={S.header} onMouseDown={handleMouseDown}>
           <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
             {TABS.map(t => {
               const active = activeTab === t.id;
@@ -542,7 +552,7 @@ function FuturesPanel() {
               );
             })}
           </div>
-          <button onClick={handleClose} style={S.closeBtn}>
+          <button data-nodrag onClick={handleClose} style={S.closeBtn}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>

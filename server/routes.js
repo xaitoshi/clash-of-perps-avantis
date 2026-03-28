@@ -22,12 +22,16 @@ function auth(req, res, next) {
 
 // Register a new player
 router.post('/players/register', (req, res) => {
-  const { name } = req.body;
+  const { name, wallet } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 2) {
     return res.status(400).json({ error: 'Name must be at least 2 characters' });
   }
   try {
     const result = db.registerPlayer(name.trim());
+    // Save wallet address if provided
+    if (wallet) {
+      db.db.prepare('UPDATE players SET wallet = ? WHERE id = ?').run(wallet, result.id);
+    }
     const state = db.getFullPlayerState(result.id);
     res.json({ ...state, token: result.token });
   } catch (e) {
@@ -237,8 +241,8 @@ router.post('/trading/claim-gold', auth, async (req, res) => {
     return res.status(429).json({ gold: 0, reason: 'Please wait before claiming again' });
   }
   claimCooldowns.set(req.player.id, Date.now());
-  const { wallet } = req.body;
-  if (!wallet) return res.status(400).json({ error: 'wallet required' });
+  const wallet = req.body.wallet || req.player.wallet;
+  if (!wallet) return res.status(400).json({ error: 'wallet required — connect wallet in profile' });
 
   try {
     // Get or create reward record

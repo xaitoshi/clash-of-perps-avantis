@@ -7,7 +7,7 @@ import bs58 from 'bs58';
 const API = 'https://api.pacifica.fi/api/v1';
 const WS_URL = 'wss://ws.pacifica.fi/ws';
 const BUILDER_CODE = 'clashofperps';
-const GAME_API = import.meta.env.VITE_GAME_API || 'http://localhost:4000/api';
+const GAME_API = import.meta.env.VITE_GAME_API || '/api';
 
 // ---------- Gold Reward Rates ----------
 const GOLD_PER_USD_VOLUME = 5;        // 5 gold per $1 traded
