@@ -341,14 +341,22 @@ router.get('/state', auth, (req, res) => {
 
 // ==================== ADMIN ====================
 
+const ADMIN_KEY = process.env.ADMIN_KEY || 'change-me-in-production';
+function adminAuth(req, res, next) {
+  if (req.headers['x-admin-key'] !== ADMIN_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+}
+
 // List all players
-router.get('/admin/players', (req, res) => {
+router.get('/admin/players', adminAuth, (req, res) => {
   const players = db.db.prepare('SELECT id, name, trophies, level, gold, wood, ore, created_at FROM players ORDER BY trophies DESC').all();
   res.json(players);
 });
 
 // Delete a player by name
-router.delete('/admin/players/:name', (req, res) => {
+router.delete('/admin/players/:name', adminAuth, (req, res) => {
   const player = db.db.prepare('SELECT id FROM players WHERE name = ?').get(req.params.name);
   if (!player) return res.status(404).json({ error: 'Player not found' });
   db.db.prepare('DELETE FROM buildings WHERE player_id = ?').run(player.id);
@@ -358,7 +366,7 @@ router.delete('/admin/players/:name', (req, res) => {
 });
 
 // Reset a player (keep account, clear buildings & reset resources)
-router.post('/admin/players/:name/reset', (req, res) => {
+router.post('/admin/players/:name/reset', adminAuth, (req, res) => {
   const player = db.db.prepare('SELECT id FROM players WHERE name = ?').get(req.params.name);
   if (!player) return res.status(404).json({ error: 'Player not found' });
   db.db.prepare('DELETE FROM buildings WHERE player_id = ?').run(player.id);
@@ -368,7 +376,7 @@ router.post('/admin/players/:name/reset', (req, res) => {
 });
 
 // Wipe entire database
-router.post('/admin/wipe', (req, res) => {
+router.post('/admin/wipe', adminAuth, (req, res) => {
   db.db.prepare('DELETE FROM buildings').run();
   db.db.prepare('DELETE FROM troop_levels').run();
   db.db.prepare('DELETE FROM players').run();

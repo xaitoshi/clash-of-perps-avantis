@@ -24,6 +24,8 @@ app.use((req, res, next) => {
 });
 
 // Health check — HTML page for browser
+const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
 app.get('/', (req, res) => {
   const db = require('./db');
   const players = db.db.prepare('SELECT id, name, trophies, level, gold, wood, ore, created_at FROM players ORDER BY trophies DESC').all();
@@ -36,7 +38,7 @@ app.get('/', (req, res) => {
 
   const playersRows = players.map(p => `
     <tr>
-      <td>${p.name}</td>
+      <td>${esc(p.name)}</td>
       <td>${p.trophies}</td>
       <td>${p.level}</td>
       <td style="color:#e8b830">${p.gold}</td>

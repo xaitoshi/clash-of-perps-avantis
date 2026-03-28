@@ -216,14 +216,21 @@ export function usePacifica() {
     } catch {}
   }, [walletAddr]);
 
+  const [marginModes, setMarginModes] = useState({}); // { BTC: false (cross), ETH: true (isolated) }
+
   const fetchLeverageSettings = useCallback(async () => {
     if (!walletAddr) return;
     try {
       const res = await fetch(`${API}/account/settings?account=${walletAddr}`).then(r => r.json());
       if (res.data?.margin_settings) {
-        const map = {};
-        for (const s of res.data.margin_settings) map[s.symbol] = s.leverage;
-        setLeverageSettings(map);
+        const levMap = {};
+        const marginMap = {};
+        for (const s of res.data.margin_settings) {
+          levMap[s.symbol] = s.leverage;
+          marginMap[s.symbol] = s.isolated;
+        }
+        setLeverageSettings(levMap);
+        setMarginModes(marginMap);
       }
     } catch {}
   }, [walletAddr]);
@@ -414,6 +421,21 @@ export function usePacifica() {
     } catch (e) { setError(e.message); }
   }, [publicKey, signedRequest, fetchLeverageSettings]);
 
+  const setMarginMode = useCallback(async (symbol, isIsolated) => {
+    if (!publicKey) return;
+    try {
+      const res = await signedRequestWithActivation('POST', '/account/margin', 'update_margin_mode', {
+        symbol, is_isolated: isIsolated,
+      });
+      if (res.error) {
+        if (res.code === 422) throw new Error('Cannot change margin mode with open position');
+        throw new Error(res.error);
+      }
+      fetchLeverageSettings();
+      return res;
+    } catch (e) { setError(e.message); }
+  }, [publicKey, signedRequest, fetchLeverageSettings]);
+
   const withdraw = useCallback(async (amount) => {
     if (!publicKey) return;
     setLoading(true);
@@ -549,11 +571,11 @@ export function usePacifica() {
   }, [signedRequest, activate]);
 
   return {
-    connected, walletAddr, account, positions, orders, prices, markets, walletUsdc, leverageSettings,
+    connected, walletAddr, account, positions, orders, prices, markets, walletUsdc, leverageSettings, marginModes,
     loading, error, clearError, goldEarned, clearGoldEarned,
     depositToPacifica, withdraw, activate, claimGold,
     placeMarketOrder, placeLimitOrder, closePosition, cancelOrder,
-    setTpsl, setLeverage,
+    setTpsl, setLeverage, setMarginMode,
     fetchAccount, fetchPositions, fetchOrders,
   };
 }

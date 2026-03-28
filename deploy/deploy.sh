@@ -35,7 +35,10 @@ fi
 # ── 2. Copy project files ──
 echo "[2/7] Copying project files..."
 mkdir -p "$APP_DIR"
-rsync -a --delete --exclude='node_modules' --exclude='.git' --exclude='clash.db*' \
+rsync -a --delete \
+    --exclude='node_modules' --exclude='.git' --exclude='clash.db*' \
+    --exclude='server-futures/node_modules' --exclude='server-futures/*.db*' \
+    --exclude='server-futures/server.log' \
     "$(dirname "$(dirname "$(readlink -f "$0")")")/" "$APP_DIR/"
 
 # ── 3. Install backend dependencies ──
@@ -150,8 +153,21 @@ systemctl reload nginx
 # ── 8. Start/restart services with PM2 ──
 echo "[8/9] Starting services..."
 cd "$SERVER_DIR"
+
+# Generate admin key if not exists
+if [ ! -f "$APP_DIR/.env" ]; then
+    ADMIN_KEY=$(openssl rand -hex 16)
+    REWARD_SECRET=$(openssl rand -hex 32)
+    cat > "$APP_DIR/.env" << EOF
+ADMIN_KEY=$ADMIN_KEY
+REWARD_SECRET=$REWARD_SECRET
+NODE_ENV=production
+EOF
+    echo "Generated .env with ADMIN_KEY=$ADMIN_KEY"
+fi
+
 pm2 delete clash-api 2>/dev/null || true
-pm2 start index.js --name clash-api --env production
+pm2 start index.js --name clash-api --env production --node-args="--env-file=$APP_DIR/.env"
 pm2 save
 pm2 startup systemd -u root --hp /root 2>/dev/null || true
 

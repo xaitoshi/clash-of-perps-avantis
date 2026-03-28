@@ -20,11 +20,24 @@ function FuturesPanel() {
   const { connected } = useWallet();
   const { setVisible: openWalletModal } = useWalletModal();
   const {
-    walletAddr, account, positions, orders, prices, markets, walletUsdc, leverageSettings,
+    walletAddr, account, positions, orders, prices, markets, walletUsdc, leverageSettings, marginModes,
     loading, error, clearError, goldEarned,
     placeMarketOrder, placeLimitOrder, cancelOrder, setLeverage: setLeverageApi,
-    closePosition, depositToPacifica, withdraw, setTpsl,
+    closePosition, depositToPacifica, withdraw, setTpsl, setMarginMode,
   } = usePacifica();
+
+  // Drag state
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const dragRef = useRef(null);
+  const handleMouseDown = useCallback((e) => {
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SVG' || e.target.closest('button')) return;
+    const startX = e.clientX - pos.x;
+    const startY = e.clientY - pos.y;
+    const onMove = (e) => setPos({ x: e.clientX - startX, y: e.clientY - startY });
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [pos]);
 
   const [activeTab, setActiveTab] = useState('Trade');
   const [symbol, setSymbol] = useState('BTC');
@@ -110,8 +123,8 @@ function FuturesPanel() {
     return (
       <>
         <style>{animCSS}</style>
-        <div style={S.container}>
-          <div style={S.header}>
+        <div style={{...S.container, transform: `translate(${pos.x}px, ${pos.y}px)`}}>
+          <div style={S.header} onMouseDown={handleMouseDown}>
             <span style={S.headerTitle}>Futures Trading</span>
             <button onClick={handleClose} style={S.closeBtn}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -137,13 +150,17 @@ function FuturesPanel() {
     <>
       <div style={S.chartArea}><TradingViewWidget symbol={symbol} /></div>
 
-      {/* Symbol + balance */}
+      {/* Symbol + margin mode + balance */}
       <div style={S.row}>
         <button style={S.symbolBtn} onClick={() => setShowSymbolPicker(!showSymbolPicker)}>
           <span style={{fontSize: 18, fontWeight: 900}}>{symbol}</span>
           {currentPrice && <span style={{fontSize: 13, color: '#5C3A21', fontWeight: 700}}>${parseFloat(currentPrice).toLocaleString()}</span>}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
+        <div style={S.marginToggle}>
+          <button style={!marginModes[symbol] ? S.marginChipActive : S.marginChip} onClick={() => setMarginMode(symbol, false)}>Cross</button>
+          <button style={marginModes[symbol] ? S.marginChipActiveIso : S.marginChip} onClick={() => setMarginMode(symbol, true)}>Isolated</button>
+        </div>
         <div style={S.balBadge}>
           <span style={{fontSize: 9, fontWeight: 700, color: '#a3906a'}}>BALANCE</span>
           <span style={{fontSize: 15, fontWeight: 900, color: '#5C3A21'}}>${pacBalance.toFixed(2)}</span>
@@ -564,6 +581,7 @@ const S = {
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     padding: '8px 12px', background: '#d4c8b0', borderBottom: '4px solid #bba882',
+    cursor: 'grab', userSelect: 'none',
   },
   headerTitle: { fontSize: 16, fontWeight: 900, color: '#5C3A21' },
   tabActive: {
@@ -659,6 +677,21 @@ const S = {
   levCloseBtn: {
     width: 28, height: 28, borderRadius: '50%', background: '#E53935', border: '2px solid #fff',
     color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+  },
+  marginToggle: {
+    display: 'flex', borderRadius: 8, overflow: 'hidden', border: '2px solid #d4c8b0',
+  },
+  marginChip: {
+    padding: '5px 8px', background: '#e8dfc8', border: 'none',
+    fontWeight: 800, fontSize: 10, color: '#a3906a', cursor: 'pointer',
+  },
+  marginChipActive: {
+    padding: '5px 8px', background: '#4CAF50', border: 'none',
+    fontWeight: 800, fontSize: 10, color: '#fff', cursor: 'default',
+  },
+  marginChipActiveIso: {
+    padding: '5px 8px', background: '#FF9800', border: 'none',
+    fontWeight: 800, fontSize: 10, color: '#fff', cursor: 'default',
   },
   levPreset: {
     flex: 1, padding: '8px 0', background: '#e8dfc8', border: '2px solid #d4c8b0', borderRadius: 8,

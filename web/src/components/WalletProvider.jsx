@@ -9,7 +9,6 @@ const RPC_LIST = [
   'https://api.mainnet-beta.solana.com',
   'https://solana.drpc.org',
   'https://rpc.ankr.com/solana',
-  'https://mainnet.helius-rpc.com/?api-key=1d8740dc-e5f4-421c-b823-e1bad1889eff',
 ];
 
 function useBestRpc() {

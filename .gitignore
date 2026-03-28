@@ -18,6 +18,9 @@ server-futures/server.log
 # Web
 web/node_modules/
 
+# Environment
+.env
+
 # MCP
 .mcp.json
 addons/godot_mcp/
