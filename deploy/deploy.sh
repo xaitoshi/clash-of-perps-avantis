@@ -123,6 +123,12 @@ server {
         proxy_set_header Host $host;
     }
 
+    # Trading stats
+    location /trading-stats {
+        proxy_pass http://127.0.0.1:4000/trading-stats;
+        proxy_set_header Host $host;
+    }
+
     # Frontend static files
     root /opt/clash/web/dist;
     index index.html;
