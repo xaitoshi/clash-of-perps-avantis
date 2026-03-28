@@ -16,11 +16,12 @@ const GOLD_FIRST_TRADE = 300;         // one-time bonus
 const GOLD_DAILY_TRADE = 200;         // once per day
 const GOLD_PROFIT_RATE = 0.10;        // 10% of PnL in gold (1 gold per $0.10 profit)
 
-// Round down to lot size
+// Round down to lot size (avoids floating point errors)
 function roundToLot(amount, lotSize) {
-  if (!lotSize) return amount;
+  if (!lotSize) return String(amount);
   const lot = parseFloat(lotSize);
-  return String(Math.floor(parseFloat(amount) / lot) * lot);
+  const decimals = (lotSize.toString().split('.')[1] || '').length;
+  return (Math.floor(parseFloat(amount) / lot) * lot).toFixed(decimals);
 }
 
 // Pacifica on-chain deposit constants
@@ -413,7 +414,7 @@ export function usePacifica() {
         symbol, leverage: Number(leverage),
       });
       if (res.error) {
-        if (res.code === 422) throw new Error('Cannot change leverage with open position (can only increase)');
+        if (res.code === 422) throw new Error('Close your ' + symbol + ' position first (can only increase leverage)');
         throw new Error(res.error);
       }
       fetchLeverageSettings();
@@ -428,7 +429,7 @@ export function usePacifica() {
         symbol, is_isolated: isIsolated,
       });
       if (res.error) {
-        if (res.code === 422) throw new Error('Cannot change margin mode with open position');
+        if (res.code === 422) throw new Error('Close your ' + symbol + ' position first to change margin mode');
         throw new Error(res.error);
       }
       fetchLeverageSettings();

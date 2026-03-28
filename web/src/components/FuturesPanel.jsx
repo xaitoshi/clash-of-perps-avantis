@@ -157,10 +157,15 @@ function FuturesPanel() {
           {currentPrice && <span style={{fontSize: 13, color: '#5C3A21', fontWeight: 700}}>${parseFloat(currentPrice).toLocaleString()}</span>}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
-        <div style={S.marginToggle}>
-          <button style={!marginModes[symbol] ? S.marginChipActive : S.marginChip} onClick={() => setMarginMode(symbol, false)}>Cross</button>
-          <button style={marginModes[symbol] ? S.marginChipActiveIso : S.marginChip} onClick={() => setMarginMode(symbol, true)}>Isolated</button>
-        </div>
+        <button style={S.marginSwapBtn} onClick={() => setMarginMode(symbol, !marginModes[symbol])}>
+          <span style={{color: marginModes[symbol] ? '#FF9800' : '#4CAF50', fontWeight: 900}}>
+            {marginModes[symbol] ? 'Isolated' : 'Cross'}
+          </span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{marginLeft: 3}}>
+            <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+        </button>
         <div style={S.balBadge}>
           <span style={{fontSize: 9, fontWeight: 700, color: '#a3906a'}}>BALANCE</span>
           <span style={{fontSize: 15, fontWeight: 900, color: '#5C3A21'}}>${pacBalance.toFixed(2)}</span>
@@ -678,20 +683,10 @@ const S = {
     width: 28, height: 28, borderRadius: '50%', background: '#E53935', border: '2px solid #fff',
     color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
   },
-  marginToggle: {
-    display: 'flex', borderRadius: 8, overflow: 'hidden', border: '2px solid #d4c8b0',
-  },
-  marginChip: {
-    padding: '5px 8px', background: '#e8dfc8', border: 'none',
-    fontWeight: 800, fontSize: 10, color: '#a3906a', cursor: 'pointer',
-  },
-  marginChipActive: {
-    padding: '5px 8px', background: '#4CAF50', border: 'none',
-    fontWeight: 800, fontSize: 10, color: '#fff', cursor: 'default',
-  },
-  marginChipActiveIso: {
-    padding: '5px 8px', background: '#FF9800', border: 'none',
-    fontWeight: 800, fontSize: 10, color: '#fff', cursor: 'default',
+  marginSwapBtn: {
+    padding: '8px 12px', background: '#e8dfc8', border: '2px solid #d4c8b0', borderRadius: 8,
+    fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center',
+    height: '100%', boxSizing: 'border-box',
   },
   levPreset: {
     flex: 1, padding: '8px 0', background: '#e8dfc8', border: '2px solid #d4c8b0', borderRadius: 8,
