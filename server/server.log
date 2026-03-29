@@ -11,12 +11,6 @@ Error: listen EADDRINUSE: address already in use 0.0.0.0:4000
 [31mPOST[0m /api/trading/claim-gold [90m400 5ms[0m
 [32mGET[0m /api/admin/players [90m200 20ms[0m
 [32mPOST[0m /api/admin/wipe [90m200 30ms[0m
-l/process/task_queues:89:21) {
-  code: 'EADDRINUSE',
-  errno: -4091,
-  syscall: 'listen',
-  address: '0.0.0.0',
-  port: 4000
-}
-
-Node.js v25.2.1
+[31mGET[0m /api/trading/stats [90m401 66ms[0m
+[31mGET[0m /api/trading/stats [90m401 1ms[0m
+[31mPOST[0m /api/trading/claim-gold [90m401 56ms[0m

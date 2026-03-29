@@ -5,6 +5,8 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { usePacifica } from '../hooks/usePacifica';
 import { cartoonBtn } from '../styles/theme';
 import TradingViewWidget from './TradingViewWidget';
+import OrderBook from './OrderBook';
+import TradeHistory from './TradeHistory';
 
 const TABS = [
   { id: 'Trade', icon: '📈', label: 'Trade' },
@@ -21,7 +23,7 @@ function FuturesPanel() {
   const { setVisible: openWalletModal } = useWalletModal();
   const {
     walletAddr, account, positions, orders, prices, markets, walletUsdc, leverageSettings, marginModes,
-    loading, error, clearError, goldEarned,
+    loading, error, clearError, goldEarned, clearGoldEarned,
     placeMarketOrder, placeLimitOrder, cancelOrder, setLeverage: setLeverageApi,
     closePosition, depositToPacifica, withdraw, setTpsl, setMarginMode,
   } = usePacifica();
@@ -65,6 +67,8 @@ function FuturesPanel() {
   const [slPrice, setSlPrice] = useState('');
   const [depositAmt, setDepositAmt] = useState('');
   const [withdrawAmt, setWithdrawAmt] = useState('');
+  const [fullscreen, setFullscreen] = useState(false);
+  const [bottomTab, setBottomTab] = useState('positions');
 
   const handleClose = useCallback(() => setFuturesOpen(false), [setFuturesOpen]);
 
@@ -133,7 +137,7 @@ function FuturesPanel() {
     return (
       <>
         <style>{animCSS}</style>
-        <div style={{...S.container, transform: `translate(${pos.x}px, ${pos.y}px)`}}>
+        <div style={{...(fullscreen ? S.containerFull : S.container), transform: fullscreen ? 'none' : `translate(${pos.x}px, ${pos.y}px)`}}>
           <div style={S.header} onMouseDown={handleMouseDown}>
             <span style={S.headerTitle}>Futures Trading</span>
             <button data-nodrag onClick={handleClose} style={S.closeBtn}>
@@ -155,11 +159,9 @@ function FuturesPanel() {
     );
   }
 
-  // ==================== TRADE TAB ====================
-  const renderTrade = () => (
-    <>
-      <div style={S.chartArea}><TradingViewWidget symbol={symbol} /></div>
-
+  // ==================== TRADE CONTROLS (reusable) ====================
+  const renderTradeControls = () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 8, ...(fullscreen ? {width: '100%', overflowY: 'auto', overflowX: 'hidden', padding: 10, scrollbarWidth: 'none'} : {})}}>
       {/* Symbol + margin mode + balance */}
       <div style={S.row}>
         <button style={S.symbolBtn} onClick={() => setShowSymbolPicker(!showSymbolPicker)}>
@@ -295,8 +297,137 @@ function FuturesPanel() {
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
+
+  // ==================== BOTTOM PANEL (fullscreen) ====================
+  const renderBottomPanel = () => {
+    const tabs = [
+      { id: 'positions', label: `Positions (${positions.length})` },
+      { id: 'orders', label: `Orders (${orders.length})` },
+      { id: 'history', label: 'History' },
+    ];
+
+    return (
+      <div style={S.bottomPanel}>
+        <div style={S.bottomTabs}>
+          {tabs.map(t => (
+            <button key={t.id} style={bottomTab === t.id ? S.bottomTabActive : S.bottomTabBtn} onClick={() => setBottomTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div style={S.bottomContent}>
+          {bottomTab === 'positions' && (
+            positions.length ? (
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>Symbol</th><th style={S.th}>Side</th><th style={S.th}>Size</th>
+                  <th style={S.th}>Entry</th><th style={S.th}>Mark</th><th style={S.th}>PnL</th>
+                  <th style={S.th}>PnL %</th><th style={S.th}>Lev</th><th style={S.th}></th>
+                </tr></thead>
+                <tbody>{positions.map((p, i) => {
+                  const mark = prices.find(pr => pr.symbol === p.symbol)?.mark;
+                  const entryPrice = parseFloat(p.entry_price);
+                  const markPrice = mark ? parseFloat(mark) : 0;
+                  const pnlVal = markPrice ? (markPrice - entryPrice) * parseFloat(p.amount) * (p.side === 'bid' ? 1 : -1) : 0;
+                  const lev = leverageSettings[p.symbol] || 1;
+                  const pnlPct = entryPrice && markPrice ? ((markPrice - entryPrice) / entryPrice * 100 * (p.side === 'bid' ? 1 : -1) * (typeof lev === 'number' ? lev : 1)) : 0;
+                  const pnlColor = pnlVal >= 0 ? '#4CAF50' : '#E53935';
+                  return (
+                    <tr key={i} style={S.tr}>
+                      <td style={S.td}>{p.symbol}</td>
+                      <td style={{...S.td, color: p.side === 'bid' ? '#4CAF50' : '#E53935', fontWeight: 900}}>{p.side === 'bid' ? 'LONG' : 'SHORT'}</td>
+                      <td style={S.td}>{p.amount}</td>
+                      <td style={S.td}>${entryPrice.toLocaleString()}</td>
+                      <td style={S.td}>{markPrice ? `$${markPrice.toLocaleString()}` : '—'}</td>
+                      <td style={{...S.td, color: pnlColor, fontWeight: 900}}>{pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(2)}</td>
+                      <td style={{...S.td, color: pnlColor, fontWeight: 900}}>{pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</td>
+                      <td style={S.td}>{lev}x</td>
+                      <td style={S.td}>
+                        <button style={S.tblCloseBtn} onClick={() => closePosition(p.symbol, p.side, p.amount)}>Close</button>
+                      </td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            ) : <div style={{padding: 20, textAlign: 'center', color: '#a3906a'}}>No open positions</div>
+          )}
+          {bottomTab === 'orders' && (
+            orders.length ? (
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>Symbol</th><th style={S.th}>Side</th><th style={S.th}>Type</th>
+                  <th style={S.th}>Price</th><th style={S.th}>Amount</th><th style={S.th}></th>
+                </tr></thead>
+                <tbody>{orders.map((o, i) => {
+                  const sym = o.symbol || o.s;
+                  const side = o.side || o.d;
+                  const rawPrice = parseFloat(o.price || o.ip || 0);
+                  const stopPrice = parseFloat(o.stop_price || o.sp || 0);
+                  const price = rawPrice > 0 ? rawPrice : stopPrice;
+                  const rawAmt = o.initial_amount || o.amount || o.a;
+                  const amt = parseFloat(rawAmt || 0) > 0 ? rawAmt : 'Full';
+                  const type = (o.order_type || o.ot || (stopPrice > 0 ? 'stop' : 'limit')).toUpperCase().replace(/_/g, ' ');
+                  const isTP = type.includes('TAKE') || type.includes('TP');
+                  const isSL = type.includes('STOP LOSS') || type.includes('SL');
+                  const typeColor = isTP ? '#4CAF50' : isSL ? '#E53935' : '#a3906a';
+                  return (
+                    <tr key={i} style={S.tr}>
+                      <td style={S.td}>{sym}</td>
+                      <td style={{...S.td, color: side === 'bid' ? '#4CAF50' : '#E53935', fontWeight: 900}}>{side === 'bid' ? 'BUY' : 'SELL'}</td>
+                      <td style={{...S.td, color: typeColor, fontWeight: 700}}>{type}</td>
+                      <td style={S.td}>${price.toLocaleString()}</td>
+                      <td style={S.td}>{amt}</td>
+                      <td style={S.td}>
+                        <button style={S.tblCloseBtn} onClick={() => cancelOrder(sym, o.order_id || o.i)}>Cancel</button>
+                      </td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            ) : <div style={{padding: 20, textAlign: 'center', color: '#a3906a'}}>No open orders</div>
+          )}
+          {bottomTab === 'history' && (
+            <TradeHistory walletAddr={walletAddr} />
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ==================== TRADE TAB ====================
+  const renderTrade = () => {
+    if (fullscreen) {
+      return (
+        <div style={{display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden'}}>
+          {/* Top: chart + orderbook + controls */}
+          <div style={{display: 'flex', flex: 1, overflow: 'hidden'}}>
+            <div style={{flex: '0 0 55%', maxWidth: '55%', position: 'relative', borderRight: '3px solid #d4c8b0'}}>
+              <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} />
+              <button style={S.fsBtn} onClick={() => setFullscreen(false)}>⊟</button>
+            </div>
+            <div style={{flex: '0 0 160px', borderRight: '3px solid #d4c8b0', overflow: 'hidden'}}>
+              <OrderBook symbol={symbol} />
+            </div>
+            <div style={{flex: 1, minWidth: 0, overflow: 'hidden'}}>{renderTradeControls()}</div>
+          </div>
+          {/* Bottom: positions/orders panel */}
+          {renderBottomPanel()}
+        </div>
+      );
+    }
+    // Normal layout: chart top, controls bottom
+    return (
+      <>
+        <div style={{...S.chartArea, position: 'relative'}}>
+          <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} />
+          <button style={S.fsBtn} onClick={() => setFullscreen(true)}>⊞</button>
+        </div>
+        {renderTradeControls()}
+      </>
+    );
+  };
 
   // ==================== POSITIONS TAB ====================
   const renderPositions = () => {
@@ -309,11 +440,15 @@ function FuturesPanel() {
       );
     }
     return (
-      <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+      <div style={{display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start'}}>
         {positions.map((pos, i) => {
           const mark = prices.find(p => p.symbol === pos.symbol)?.mark;
-          const pnl = mark ? ((parseFloat(mark) - parseFloat(pos.entry_price)) * parseFloat(pos.amount) * (pos.side === 'bid' ? 1 : -1)).toFixed(2) : '—';
-          const setLev = leverageSettings[pos.symbol] || '—';
+          const entryP = parseFloat(pos.entry_price);
+          const markP = mark ? parseFloat(mark) : 0;
+          const pnlVal = markP ? (markP - entryP) * parseFloat(pos.amount) * (pos.side === 'bid' ? 1 : -1) : 0;
+          const setLev = leverageSettings[pos.symbol] || 1;
+          const pnlPct = entryP && markP ? ((markP - entryP) / entryP * 100 * (pos.side === 'bid' ? 1 : -1) * (typeof setLev === 'number' ? setLev : 1)) : 0;
+          const pnlColor = pnlVal >= 0 ? '#4CAF50' : '#E53935';
           const posKey = `${pos.symbol}-${pos.side}`;
           const expanded = expandedPos?.startsWith(posKey) ? expandedPos.split(':')[1] : null;
 
@@ -333,9 +468,9 @@ function FuturesPanel() {
                 <span style={S.detail}>Entry: ${parseFloat(pos.entry_price).toLocaleString()}</span>
               </div>
               <div style={S.row}>
-                <span style={S.detail}>Mark: {mark ? `$${parseFloat(mark).toLocaleString()}` : '—'}</span>
-                <span style={{fontSize: 14, fontWeight: 900, color: parseFloat(pnl) >= 0 ? '#4CAF50' : '#E53935'}}>
-                  PnL: ${pnl}
+                <span style={S.detail}>Mark: {markP ? `$${markP.toLocaleString()}` : '—'}</span>
+                <span style={{fontSize: 14, fontWeight: 900, color: pnlColor}}>
+                  {pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(2)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
                 </span>
               </div>
 
@@ -394,21 +529,36 @@ function FuturesPanel() {
     }
     return (
       <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
-        {orders.map((o, i) => (
-          <div key={i} style={S.posCard}>
-            <div style={S.row}>
-              <span style={{fontSize: 16, fontWeight: 900}}>{o.symbol || o.s}</span>
-              <span style={{fontSize: 13, fontWeight: 900, color: (o.side || o.d) === 'bid' ? '#4CAF50' : '#E53935'}}>
-                {(o.side || o.d) === 'bid' ? 'BUY' : 'SELL'}
-              </span>
-              <button style={S.cancelBtn} onClick={() => cancelOrder(o.symbol || o.s, o.order_id || o.i)}>✕</button>
+        {orders.map((o, i) => {
+          const sym = o.symbol || o.s;
+          const side = o.side || o.d;
+          const rawPrice = parseFloat(o.price || o.ip || 0);
+          const stopPrice = parseFloat(o.stop_price || o.sp || 0);
+          const price = rawPrice > 0 ? rawPrice : stopPrice;
+          const rawAmt = o.initial_amount || o.amount || o.a;
+          const amt = parseFloat(rawAmt || 0) > 0 ? rawAmt : 'Full position';
+          const type = (o.order_type || o.ot || (stopPrice > 0 ? 'stop' : 'limit')).toUpperCase().replace(/_/g, ' ');
+          const isBid = side === 'bid';
+          const isTP = type.includes('TAKE') || type.includes('TP');
+          const isSL = type.includes('STOP LOSS') || type.includes('SL');
+          const typeColor = isTP ? '#4CAF50' : isSL ? '#E53935' : '#a3906a';
+          return (
+            <div key={i} style={S.posCard}>
+              <div style={S.row}>
+                <span style={{fontSize: 16, fontWeight: 900}}>{sym}</span>
+                <span style={{fontSize: 10, fontWeight: 800, color: typeColor, background: '#fdf8e7', padding: '2px 6px', borderRadius: 5, border: '1px solid #d4c8b0'}}>{type}</span>
+                <span style={{fontSize: 13, fontWeight: 900, color: isBid ? '#4CAF50' : '#E53935'}}>
+                  {isBid ? 'BUY' : 'SELL'}
+                </span>
+                <button style={S.cancelBtn} onClick={() => cancelOrder(sym, o.order_id || o.i)}>✕</button>
+              </div>
+              <div style={S.row}>
+                <span style={S.detail}>Price: ${parseFloat(price).toLocaleString()}</span>
+                <span style={S.detail}>Amount: {amt}</span>
+              </div>
             </div>
-            <div style={S.row}>
-              <span style={S.detail}>Price: ${parseFloat(o.price || o.ip || 0).toLocaleString()}</span>
-              <span style={S.detail}>Amount: {o.initial_amount || o.a}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -423,7 +573,7 @@ function FuturesPanel() {
     return (
       <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
         {/* Wallet address */}
-        <div style={S.posCard}>
+        <div style={S.fullCard}>
           <div style={S.row}>
             <span style={S.label}>Connected Wallet</span>
             <span style={{fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: '#5C3A21'}}>
@@ -433,7 +583,7 @@ function FuturesPanel() {
         </div>
 
         {/* Wallet USDC */}
-        <div style={S.posCard}>
+        <div style={S.fullCard}>
           <div style={S.row}>
             <span style={S.label}>Wallet USDC</span>
             <span style={{fontSize: 18, fontWeight: 900, color: '#5C3A21'}}>
@@ -465,7 +615,7 @@ function FuturesPanel() {
         </div>
 
         {/* Deposit */}
-        <div style={S.posCard}>
+        <div style={S.fullCard}>
           <div style={S.row}>
             <span style={{...S.label, color: '#4CAF50'}}>Deposit USDC</span>
             {walletUsdc !== null && <span style={S.detail}>Wallet: ${walletUsdc.toFixed(2)}</span>}
@@ -488,7 +638,7 @@ function FuturesPanel() {
 
         {/* Withdraw */}
         {available > 0 && (
-          <div style={S.posCard}>
+          <div style={S.fullCard}>
             <div style={S.row}>
               <span style={{...S.label, color: '#9945FF'}}>Withdraw USDC</span>
               <span style={S.detail}>Max: ${available.toFixed(2)}</span>
@@ -508,7 +658,7 @@ function FuturesPanel() {
         )}
 
         {/* Account stats */}
-        <div style={S.posCard}>
+        <div style={S.fullCard}>
           <span style={S.label}>Account Info</span>
           {[
             ['Positions', account?.positions_count || 0],
@@ -539,7 +689,7 @@ function FuturesPanel() {
   return (
     <>
       <style>{animCSS}</style>
-      <div style={{...S.container, transform: `translate(${pos.x}px, ${pos.y}px)`}}>
+      <div style={{...(fullscreen ? S.containerFull : S.container), transform: fullscreen ? 'none' : `translate(${pos.x}px, ${pos.y}px)`}}>
         <div style={S.header} onMouseDown={handleMouseDown}>
           <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
             {TABS.map(t => {
@@ -568,6 +718,7 @@ function FuturesPanel() {
             <span style={S.goldIcon}>🪙</span>
             <span style={S.goldText}>+{goldEarned.amount.toLocaleString()} Gold</span>
             <span style={S.goldReason}>{goldEarned.reason}</span>
+            <button style={S.goldClose} onClick={() => clearGoldEarned()}>✕</button>
           </div>
         )}
       </div>
@@ -579,6 +730,7 @@ export default memo(FuturesPanel);
 
 const animCSS = `
   .futures-panel-body::-webkit-scrollbar { display: none; }
+  .futures-panel-body { overflow-x: hidden !important; }
   .futures-panel-body input[type=number]::-webkit-inner-spin-button,
   .futures-panel-body input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   .futures-panel-body input[type=number] { -moz-appearance: textfield; }
@@ -587,6 +739,12 @@ const animCSS = `
 `;
 
 const S = {
+  containerFull: {
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    background: '#e8dfc8', border: 'none', borderRadius: 0,
+    display: 'flex', flexDirection: 'column', pointerEvents: 'auto', overflow: 'hidden', zIndex: 100,
+    boxShadow: 'none', fontFamily: '"Inter","Segoe UI",sans-serif',
+  },
   container: {
     position: 'absolute', top: 20, right: 20, bottom: 150, width: 400,
     background: '#e8dfc8', border: '6px solid #d4c8b0', borderRadius: 24,
@@ -616,7 +774,7 @@ const S = {
   },
   body: {
     flex: 1, padding: 12, display: 'flex', flexDirection: 'column', gap: 10,
-    overflowY: 'auto', background: '#fdf8e7', scrollbarWidth: 'none',
+    overflowY: 'auto', overflowX: 'hidden', background: '#fdf8e7', scrollbarWidth: 'none',
   },
   // Common
   row: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
@@ -638,6 +796,20 @@ const S = {
   chartArea: {
     width: '100%', flex: 1, minHeight: 200, background: '#fff', borderRadius: 12,
     border: '4px solid #d4c8b0', overflow: 'hidden', boxShadow: 'inset 0 3px 6px rgba(0,0,0,0.1)',
+    position: 'relative',
+  },
+  chartFullscreen: {
+    width: '100%', flex: 3, minHeight: 400, background: '#fff', borderRadius: 12,
+    border: '4px solid #d4c8b0', overflow: 'hidden', boxShadow: 'inset 0 3px 6px rgba(0,0,0,0.1)',
+    position: 'relative',
+  },
+  fsBtn: {
+    position: 'absolute', top: 6, right: 6,
+    width: 26, height: 26, borderRadius: 6,
+    background: 'rgba(92,58,33,0.7)', border: 'none', color: '#fff',
+    fontSize: 16, fontWeight: 900, cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 2,
   },
   symbolBtn: {
     display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px',
@@ -729,6 +901,12 @@ const S = {
   posCard: {
     background: '#e8dfc8', border: '3px solid #d4c8b0', borderRadius: 12,
     padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5,
+    flex: '0 1 380px',
+  },
+  fullCard: {
+    background: '#e8dfc8', border: '3px solid #d4c8b0', borderRadius: 12,
+    padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5,
+    width: '100%',
   },
   expandPanel: {
     display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4,
@@ -775,5 +953,38 @@ const S = {
   },
   goldIcon: { fontSize: 28 },
   goldText: { fontSize: 18, fontWeight: 900, color: '#5C3A21', textShadow: '0 1px 0 rgba(255,255,255,0.5)' },
-  goldReason: { fontSize: 11, fontWeight: 700, color: '#7B5B00', marginLeft: 'auto' },
+  goldReason: { fontSize: 11, fontWeight: 700, color: '#7B5B00', flex: 1, textAlign: 'right' },
+  // Bottom panel (fullscreen)
+  bottomPanel: {
+    borderTop: '3px solid #bba882', background: '#e8dfc8',
+    display: 'flex', flexDirection: 'column', height: 160, minHeight: 120,
+    overflow: 'hidden',
+  },
+  bottomTabs: {
+    display: 'flex', gap: 0, background: '#d4c8b0', flexShrink: 0,
+  },
+  bottomTabBtn: {
+    padding: '6px 20px', background: 'transparent', border: 'none',
+    fontSize: 12, fontWeight: 700, color: '#77573d', cursor: 'pointer',
+    borderBottom: '2px solid transparent',
+  },
+  bottomTabActive: {
+    padding: '6px 20px', background: '#e8dfc8', border: 'none',
+    fontSize: 12, fontWeight: 800, color: '#5C3A21', cursor: 'default',
+    borderBottom: '2px solid #4CAF50',
+  },
+  bottomContent: { flex: 1, overflowY: 'auto', overflowX: 'hidden', scrollbarWidth: 'none' },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'monospace' },
+  th: { padding: '4px 12px', textAlign: 'left', color: '#a3906a', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', background: '#e8dfc8' },
+  td: { padding: '4px 12px', color: '#5C3A21', fontSize: 12, borderBottom: '1px solid #d4c8b0' },
+  tr: { background: '#fdf8e7' },
+  tblCloseBtn: {
+    padding: '2px 8px', background: '#E53935', border: 'none', borderRadius: 4,
+    color: '#fff', fontWeight: 800, fontSize: 10, cursor: 'pointer',
+  },
+  goldClose: {
+    width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.15)',
+    border: 'none', color: '#5C3A21', fontWeight: 900, fontSize: 13,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 4,
+  },
 };
