@@ -7,6 +7,7 @@ import { cartoonBtn } from '../styles/theme';
 import TradingViewWidget from './TradingViewWidget';
 import OrderBook from './OrderBook';
 import TradeHistory from './TradeHistory';
+import pacificaLogo from '../assets/pacifica.png';
 
 const TABS = [
   { id: 'Trade', icon: <svg className="tab-icon-trade" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path className="trend-line" d="m19 9-5 5-4-4-3 3"/></svg>, label: 'Trade' },
@@ -30,9 +31,10 @@ function FuturesPanel() {
 
   // Drag state
   const [pos, setPos] = useState({ x: 0, y: 0 });
-  const draggingRef = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
   const handleMouseDown = useCallback((e) => {
     if (e.target.closest('[data-nodrag]')) return;
+    setIsDragging(true);
     const startX = e.clientX;
     const startY = e.clientY;
     const origX = pos.x;
@@ -44,6 +46,7 @@ function FuturesPanel() {
       setPos({ x: origX + dx, y: origY + dy });
     };
     const onUp = () => {
+      setIsDragging(false);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
@@ -137,7 +140,11 @@ function FuturesPanel() {
     return (
       <>
         <style>{animCSS}</style>
-        <div style={{...(fullscreen ? S.containerFull : S.container), transform: fullscreen ? 'none' : `translate(${pos.x}px, ${pos.y}px)`}}>
+        <div style={{
+          ...(fullscreen ? S.containerFull : S.container),
+          transform: fullscreen ? 'translate(0px, 0px)' : `translate(${pos.x}px, ${pos.y}px)`,
+          transition: isDragging ? 'none' : 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
           <div style={S.header} onMouseDown={handleMouseDown}>
             <span style={S.headerTitle}>Futures Trading</span>
             <button data-nodrag onClick={handleClose} style={S.closeBtn}>
@@ -691,7 +698,11 @@ function FuturesPanel() {
   return (
     <>
       <style>{animCSS}</style>
-      <div style={{...(fullscreen ? S.containerFull : S.container), transform: fullscreen ? 'none' : `translate(${pos.x}px, ${pos.y}px)`}}>
+      <div style={{
+        ...(fullscreen ? S.containerFull : S.container),
+        transform: fullscreen ? 'translate(0px, 0px)' : `translate(${pos.x}px, ${pos.y}px)`,
+        transition: isDragging ? 'none' : 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+      }}>
         <div style={S.header} onMouseDown={handleMouseDown}>
           <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
             {TABS.map(t => {
@@ -721,6 +732,13 @@ function FuturesPanel() {
           <div key={activeTab} style={{animation: 'fadeIn 0.25s ease-out', display: 'flex', flexDirection: 'column', gap: 10, height: '100%'}}>
             {renderContent()}
           </div>
+        </div>
+
+        {/* Powered by Pacifica footer */}
+        <div style={S.pacificaFooter}>
+          <img src={pacificaLogo} alt="Pacifica" style={S.pacificaLogo} />
+          <span style={S.pacificaText}>Powered by</span>
+          <span style={S.pacificaBrand}>Pacifica</span>
         </div>
 
         {/* Gold earned notification */}
@@ -809,13 +827,13 @@ const animCSS = `
 
 const S = {
   containerFull: {
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-    background: '#e8dfc8', border: 'none', borderRadius: 0,
+    position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%',
+    background: '#e8dfc8', border: '0px solid #d4c8b0', borderRadius: 0,
     display: 'flex', flexDirection: 'column', pointerEvents: 'auto', overflow: 'hidden', zIndex: 100,
-    boxShadow: 'none', fontFamily: '"Inter","Segoe UI",sans-serif',
+    boxShadow: '0 0 0 rgba(0,0,0,0)', fontFamily: '"Inter","Segoe UI",sans-serif',
   },
   container: {
-    position: 'absolute', top: 20, right: 20, bottom: 150, width: 400,
+    position: 'fixed', top: 20, right: 20, bottom: 150, width: 400,
     background: '#e8dfc8', border: '6px solid #d4c8b0', borderRadius: 24,
     display: 'flex', flexDirection: 'column', pointerEvents: 'auto', overflow: 'hidden', zIndex: 100,
     boxShadow: '0 10px 30px rgba(0,0,0,0.4)', fontFamily: '"Inter","Segoe UI",sans-serif',
@@ -845,6 +863,15 @@ const S = {
     flex: 1, padding: 12, display: 'flex', flexDirection: 'column', gap: 10,
     overflowY: 'auto', overflowX: 'hidden', background: '#fdf8e7', scrollbarWidth: 'none',
   },
+  pacificaFooter: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    padding: '6px 12px', borderTop: '3px solid #d4c8b0',
+    background: 'linear-gradient(90deg, #e8dfc8 0%, #fdf8e7 50%, #e8dfc8 100%)',
+    flexShrink: 0,
+  },
+  pacificaLogo: { width: 20, height: 20, objectFit: 'contain', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))' },
+  pacificaText: { fontSize: 10, fontWeight: 700, color: '#a3906a', letterSpacing: '0.05em', textTransform: 'uppercase' },
+  pacificaBrand: { fontSize: 11, fontWeight: 900, color: '#5C3A21', letterSpacing: '0.08em', textTransform: 'uppercase' },
   // Common
   row: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   label: { color: '#5C3A21', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' },

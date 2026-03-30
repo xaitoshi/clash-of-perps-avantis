@@ -1922,6 +1922,10 @@ func _select_building(b: Dictionary) -> void:
 		if level < max_level:
 			for res_name in cost:
 				upgrade_cost[res_name] = cost[res_name] * multiplier
+		var bs_has_ship = false
+		if b.has("node") and is_instance_valid(b["node"]) and b["node"].has_meta("has_ship"):
+			bs_has_ship = true
+			
 		bridge.send_to_react("building_selected", {
 			"id": b.id, "name": def.name, "level": level,
 			"hp": hp, "max_hp": max_hp, "max_level": max_level,
@@ -1929,6 +1933,7 @@ func _select_building(b: Dictionary) -> void:
 			"is_enemy": is_viewing_enemy,
 			"is_barracks": b.id == "barracks",
 			"is_upgrading": b.get("is_upgrading", false),
+			"has_ship": bs_has_ship
 		})
 
 	# Range indicator for defense buildings
@@ -2602,6 +2607,9 @@ func _buy_ship() -> void:
 	_refresh_port_panel()
 	_spawn_port_ship()
 	
+	if typeof(selected_building) == TYPE_DICTIONARY and selected_building.size() > 0:
+		_select_building(selected_building)
+	
 	var bridge = get_node_or_null("/root/Bridge")
 	if bridge:
 		bridge.send_to_react("resources", {
@@ -3145,6 +3153,9 @@ func _update_ship_flash(delta: float) -> void:
 	if _ship_flash_timer <= 0:
 		if _ship_flash and is_instance_valid(_ship_flash):
 			_ship_flash.visible = false
+		return
+	if not _ship_flash or not is_instance_valid(_ship_flash):
+		_ship_flash_timer = 0
 		return
 	var progress = 1.0 - clampf(_ship_flash_timer / SHIP_FLASH_DURATION, 0.0, 1.0)
 	# Swap texture frame

@@ -72,7 +72,7 @@ function BuildingInfoPanel({ onOpenTroops }) {
             </button>
           )}
 
-          {building.id === 'port' && !building.is_enemy && (
+          {building.id === 'port' && !building.is_enemy && !building.has_ship && (
             <button
               style={styles.troopsBtn}
               onClick={handleBuyShip}

@@ -141,7 +141,7 @@ function ShopPanel({ onClose }) {
 
   const filteredBuildings = useMemo(
     () => Object.entries(buildings).filter(([id, def]) => {
-      if (id === 'barracks') return false;
+      if (id === 'barracks' || id === 'flag') return false;
       // Hide buildings that reached max_count (e.g. town_hall max 1)
       const maxCount = def.max_count || 0;
       if (maxCount > 0 && (placedCounts[id] || 0) >= maxCount) return false;
