@@ -318,6 +318,7 @@ var find_button: Button
 # ── Ship cannon ───────────────────────────────────────────────
 var _ship_cannon_mode: bool = false
 var _ship_cannon_label: Label = null
+var _cannon_paused_attack: bool = false  # was attack mode active when cannon was entered
 var _ship_cannonballs: Array = []  # Array of {node, target_bdata, target_pos}
 const SHIP_CANNON_DAMAGE: int = 500
 const SHIP_CANNON_SPEED: float = 6.0
@@ -329,10 +330,17 @@ const SHIP_FLASH_FRAMES: Array[String] = [
 	"res://Model/Turret/splash/FootageCrate-Muzzle_Flash_6_Point_70_Degrees_2-LQ_000.png",
 	"res://Model/Turret/splash/FootageCrate-Muzzle_Flash_6_Point_70_Degrees_2-LQ_001.png",
 ]
+const SHIP_EXPLOSION_SCALE: float = 1.65
+const SHIP_EXPLOSION_DURATION: float = 0.9
+const SHIP_EXPLOSION_FRAME_COUNT: int = 86
+const SHIP_EXPLOSION_FRAME_DIR: String = "res://Model/Ship/FootageCrate-Particle_Explosion_Small/FootageCrate-Particle_Explosion_Small-%05d.png"
 var _ship_cannon_cooldown: float = 0.0
 var _attack_ship_wave_tweens: Array = []
 var _ship_flash: MeshInstance3D = null
 var _ship_flash_timer: float = 0.0
+var _ship_explosion: MeshInstance3D = null
+var _ship_explosion_timer: float = 0.0
+var _ship_explosion_textures: Array = []
 var _ship_flash_textures: Array = []
 
 # ── Port / Ships ─────────────────────────────────────────────
@@ -489,6 +497,8 @@ func _process(delta: float) -> void:
 		_ship_cannon_cooldown -= delta
 	if _ship_flash_timer > 0:
 		_update_ship_flash(delta)
+	if _ship_explosion_timer > 0:
+		_update_ship_explosion(delta)
 	if _ship_cannonballs.size() > 0:
 		_update_ship_cannonballs(delta)
 
@@ -1922,9 +1932,21 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 			elif _ship_cannon_mode:
-				# Click anywhere else in cannon mode — cancel
-				_exit_ship_cannon_mode()
-				get_viewport().set_input_as_handled()
+				# Left click in cannon mode — fire at building if hit, else cancel
+				var fired := false
+				for bs in _building_systems:
+					var local_hit = bs._get_mouse_local()
+					if local_hit != Vector3.INF:
+						var gp = bs._local_to_grid(local_hit)
+						var bdata = bs._find_building_at(gp)
+						if bdata.size() > 0:
+							_fire_ship_cannon(bdata)
+							fired = true
+							get_viewport().set_input_as_handled()
+							return
+				if not fired:
+					_exit_ship_cannon_mode()
+					get_viewport().set_input_as_handled()
 				return
 		if event.button_index == MOUSE_BUTTON_RIGHT and _ship_cannon_mode:
 			# Right click — fire at building (search ALL building systems)
@@ -3379,6 +3401,7 @@ func _switch_to_enemy_island() -> void:
 	var cloud = _get_or_create_cloud()
 	cloud.close()
 	await cloud.close_finished
+	_preload_explosion_textures()
 
 	# Clear ALL building systems (including port grid)
 	for bs in _building_systems:
@@ -3517,6 +3540,66 @@ func _update_ship_flash(delta: float) -> void:
 		fmat.albedo_color = Color(1.5 * fade, 1.2 * fade, 0.8 * fade, fade)
 
 
+func _preload_explosion_textures() -> void:
+	if not _ship_explosion_textures.is_empty():
+		return
+	for i in range(1, SHIP_EXPLOSION_FRAME_COUNT + 1):
+		var tex = load(SHIP_EXPLOSION_FRAME_DIR % i)
+		if tex:
+			_ship_explosion_textures.append(tex)
+
+
+func _spawn_ship_explosion(pos: Vector3) -> void:
+	_preload_explosion_textures()
+	if _ship_explosion_textures.is_empty():
+		return
+	# Create or reuse explosion quad
+	if not _ship_explosion or not is_instance_valid(_ship_explosion):
+		_ship_explosion = MeshInstance3D.new()
+		var quad = QuadMesh.new()
+		quad.size = Vector2(SHIP_EXPLOSION_SCALE, SHIP_EXPLOSION_SCALE)
+		quad.center_offset = Vector3(0, SHIP_EXPLOSION_SCALE * 0.28, 0)
+		_ship_explosion.mesh = quad
+		var mat = StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.no_depth_test = true
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.albedo_texture = _ship_explosion_textures[0]
+		mat.albedo_color = Color(1.4, 1.1, 0.7, 1.0)
+		_ship_explosion.material_override = mat
+		get_tree().root.add_child(_ship_explosion)
+	_ship_explosion.global_position = pos
+	_ship_explosion.visible = true
+	_ship_explosion_timer = SHIP_EXPLOSION_DURATION
+	var emat = _ship_explosion.material_override as StandardMaterial3D
+	emat.albedo_texture = _ship_explosion_textures[0]
+	emat.albedo_color = Color(1.4, 1.1, 0.7, 1.0)
+
+
+func _update_ship_explosion(delta: float) -> void:
+	_ship_explosion_timer -= delta
+	if _ship_explosion_timer <= 0:
+		if _ship_explosion and is_instance_valid(_ship_explosion):
+			_ship_explosion.visible = false
+		return
+	if not _ship_explosion or not is_instance_valid(_ship_explosion):
+		_ship_explosion_timer = 0
+		return
+	var progress = 1.0 - clampf(_ship_explosion_timer / SHIP_EXPLOSION_DURATION, 0.0, 1.0)
+	var frame_idx = clampi(int(progress * _ship_explosion_textures.size()), 0, _ship_explosion_textures.size() - 1)
+	var emat = _ship_explosion.material_override as StandardMaterial3D
+	if frame_idx < _ship_explosion_textures.size():
+		emat.albedo_texture = _ship_explosion_textures[frame_idx]
+	# Fade out in last 25%
+	if progress > 0.75:
+		var fade = (1.0 - progress) / 0.25
+		emat.albedo_color = Color(1.4 * fade, 1.1 * fade, 0.7 * fade, fade)
+
+
+
 func _check_ship_cannon_click(mouse_pos: Vector2) -> bool:
 	var camera = BaseTroop._get_camera_cached()
 	if not camera:
@@ -3531,13 +3614,19 @@ func _check_ship_cannon_click(mouse_pos: Vector2) -> bool:
 
 func _enter_ship_cannon_mode() -> void:
 	_ship_cannon_mode = true
-	# Exit attack mode so it doesn't consume right-clicks
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("cannon_mode", {"active": true})
+	# Pause (not exit) attack mode so RMB doesn't cancel placement
 	var attack_system = get_node_or_null("../AttackSystem")
-	if attack_system and attack_system.has_method("exit_attack_mode"):
-		attack_system.exit_attack_mode()
+	if attack_system and attack_system.has_method("_pause_attack_mode"):
+		_cannon_paused_attack = attack_system.is_attack_mode
+		attack_system._pause_attack_mode()
+	else:
+		_cannon_paused_attack = false
 	if canvas and not _ship_cannon_label:
 		_ship_cannon_label = Label.new()
-		_ship_cannon_label.text = "Cannon mode — RMB on building to fire  |  LMB to cancel"
+		_ship_cannon_label.text = "Cannon mode — Click building to fire  |  Click sea to cancel"
 		_ship_cannon_label.anchor_left = 0.5
 		_ship_cannon_label.anchor_right = 0.5
 		_ship_cannon_label.anchor_top = 0.0
@@ -3554,9 +3643,18 @@ func _enter_ship_cannon_mode() -> void:
 
 func _exit_ship_cannon_mode() -> void:
 	_ship_cannon_mode = false
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("cannon_mode", {"active": false})
 	if _ship_cannon_label and is_instance_valid(_ship_cannon_label):
 		_ship_cannon_label.queue_free()
 		_ship_cannon_label = null
+	# Restore attack placement mode if it was active before cannon
+	if _cannon_paused_attack:
+		_cannon_paused_attack = false
+		var attack_system = get_node_or_null("../AttackSystem")
+		if attack_system and attack_system.has_method("_resume_attack_mode"):
+			attack_system._resume_attack_mode()
 
 
 func _fire_ship_cannon(bdata: Dictionary) -> void:
@@ -3619,6 +3717,10 @@ func _update_ship_cannonballs(delta: float) -> void:
 						bs.remove_building(bdata)
 						break
 			c.node.queue_free()
+			_spawn_ship_explosion(c.target_pos)
+			var cam_rig = get_tree().current_scene.find_child("CameraRig", true, false)
+			if cam_rig and cam_rig.has_method("add_trauma"):
+				cam_rig.add_trauma(0.4)
 			_ship_cannonballs.remove_at(i)
 		i -= 1
 

@@ -21,6 +21,8 @@ export function GodotProvider({ children }) {
   const [collectibles, setCollectibles] = useState([]);
   const [cloudVisible, setCloudVisible] = useState(false);
   const [futuresOpen, setFuturesOpen] = useState(false);
+  const [cannonMode, setCannonMode] = useState(false);
+  const [selectedTroopIdx, setSelectedTroopIdx] = useState(0);
   const errorTimerRef = useRef(null);
 
   useEffect(() => {
@@ -64,7 +66,13 @@ export function GodotProvider({ children }) {
           break;
         case 'enemy_mode':
           setEnemyMode(data);
-          if (!data.active) setSelectedBuilding(null);
+          if (!data.active) { setSelectedBuilding(null); setCannonMode(false); setSelectedTroopIdx(0); }
+          break;
+        case 'troop_idx_changed':
+          setSelectedTroopIdx(data.idx ?? 0);
+          break;
+        case 'cannon_mode':
+          setCannonMode(data.active);
           break;
         case 'error':
           setError(data.message);
@@ -112,8 +120,8 @@ export function GodotProvider({ children }) {
     buildingDefs, troopLevels, selectedBuilding,
   }), [buildingDefs, troopLevels, selectedBuilding]);
   const uiCtx = useMemo(() => ({
-    ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible, futuresOpen
-  }), [ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible, futuresOpen]);
+    ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible, futuresOpen, cannonMode, selectedTroopIdx
+  }), [ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible, futuresOpen, cannonMode, selectedTroopIdx]);
 
   // Nested providers using createElement (no JSX needed in .js file)
   return createElement(SendContext.Provider, { value: sendCtx },

@@ -64,9 +64,18 @@ func _send_perf_data() -> void:
 					active_bullets += b.node._active_bullets.size()
 
 	var ships = 0
-	var attack_sys = get_tree().current_scene.get_node_or_null("IslandView/AttackSystem")
+	var deployed_types := {}
+	var attack_sys = get_tree().current_scene.get_node_or_null("AttackSystem")
 	if attack_sys:
-		ships = attack_sys._ships_placed
+		ships = attack_sys._total_ships_launched
+		deployed_types = attack_sys._deployed_types
+
+	# Count live troops per script basename
+	var troop_counts := {}
+	for troop in troop_list:
+		if is_instance_valid(troop) and troop.get_script():
+			var sname: String = troop.get_script().resource_path.get_file().get_basename()
+			troop_counts[sname] = troop_counts.get(sname, 0) + 1
 
 	var state = "idle"
 	if troops > 0:
@@ -85,6 +94,8 @@ func _send_perf_data() -> void:
 			"projectiles": troop_projectiles,
 			"buildings": buildings,
 			"ships": ships,
+			"deployed_types": deployed_types,
+			"troop_counts": troop_counts,
 			"state": state,
 			"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 			"objects": Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
@@ -187,6 +198,17 @@ func _handle_react_action(action: String, data: Dictionary) -> void:
 		"return_home":
 			if bs:
 				bs._return_home()
+		"ship_cannon_mode":
+			if bs:
+				if bs._ship_cannon_mode:
+					bs._exit_ship_cannon_mode()
+				else:
+					bs._enter_ship_cannon_mode()
+		"select_troop":
+			var asys = get_tree().current_scene.get_node_or_null("AttackSystem")
+			if asys:
+				asys._next_troop_idx = int(data.get("idx", 0))
+				send_to_react("troop_idx_changed", {"idx": asys._next_troop_idx})
 		"upgrade_building":
 			var active = _get_active_building_system()
 			if active:

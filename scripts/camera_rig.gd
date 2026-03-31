@@ -37,6 +37,14 @@ var _target_position: Vector3 = Vector3.ZERO
 var _is_panning: bool = false
 var zoom_blocked: bool = false
 
+var _shake_trauma: float = 0.0
+const SHAKE_MAX_OFFSET: float = 0.035
+const SHAKE_DECAY: float = 2.8
+
+## Add trauma (0–1) to trigger screen shake. Values accumulate, capped at 1.
+func add_trauma(amount: float) -> void:
+	_shake_trauma = minf(_shake_trauma + amount, 1.0)
+
 
 func _ready() -> void:
 	_pitch_pivot = $PitchPivot
@@ -127,3 +135,13 @@ func _process(delta_raw: float) -> void:
 
 	# Apply pitch angle
 	_pitch_pivot.rotation_degrees.x = -camera_pitch
+
+	# Screen shake — offset camera in camera-local XY, decays each frame
+	if _shake_trauma > 0.0:
+		_shake_trauma = maxf(_shake_trauma - SHAKE_DECAY * delta, 0.0)
+		var intensity = _shake_trauma * _shake_trauma
+		_camera.position.x = randf_range(-1.0, 1.0) * SHAKE_MAX_OFFSET * intensity
+		_camera.position.y = randf_range(-1.0, 1.0) * SHAKE_MAX_OFFSET * intensity
+	else:
+		_camera.position.x = 0.0
+		_camera.position.y = 0.0

@@ -88,6 +88,10 @@ static func _get_ships_cached() -> Array:
 # ---------------------------------------------------------------------------
 var is_attack_mode: bool = false
 var _ships_placed: int = 0
+var _total_ships_launched: int = 0  # never reset mid-attack; used by React HUD
+var _next_troop_idx: int = 0
+var _ship_troop_map: Dictionary = {}   # ship_idx → troop_idx chosen at placement
+var _deployed_types: Dictionary = {}   # script basename → true; which troop types were sent
 var ship_plane: MeshInstance3D
 var plane_y: float = 0.0
 var water_y: float = 0.0
@@ -154,8 +158,15 @@ func _separate_ships(delta: float) -> void:
 func enter_attack_mode() -> void:
 	is_attack_mode = true
 	_ships_placed = 0
+	_total_ships_launched = 0
+	_next_troop_idx = 0
+	_ship_troop_map.clear()
+	_deployed_types.clear()
 	_ship_stop_positions.clear()
 	_ship_markers.clear()
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("troop_idx_changed", {"idx": 0})
 	if ship_plane:
 		ship_plane.visible = true
 		var mat = StandardMaterial3D.new()
@@ -164,6 +175,28 @@ func enter_attack_mode() -> void:
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		ship_plane.material_override = mat
 	print("Attack mode ON - place up to %d ships!" % max_ships)
+
+
+## Temporarily hides the placement plane without resetting any state.
+## Used when cannon mode activates mid-placement to prevent RMB conflicts.
+func _pause_attack_mode() -> void:
+	is_attack_mode = false
+	if ship_plane:
+		ship_plane.visible = false
+
+
+## Restores the placement plane after cannon mode ends, if ships still remain.
+func _resume_attack_mode() -> void:
+	if _ships_placed >= max_ships:
+		return
+	is_attack_mode = true
+	if ship_plane:
+		ship_plane.visible = true
+		var mat = StandardMaterial3D.new()
+		mat.albedo_color = Color(0.8, 0.1, 0.1, 0.35)
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ship_plane.material_override = mat
 
 
 ## Called when all ships are placed — hides plane but keeps markers alive.
@@ -181,6 +214,11 @@ func _finish_attack_mode() -> void:
 func exit_attack_mode() -> void:
 	is_attack_mode = false
 	_ships_placed = 0
+	_total_ships_launched = 0
+	_next_troop_idx = 0
+	_deployed_types.clear()
+	# _ship_troop_map is intentionally NOT cleared here — ships still sailing
+	# need it in _deploy_troops_from_ship. Cleared only in enter_attack_mode.
 	# Free markers for ships that were cancelled before arriving
 	for marker in _ship_markers:
 		if is_instance_valid(marker):
@@ -280,9 +318,25 @@ func _try_place_ship(hit: Vector3) -> bool:
 	for existing in _ship_stop_positions:
 		if hit.distance_to(existing) < SHIP_MIN_SEPARATION:
 			return false
+	_ship_troop_map[_ships_placed] = _next_troop_idx
 	if not _spawn_single_ship(hit):
+		_ship_troop_map.erase(_ships_placed)
 		return false
+	# Record which troop type was deployed (by script basename, matches React key)
+	var script_path: String = SHIP_TROOPS[_next_troop_idx].script
+	_deployed_types[script_path.get_file().get_basename()] = true
 	_ships_placed += 1
+	_total_ships_launched += 1
+	# Auto-advance to next undeployed troop type
+	for offset in range(1, SHIP_TROOPS.size() + 1):
+		var candidate = (_next_troop_idx + offset) % SHIP_TROOPS.size()
+		var candidate_key = SHIP_TROOPS[candidate].script.get_file().get_basename()
+		if not _deployed_types.has(candidate_key):
+			_next_troop_idx = candidate
+			break
+	var bridge = get_node_or_null("/root/Bridge")
+	if bridge:
+		bridge.send_to_react("troop_idx_changed", {"idx": _next_troop_idx})
 	return true
 
 
@@ -407,7 +461,7 @@ func _spawn_single_ship(target: Vector3) -> bool:
 ## Troops are staggered by [troop_spawn_delay] seconds and placed on the island
 ## at building height so they immediately engage targets.
 func _deploy_troops_from_ship(ship_pos: Vector3, sail_dir: Vector3, ship_idx: int) -> void:
-	var troop_idx = ship_idx % SHIP_TROOPS.size()
+	var troop_idx = _ship_troop_map.get(ship_idx, ship_idx % SHIP_TROOPS.size())
 	var troop_def = SHIP_TROOPS[troop_idx]
 	var model_res  = _troop_model_res[troop_idx]
 	var script_res = _troop_script_res[troop_idx]
