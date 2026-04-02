@@ -7,7 +7,7 @@ function FundingHistory({ walletAddr, filters }) {
 
   useEffect(() => {
     if (!walletAddr) return;
-    fetch(`${API}/trades/funding_payments?account=${walletAddr}`)
+    fetch(`${API}/funding/history?account=${walletAddr}`)
       .then(r => r.json())
       .then(d => { if (d.data) setPayments(d.data); })
       .catch(() => {});

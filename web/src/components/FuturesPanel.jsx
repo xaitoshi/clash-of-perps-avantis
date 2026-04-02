@@ -79,6 +79,38 @@ function FuturesPanel() {
   const defaultFilters = { symbol: 'All', side: 'All', sortBy: 'time', sortDir: 'desc' };
   const [btmFilters, setBtmFilters] = useState(defaultFilters);
 
+  // Resizable panel sizes (percentages / pixels)
+  const [bottomH, setBottomH] = useState(160);       // bottom panel height in px
+  const [obWidth, setObWidth] = useState(160);        // orderbook width in px
+  const [chartPct, setChartPct] = useState(55);       // chart width as % of (chart + orderbook + controls)
+
+  const useDrag = (onDrag) => {
+    return useCallback((e) => {
+      e.preventDefault();
+      const startX = e.clientX, startY = e.clientY;
+      const onMove = (ev) => onDrag(ev.clientX - startX, ev.clientY - startY, ev);
+      const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    }, [onDrag]);
+  };
+
+  const dragBottom = useDrag(useCallback((dx, dy) => {
+    setBottomH(prev => Math.max(60, Math.min(500, prev - dy)));
+  }, []));
+
+  const dragOb = useDrag(useCallback((dx) => {
+    setObWidth(prev => Math.max(80, Math.min(350, prev + dx)));
+  }, []));
+
+  const dragChart = useDrag(useCallback((dx, dy, ev) => {
+    const container = panelRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+    setChartPct(Math.max(20, Math.min(70, pct)));
+  }, []));
+
   const handleClose = useCallback(() => setFuturesOpen(false), [setFuturesOpen]);
 
   // Sync leverage from Pacifica settings when symbol changes or settings load
@@ -381,7 +413,7 @@ function FuturesPanel() {
     ];
 
     return (
-      <div style={S.bottomPanel}>
+      <div style={{...S.bottomPanel, height: bottomH}}>
         <div style={{...S.bottomTabs, position: 'relative'}}>
           {tabs.map(t => (
             <button key={t.id} style={bottomTab === t.id ? S.bottomTabActive : S.bottomTabBtn} onClick={() => { setBottomTab(t.id); setShowFilter(false); }}>
@@ -511,15 +543,21 @@ function FuturesPanel() {
         <div style={{display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden'}}>
           {/* Top: chart + orderbook + controls */}
           <div style={{display: 'flex', flex: 1, overflow: 'hidden'}}>
-            <div style={{flex: '0 0 55%', maxWidth: '55%', position: 'relative', borderRight: '3px solid #d4c8b0'}}>
+            <div style={{flex: `0 0 ${chartPct}%`, maxWidth: `${chartPct}%`, position: 'relative'}}>
               <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} />
               {fundingBadge}
             </div>
-            <div style={{flex: '0 0 160px', borderRight: '3px solid #d4c8b0', overflow: 'hidden'}}>
+            {/* Drag handle: chart ↔ orderbook */}
+            <div style={S.dragHandleV} onMouseDown={dragChart} />
+            <div style={{flex: `0 0 ${obWidth}px`, overflow: 'hidden'}}>
               <OrderBook symbol={symbol} />
             </div>
+            {/* Drag handle: orderbook ↔ controls */}
+            <div style={S.dragHandleV} onMouseDown={dragOb} />
             <div style={{flex: 1, minWidth: 0, overflow: 'hidden'}}>{renderTradeControls()}</div>
           </div>
+          {/* Drag handle: top ↔ bottom */}
+          <div style={S.dragHandleH} onMouseDown={dragBottom} />
           {/* Bottom: positions/orders panel */}
           {renderBottomPanel()}
         </div>
@@ -1162,9 +1200,9 @@ const S = {
   goldReason: { fontSize: 11, fontWeight: 700, color: '#7B5B00', flex: 1, textAlign: 'right' },
   // Bottom panel (fullscreen)
   bottomPanel: {
-    borderTop: '3px solid #bba882', background: '#e8dfc8',
-    display: 'flex', flexDirection: 'column', height: 160, minHeight: 120,
-    overflow: 'hidden',
+    background: '#e8dfc8',
+    display: 'flex', flexDirection: 'column', minHeight: 60,
+    overflow: 'hidden', flexShrink: 0,
   },
   bottomTabs: {
     display: 'flex', gap: 0, background: '#d4c8b0', flexShrink: 0,
@@ -1178,6 +1216,16 @@ const S = {
     padding: '6px 20px', background: '#e8dfc8', border: 'none',
     fontSize: 12, fontWeight: 800, color: '#5C3A21', cursor: 'default',
     borderBottom: '2px solid #4CAF50',
+  },
+  dragHandleV: {
+    width: 6, cursor: 'col-resize', background: '#d4c8b0', flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background 0.15s',
+  },
+  dragHandleH: {
+    height: 6, cursor: 'row-resize', background: '#bba882', flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background 0.15s',
   },
   bottomContent: { flex: 1, overflowY: 'auto', overflowX: 'hidden', scrollbarWidth: 'none', position: 'relative' },
   filterBtn: {
