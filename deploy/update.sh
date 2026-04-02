@@ -24,6 +24,9 @@ for db in "$DB_BACKUP/clash.db" "$DB_BACKUP/clash.db-wal" "$DB_BACKUP/clash.db-s
 done
 echo "DB restored"
 
+# Ensure brotli is installed
+command -v brotli &>/dev/null || sudo apt-get install -y -qq brotli
+
 # Install & rebuild frontend
 echo "Building frontend..."
 cd "$APP_DIR/web"
