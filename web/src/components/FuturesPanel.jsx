@@ -338,15 +338,18 @@ function FuturesPanel() {
                   const mark = prices.find(pr => pr.symbol === p.symbol)?.mark;
                   const entryPrice = parseFloat(p.entry_price);
                   const markPrice = mark ? parseFloat(mark) : 0;
-                  const pnlVal = markPrice ? (markPrice - entryPrice) * parseFloat(p.amount) * (p.side === 'bid' ? 1 : -1) : 0;
-                  const lev = leverageSettings[p.symbol] || 1;
+                  const tblAmt = parseFloat(p.amount);
+                  const tblMargin = parseFloat(p.margin || 0);
+                  const pnlVal = markPrice ? (markPrice - entryPrice) * tblAmt * (p.side === 'bid' ? 1 : -1) : 0;
+                  const lev = (tblMargin > 0 && entryPrice > 0 && tblAmt > 0) ? Math.round((tblAmt * entryPrice) / tblMargin) : (leverageSettings[p.symbol] || 1);
+                  const tblPosValue = markPrice ? tblAmt * markPrice : tblAmt * entryPrice;
                   const pnlPct = entryPrice && markPrice ? ((markPrice - entryPrice) / entryPrice * 100 * (p.side === 'bid' ? 1 : -1) * (typeof lev === 'number' ? lev : 1)) : 0;
                   const pnlColor = pnlVal >= 0 ? '#4CAF50' : '#E53935';
                   return (
                     <tr key={i} style={S.tr}>
                       <td style={S.td}>{p.symbol}</td>
                       <td style={{...S.td, color: p.side === 'bid' ? '#4CAF50' : '#E53935', fontWeight: 900}}>{p.side === 'bid' ? 'LONG' : 'SHORT'}</td>
-                      <td style={S.td}>{p.amount}</td>
+                      <td style={S.td}>{p.amount} <span style={{color: '#a3906a', fontSize: 11}}>(${tblPosValue.toFixed(2)})</span></td>
                       <td style={S.td}>${entryPrice.toLocaleString()}</td>
                       <td style={S.td}>{markPrice ? `$${markPrice.toLocaleString()}` : '—'}</td>
                       <td style={{...S.td, color: pnlColor, fontWeight: 900}}>{pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(2)}</td>
@@ -468,8 +471,11 @@ function FuturesPanel() {
           const mark = prices.find(p => p.symbol === pos.symbol)?.mark;
           const entryP = parseFloat(pos.entry_price);
           const markP = mark ? parseFloat(mark) : 0;
-          const pnlVal = markP ? (markP - entryP) * parseFloat(pos.amount) * (pos.side === 'bid' ? 1 : -1) : 0;
-          const setLev = leverageSettings[pos.symbol] || 1;
+          const amt = parseFloat(pos.amount);
+          const margin = parseFloat(pos.margin || 0);
+          const pnlVal = markP ? (markP - entryP) * amt * (pos.side === 'bid' ? 1 : -1) : 0;
+          const setLev = (margin > 0 && entryP > 0 && amt > 0) ? Math.round((amt * entryP) / margin) : (leverageSettings[pos.symbol] || 1);
+          const posValueUsd = markP ? amt * markP : amt * entryP;
           const pnlPct = entryP && markP ? ((markP - entryP) / entryP * 100 * (pos.side === 'bid' ? 1 : -1) * (typeof setLev === 'number' ? setLev : 1)) : 0;
           const pnlColor = pnlVal >= 0 ? '#4CAF50' : '#E53935';
           const posKey = `${pos.symbol}-${pos.side}`;
@@ -487,7 +493,7 @@ function FuturesPanel() {
                 </div>
               </div>
               <div style={S.row}>
-                <span style={S.detail}>Size: {pos.amount}</span>
+                <span style={S.detail}>Size: {pos.amount} <span style={{color: '#a3906a'}}>(${posValueUsd.toFixed(2)})</span></span>
                 <span style={S.detail}>Entry: ${parseFloat(pos.entry_price).toLocaleString()}</span>
               </div>
               <div style={S.row}>
