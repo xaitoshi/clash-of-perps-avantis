@@ -1,4 +1,4 @@
-import { useState, memo } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useSend } from '../hooks/useGodot';
@@ -9,6 +9,15 @@ function RegisterPanel() {
   const { publicKey, connected } = useWallet();
   const { setVisible: openWalletModal } = useWalletModal();
   const [name, setName] = useState('');
+  const triedWalletLogin = useRef(false);
+
+  // Auto-login by wallet when connected (recovers account after cache clear)
+  useEffect(() => {
+    if (connected && publicKey && !triedWalletLogin.current) {
+      triedWalletLogin.current = true;
+      sendToGodot('wallet_connected', { wallet: publicKey.toBase58() });
+    }
+  }, [connected, publicKey, sendToGodot]);
 
   const handleSubmit = (e) => {
     e.preventDefault();

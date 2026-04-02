@@ -222,6 +222,8 @@ func _handle_react_action(action: String, data: Dictionary) -> void:
 				bs._upgrade_troop(tn)
 		"register":
 			_do_register(data.get("name", ""), data.get("wallet", ""))
+		"wallet_connected":
+			_try_wallet_login(data.get("wallet", ""))
 		"deselect_building":
 			var active = _get_active_building_system()
 			if active:
@@ -245,6 +247,18 @@ func _do_register(player_name: String, wallet: String = "") -> void:
 	if not net:
 		send_to_react("error", {"message": "Network not available"})
 		return
+	# Try to recover existing account by wallet first
+	if wallet != "":
+		var wallet_result = await net.login_by_wallet(wallet)
+		if wallet_result.has("token"):
+			send_to_react("registered", {"success": true})
+			send_to_react("state", {
+				"player_name": net.display_name,
+				"trophies": net.trophies,
+				"player_id": net.player_id,
+				"token": net.token,
+			})
+			return
 	if player_name.length() < 2:
 		send_to_react("error", {"message": "Name must be at least 2 characters"})
 		return
@@ -259,6 +273,23 @@ func _do_register(player_name: String, wallet: String = "") -> void:
 		"player_id": net.player_id,
 		"token": net.token,
 	})
+
+
+func _try_wallet_login(wallet: String) -> void:
+	if wallet == "":
+		return
+	var net = get_node_or_null("/root/Net")
+	if not net or net.has_token():
+		return
+	var result = await net.login_by_wallet(wallet)
+	if result.has("token"):
+		send_to_react("registered", {"success": true})
+		send_to_react("state", {
+			"player_name": net.display_name,
+			"trophies": net.trophies,
+			"player_id": net.player_id,
+			"token": net.token,
+		})
 
 
 func _send_full_state() -> void:

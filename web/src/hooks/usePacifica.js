@@ -458,15 +458,38 @@ export function usePacifica() {
   useEffect(() => {
     if (!connected) return;
 
-    let ws, reconnectTimer, pingTimer;
+    let ws, reconnectTimer, pingTimer, pongTimer;
     let latestPrices = null;
     let priceThrottleTimer = null;
+    let retryCount = 0;
+    const PING_INTERVAL = 15000;
+    const PONG_TIMEOUT = 5000;
+    const MAX_BACKOFF = 30000;
+
+    function refetchAll() {
+      fetchPrices();
+      if (walletAddr) {
+        fetchAccount();
+        fetchPositions();
+        fetchOrders();
+        fetchLeverageSettings();
+      }
+    }
+
+    function scheduleReconnect() {
+      if (cancelled) return;
+      const delay = Math.min(1000 * Math.pow(2, retryCount), MAX_BACKOFF);
+      retryCount++;
+      reconnectTimer = setTimeout(connect, delay);
+    }
 
     function connect() {
+      if (cancelled) return;
       ws = new WebSocket(WS_URL);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        retryCount = 0;
         ws.send(JSON.stringify({ method: 'subscribe', params: { source: 'prices' } }));
         if (walletAddr) {
           ws.send(JSON.stringify({ method: 'subscribe', params: { source: 'account_positions', account: walletAddr } }));
@@ -474,14 +497,31 @@ export function usePacifica() {
           ws.send(JSON.stringify({ method: 'subscribe', params: { source: 'account_info', account: walletAddr } }));
           ws.send(JSON.stringify({ method: 'subscribe', params: { source: 'account_trades', account: walletAddr } }));
         }
+        // Refetch via REST to close any gap from disconnect period
+        refetchAll();
+
         pingTimer = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ method: 'ping' }));
-        }, 30000);
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ method: 'ping' }));
+            // Start pong timeout — if no pong received, force reconnect
+            clearTimeout(pongTimer);
+            pongTimer = setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) ws.close();
+            }, PONG_TIMEOUT);
+          }
+        }, PING_INTERVAL);
       };
 
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+
+          // Pong received — clear timeout
+          if (msg.channel === 'pong' || msg.method === 'pong' || msg.pong) {
+            clearTimeout(pongTimer);
+            return;
+          }
+
           if (msg.channel === 'prices') {
             latestPrices = msg.data;
             if (!priceThrottleTimer) {
@@ -544,7 +584,8 @@ export function usePacifica() {
 
       ws.onclose = () => {
         clearInterval(pingTimer);
-        if (!cancelled) reconnectTimer = setTimeout(connect, 3000);
+        clearTimeout(pongTimer);
+        scheduleReconnect();
       };
       ws.onerror = () => {
         if (!cancelled) ws.close();
@@ -552,6 +593,20 @@ export function usePacifica() {
     }
 
     let cancelled = false;
+
+    // Online/offline listeners — pause reconnect when offline, resume when back
+    function handleOnline() {
+      if (cancelled) return;
+      clearTimeout(reconnectTimer);
+      retryCount = 0;
+      if (!ws || ws.readyState !== WebSocket.OPEN) connect();
+    }
+    function handleOffline() {
+      clearTimeout(reconnectTimer);
+    }
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     connect();
     fetchPrices();
     if (walletAddr) { fetchAccount(); fetchPositions(); fetchOrders(); fetchWalletUsdc(); fetchLeverageSettings(); }
@@ -559,8 +614,11 @@ export function usePacifica() {
     return () => {
       cancelled = true;
       clearInterval(pingTimer);
+      clearTimeout(pongTimer);
       clearTimeout(reconnectTimer);
       clearTimeout(priceThrottleTimer);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       if (ws) { ws.onclose = null; ws.onerror = null; ws.close(); }
     };
   }, [connected, walletAddr]);

@@ -68,6 +68,7 @@ const stmts = {
   `),
   getPlayerByToken: db.prepare(`SELECT * FROM players WHERE token = ?`),
   getPlayerByName: db.prepare(`SELECT * FROM players WHERE name = ?`),
+  getPlayerByWallet: db.prepare(`SELECT * FROM players WHERE wallet = ?`),
   getPlayerById: db.prepare(`SELECT * FROM players WHERE id = ?`),
 
   // Find enemy (closest trophies, not self)

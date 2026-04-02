@@ -20,9 +20,19 @@ function auth(req, res, next) {
 
 // ==================== PLAYERS ====================
 
-// Register a new player
+// Register a new player (or recover existing account by wallet)
 router.post('/players/register', (req, res) => {
   const { name, wallet } = req.body;
+
+  // If wallet provided, check if an account already exists for this wallet
+  if (wallet) {
+    const existing = db.db.prepare('SELECT * FROM players WHERE wallet = ?').get(wallet);
+    if (existing) {
+      const state = db.getFullPlayerState(existing.id);
+      return res.json({ ...state, token: existing.token });
+    }
+  }
+
   if (!name || typeof name !== 'string' || name.trim().length < 2) {
     return res.status(400).json({ error: 'Name must be at least 2 characters' });
   }
@@ -46,6 +56,16 @@ router.post('/players/register', (req, res) => {
 router.get('/players/me', auth, (req, res) => {
   const state = db.getFullPlayerState(req.player.id);
   res.json(state);
+});
+
+// Login by wallet address (recover account after cache clear)
+router.post('/players/login-wallet', (req, res) => {
+  const { wallet } = req.body;
+  if (!wallet) return res.status(400).json({ error: 'wallet required' });
+  const player = db.db.prepare('SELECT * FROM players WHERE wallet = ?').get(wallet);
+  if (!player) return res.status(404).json({ error: 'No account found for this wallet' });
+  const state = db.getFullPlayerState(player.id);
+  res.json({ ...state, token: player.token });
 });
 
 // ==================== RESOURCES ====================

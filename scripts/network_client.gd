@@ -68,6 +68,26 @@ func login() -> Dictionary:
 		auth_ok.emit(response)
 	return response
 
+# ── Login by wallet (recover account after cache clear) ───────
+
+func login_by_wallet(wallet: String) -> Dictionary:
+	var http = HTTPRequest.new()
+	add_child(http)
+	var headers = ["Content-Type: application/json"]
+	var body = JSON.stringify({"wallet": wallet})
+	http.request(SERVER_URL + "/players/login-wallet", headers, HTTPClient.METHOD_POST, body)
+	var result = await http.request_completed
+	http.queue_free()
+	var response = _parse_response(result)
+	if response.has("token"):
+		token = response["token"]
+		player_id = response["id"]
+		display_name = response["name"]
+		trophies = response.get("trophies", 0)
+		_save_token()
+		auth_ok.emit(response)
+	return response
+
 # ── Resources ─────────────────────────────────────────────────
 
 func get_resources() -> Dictionary:
