@@ -2311,7 +2311,7 @@ func _select_building(b: Dictionary) -> void:
 			"hp": hp, "max_hp": max_hp, "max_level": max_level,
 			"upgrade_cost": upgrade_cost,
 			"is_enemy": is_viewing_enemy,
-			"is_barracks": b.id == "barracks",
+			"is_barracks": b.id in ["barracks", "barn"],
 			"is_upgrading": b.get("is_upgrading", false),
 			"has_ship": bs_has_ship
 		})
@@ -2360,8 +2360,8 @@ func _select_building(b: Dictionary) -> void:
 			cam.zoom_blocked = true
 		return
 
-	# Barracks = troop upgrade panel
-	if b.id == "barracks" and barracks_panel:
+	# Barracks / Barn = troop upgrade panel
+	if b.id in ["barracks", "barn"] and barracks_panel:
 		_refresh_barracks_panel()
 		barracks_panel.visible = true
 		if building_panel:
