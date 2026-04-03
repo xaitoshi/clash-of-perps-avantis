@@ -161,6 +161,13 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # HTML entry — never cache so new deploys are picked up immediately
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+    }
+
     # Service worker — never cache (browser must always check for updates)
     location = /sw.js {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
@@ -173,7 +180,7 @@ server {
         try_files $uri =404;
         add_header Cross-Origin-Opener-Policy "same-origin" always;
         add_header Cross-Origin-Embedder-Policy "require-corp" always;
-        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Cache-Control "public, max-age=604800";
         types { application/wasm wasm; application/javascript js; application/octet-stream pck; }
 
         # Serve pre-compressed .gz files (Work.pck.gz, Work.wasm.gz)

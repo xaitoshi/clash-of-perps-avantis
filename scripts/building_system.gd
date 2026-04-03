@@ -4022,7 +4022,6 @@ func _return_home() -> void:
 		bs._destroy_all_buildings()
 
 	# Restore home buildings from server on all grids
-	var net = _net
 	if net and net.has_token():
 		var state = await net.login()
 		if state.has("buildings") and state.buildings is Array:
