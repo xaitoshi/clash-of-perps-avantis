@@ -3,7 +3,6 @@ import { memo } from 'react';
 import goldIcon from '../assets/resources/gold_bar.png';
 import woodIcon from '../assets/resources/wood_bar.png';
 import stoneIcon from '../assets/resources/stone_bar.png';
-import trophyIcon from '../assets/resources/free-icon-cup-with-star-109765.png';
 
 const fmt = (n) => (n || 0).toLocaleString().replace(/,/g, ' ');
 
@@ -32,8 +31,6 @@ function BattleResultOverlay({ result, onClose }) {
           <div style={styles.panel}>
             <div style={styles.panelTitle}>You received</div>
             <div style={styles.resourceRow}>
-               {/* Show trophies if we have them, fallback to 1 for visuals */}
-               <LootItem icon={trophyIcon} value={result.loot.trophies || 1} /> 
                <LootItem icon={goldIcon} value={result.loot.gold} />
                <LootItem icon={woodIcon} value={result.loot.wood} />
                <LootItem icon={stoneIcon} value={result.loot.ore} />

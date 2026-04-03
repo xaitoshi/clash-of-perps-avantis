@@ -313,6 +313,8 @@ var home_buildings_backup: Array[Dictionary] = []
 var home_grid_backup: Array[bool] = []
 var enemy_info: Dictionary = {}
 var _combat_session_id: String = ""
+var _battle_replay: Array = []  # [{t: float, type: String, ...}]
+var _battle_start_time: float = 0.0
 var return_button: Button
 var enemy_label: Label
 var find_button: Button
@@ -516,6 +518,29 @@ func _process(delta: float) -> void:
 		_update_ship_explosion(delta)
 	if _ship_cannonballs.size() > 0:
 		_update_ship_cannonballs(delta)
+
+	# Detect defeat during attack — all troops dead, no more ships
+	if is_viewing_enemy and create_ui and name == "BuildingSystem":
+		var attack_system: Node = get_node_or_null("../AttackSystem")
+		var troops_alive_atk: bool = not BaseTroop._get_troops_cached().is_empty()
+		if troops_alive_atk:
+			_had_troops = true
+			_skeleton_respawn_timer = 0.0
+		elif _had_troops:
+			var all_ships_used: bool = attack_system == null or not attack_system.is_attack_mode or attack_system._ships_placed >= attack_system.max_ships
+			if all_ships_used:
+				_skeleton_respawn_timer += delta
+				if _skeleton_respawn_timer >= 2.0:
+					_had_troops = false
+					_skeleton_respawn_timer = 0.0
+					# Submit defeat replay to server
+					var net_def: Node = _net
+					var def_id: String = enemy_info.get("id", "")
+					if net_def and net_def.has_token() and def_id != "":
+						net_def.submit_battle_result(def_id, _battle_replay, "defeat")
+					var bridge_def: Node = _bridge
+					if bridge_def:
+						bridge_def.send_to_react("battle_result", {"type": "defeat", "reason": "All troops lost"})
 
 	# Respawn dead tombstone skeletons after battle ends (only main BS to avoid double-spawn)
 	if not is_viewing_enemy and create_ui and name == "BuildingSystem":
@@ -2700,6 +2725,9 @@ func remove_building(b: Dictionary) -> void:
 	# Only sync removal of OWN buildings, not enemy's during attack
 	if not is_viewing_enemy:
 		_sync_remove_building(b)
+	else:
+		# Enemy building destroyed — grant cannon energy
+		_on_building_destroyed_energy()
 	var def: Dictionary = building_defs[b.id]
 	var gp: Vector2i = b.grid_pos as Vector2i
 	for x in range(def.cells.x):
@@ -3409,19 +3437,6 @@ func _on_find_pressed() -> void:
 		print("Not logged in")
 		return
 
-	# Ensure combat WebSocket is connected
-	net.combat_ws_connect()
-
-	# Connect combat signals (one-shot per session)
-	if not net.combat_session_created.is_connected(_on_combat_session_created):
-		net.combat_session_created.connect(_on_combat_session_created)
-	if not net.combat_tick.is_connected(_on_combat_tick):
-		net.combat_tick.connect(_on_combat_tick)
-	if not net.combat_victory.is_connected(_on_combat_victory):
-		net.combat_victory.connect(_on_combat_victory)
-	if not net.combat_defeat.is_connected(_on_combat_defeat):
-		net.combat_defeat.connect(_on_combat_defeat)
-
 	# Disable button while searching
 	if find_button:
 		find_button.disabled = true
@@ -3438,107 +3453,19 @@ func _on_find_pressed() -> void:
 		return
 
 	enemy_info = result
-	# Start server combat session
-	var defender_id: String = result.get("id", "")
-	if defender_id != "":
-		net.ws_attack_start(defender_id)
 	_switch_to_enemy_island()
 
 
-func _on_combat_session_created(data: Dictionary) -> void:
-	_combat_session_id = data.get("sessionId", "")
-	_cannon_energy = 10
-	_cannon_next_cost = 1
-	print("[Combat] Session started: ", _combat_session_id)
+## Cannon energy is tracked client-side in replay model.
+## Energy: starts at 10, +2 per building destroyed, shot cost escalates: 1,2,3,4...
+func _on_building_destroyed_energy() -> void:
+	_cannon_energy += 2
+	_update_cannon_energy_ui()
 
-
-func _on_combat_tick(data: Dictionary) -> void:
-	if not is_viewing_enemy:
-		return
-	# Update cannon energy from server
-	_cannon_energy = data.get("cannonEnergy", _cannon_energy)
-	_cannon_next_cost = data.get("cannonNextCost", _cannon_next_cost)
-	# Send energy to React for UI display
+func _update_cannon_energy_ui() -> void:
 	var bridge: Node = _bridge
 	if bridge:
 		bridge.send_to_react("cannon_energy", {"energy": _cannon_energy, "next_cost": _cannon_next_cost})
-	# Update building HP from server authoritative state
-	var server_buildings: Array = data.get("buildings", [])
-	for sb in server_buildings:
-		var sid: String = sb.get("id", "")
-		for bs in _building_systems:
-			for b in bs.placed_buildings:
-				if "b_%d" % b.get("server_id", -1) == sid:
-					b["hp"] = sb.get("hp", b.get("hp", 0))
-					b["max_hp"] = sb.get("maxHp", b.get("max_hp", 0))
-					break
-	# Check buildings destroyed by server
-	var events: Array = data.get("events", [])
-	for evt in events:
-		var evt_type: String = evt.get("type", "")
-		if evt_type == "building_destroyed":
-			var bid: String = evt.get("buildingId", "")
-			for bs in _building_systems:
-				for b in bs.placed_buildings:
-					if "b_%d" % b.get("server_id", -1) == bid:
-						b["hp"] = 0
-						if b.get("id", "") == "town_hall":
-							# Server will send attack_victory separately
-							pass
-						else:
-							bs.remove_building(b)
-						break
-
-
-func _on_combat_victory(data: Dictionary) -> void:
-	if not is_viewing_enemy:
-		return
-	# Server confirmed victory — destroy all buildings visually
-	for bs in _building_systems:
-		var to_destroy: Array = bs.placed_buildings.duplicate()
-		for b in to_destroy:
-			if b.id == "tombstone":
-				bs._remove_tombstone_skeletons(b)
-			if b.has("hp_bar") and is_instance_valid(b.hp_bar):
-				b.hp_bar.queue_free()
-			var icon: Control = b.get("_collect_icon")
-			if is_instance_valid(icon):
-				icon.queue_free()
-			if is_instance_valid(b.node):
-				_spawn_ship_explosion(b.node.global_position)
-				b.node.queue_free()
-		bs.placed_buildings.clear()
-		bs.grid.fill(false)
-	# Set all troops to victory state
-	for troop in get_tree().get_nodes_in_group("troops"):
-		if is_instance_valid(troop) and "state" in troop:
-			troop.state = troop.State.VICTORY
-	# Update resources from server loot and show victory screen
-	var loot: Dictionary = data.get("loot", {})
-	var bridge: Node = _bridge
-	if bridge:
-		bridge.send_to_react("resources_add", {
-			"gold": loot.get("gold", 0),
-			"wood": loot.get("wood", 0),
-			"ore": loot.get("ore", 0),
-		})
-		bridge.send_to_react("battle_result", {
-			"type": "victory",
-			"loot": loot,
-		})
-	# Player returns home by clicking "RETURN HOME" on the battle result overlay
-
-
-func _on_combat_defeat(data: Dictionary) -> void:
-	if not is_viewing_enemy:
-		return
-	var reason: String = data.get("reason", "defeat")
-	var bridge: Node = _bridge
-	if bridge:
-		bridge.send_to_react("battle_result", {
-			"type": "defeat",
-			"reason": reason,
-		})
 
 
 func _get_or_create_cloud() -> Node:
@@ -3565,6 +3492,11 @@ func _hide_all_collect_icons() -> void:
 
 
 func _switch_to_enemy_island() -> void:
+	# Reset battle replay recorder
+	_battle_replay.clear()
+	_battle_start_time = Time.get_ticks_msec() / 1000.0
+	_cannon_energy = 10
+	_cannon_next_cost = 1
 	# Instantly switch ships when button pressed
 	var _r = get_tree().root
 	if not _ship_attack_node or not is_instance_valid(_ship_attack_node):
@@ -3897,11 +3829,15 @@ func _fire_ship_cannon(bdata: Dictionary) -> void:
 	var bnode: Node3D = bdata.get("node", null) as Node3D
 	if not bnode or not is_instance_valid(bnode):
 		return
-	# Send cannon fire to server
-	var net_node: Node = _net
-	if net_node and _combat_session_id != "":
-		var bid: String = "b_%d" % bdata.get("server_id", -1)
-		net_node.ws_cannon_fire(_combat_session_id, bid)
+	# Record cannon fire in battle replay
+	var server_id: int = bdata.get("server_id", -1)
+	if is_viewing_enemy and server_id >= 0:
+		var t: float = Time.get_ticks_msec() / 1000.0 - _battle_start_time
+		_battle_replay.append({"t": t, "type": "cannon_fire", "buildingId": server_id})
+	# Deduct cannon energy
+	_cannon_energy -= _cannon_next_cost
+	_cannon_next_cost += 1
+	_update_cannon_energy_ui()
 	_ship_cannon_cooldown = SHIP_CANNON_RELOAD
 	var ball = MeshInstance3D.new()
 	var sphere = SphereMesh.new()
@@ -3971,26 +3907,55 @@ func _update_ship_cannonballs(delta: float) -> void:
 
 
 func _on_town_hall_destroyed() -> void:
-	# Town hall destroyed locally (from remove_building).
-	# Server-authoritative victory is handled by _on_combat_victory.
-	# This function is now a no-op — the server decides victory.
-	pass
-
-	# Auto-return home after 3 seconds (legacy — now handled by _on_combat_victory)
-	await get_tree().create_timer(3.0).timeout
-	if not is_instance_valid(self):
+	# Victory! Destroy ALL enemy buildings visually
+	for bs in _building_systems:
+		var to_destroy: Array = bs.placed_buildings.duplicate()
+		for b in to_destroy:
+			if b.id == "tombstone":
+				bs._remove_tombstone_skeletons(b)
+			if b.has("hp_bar") and is_instance_valid(b.hp_bar):
+				b.hp_bar.queue_free()
+			var icon: Control = b.get("_collect_icon")
+			if is_instance_valid(icon):
+				icon.queue_free()
+			if is_instance_valid(b.node):
+				_spawn_ship_explosion(b.node.global_position)
+				b.node.queue_free()
+		bs.placed_buildings.clear()
+		bs.grid.fill(false)
+	# Set all troops to victory state
+	for troop in get_tree().get_nodes_in_group("troops"):
+		if is_instance_valid(troop) and "state" in troop:
+			troop.state = troop.State.VICTORY
+	# Submit replay to server for verification + loot transfer
+	var net_node: Node = _net
+	var defender_id: String = enemy_info.get("id", "")
+	if net_node and net_node.has_token() and defender_id != "":
+		var result: Dictionary = await net_node.submit_battle_result(defender_id, _battle_replay, "victory")
+		var loot: Dictionary = result.get("loot", {})
+		var bridge: Node = _bridge
+		if bridge:
+			if loot.get("gold", 0) > 0 or loot.get("wood", 0) > 0 or loot.get("ore", 0) > 0:
+				bridge.send_to_react("resources_add", {
+					"gold": loot.get("gold", 0),
+					"wood": loot.get("wood", 0),
+					"ore": loot.get("ore", 0),
+				})
+			bridge.send_to_react("battle_result", {
+				"type": "victory",
+				"loot": loot,
+			})
 		return
-	_return_home()
+	# Fallback if no server — still show victory
+	var bridge2: Node = _bridge
+	if bridge2:
+		bridge2.send_to_react("battle_result", {"type": "victory", "loot": {}})
 
 
 func _return_home() -> void:
 	if not is_viewing_enemy:
 		return
-	# Notify server to end combat session
-	var net: Node = _net
-	if net and _combat_session_id != "":
-		net.ws_attack_end(_combat_session_id)
-		_combat_session_id = ""
+	_combat_session_id = ""
 	_exit_ship_cannon_mode()
 	# Hide attack ship, show base ship when returning home
 	var _r2 = get_tree().root

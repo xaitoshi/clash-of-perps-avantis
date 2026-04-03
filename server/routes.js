@@ -192,6 +192,48 @@ router.delete('/buildings/:id', auth, (req, res) => {
   res.json(result);
 });
 
+// ==================== BATTLE ====================
+
+// Submit battle replay for verification (Clash of Clans style)
+router.post('/attack/result', auth, (req, res) => {
+  const { defender_id, actions, result: claimedResult } = req.body;
+  if (!defender_id) return res.status(400).json({ error: 'defender_id required' });
+  if (!actions || !Array.isArray(actions)) return res.status(400).json({ error: 'actions replay required' });
+  if (!claimedResult) return res.status(400).json({ error: 'result required (victory/defeat)' });
+
+  // Get defender buildings and attacker troop levels
+  const defenderBuildings = db.getPlayerBuildings(defender_id);
+  if (!defenderBuildings || defenderBuildings.length === 0) {
+    return res.status(400).json({ error: 'Defender has no buildings' });
+  }
+  const troopRows = db.getTroopLevels(req.player.id);
+  const attackerTroopLevels = {};
+  for (const t of troopRows) attackerTroopLevels[t.troop_type] = t.level;
+
+  // Verify replay
+  const { verifyReplay } = require('./combat_session');
+  const verification = verifyReplay({
+    defenderBuildings,
+    attackerTroopLevels,
+    actions,
+    claimedResult,
+  });
+
+  if (!verification.valid) {
+    return res.status(403).json({ error: 'Replay verification failed', reason: verification.reason });
+  }
+
+  // Victory verified — grant loot
+  if (claimedResult === 'victory') {
+    const battleResult = db.battleVictory(req.player.id, defender_id);
+    if (battleResult.error) return res.status(400).json(battleResult);
+    return res.json({ ...battleResult, verification });
+  }
+
+  // Defeat — no loot
+  res.json({ success: true, loot: { gold: 0, wood: 0, ore: 0 }, verification });
+});
+
 // ==================== TROOPS ====================
 
 // Get troop levels
