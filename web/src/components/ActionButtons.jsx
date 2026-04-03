@@ -73,7 +73,6 @@ function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSel
     const h = (e) => {
       const counts = e.detail.troop_counts || {};
       const types = e.detail.deployed_types || {};
-      // Only re-render when values actually changed
       const prev = perfRef.current;
       const changed = ATTACK_TROOPS.some(t =>
         (counts[t.key] ?? 0) !== (prev.troop_counts[t.key] ?? 0) ||
@@ -90,19 +89,19 @@ function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSel
   }, []);
 
   return (
-    <div style={hud.wrap}>
-      {/* Home */}
-      <button style={hud.homeBtn} onClick={onReturnHome} title="Return Home"
-        onMouseOver={e => e.currentTarget.style.filter = 'brightness(1.2)'}
-        onMouseOut={e => e.currentTarget.style.filter = 'none'}
-      >
-        <span style={{ fontSize: 26, lineHeight: 1 }}>🏠</span>
-      </button>
+    <>
+      {/* Return Home - Top Right */}
+      <div style={hud.wrapTopRight}>
+        <button style={hud.homeBtn} onClick={onReturnHome} title="Return Home"
+          onMouseOver={e => e.currentTarget.style.filter = 'brightness(1.2)'}
+          onMouseOut={e => e.currentTarget.style.filter = 'none'}
+        >
+          <span style={{ fontSize: 26, lineHeight: 1 }}>🏳️</span>
+        </button>
+      </div>
 
-      <div style={hud.sep} />
-
-      {/* Troop cards */}
-      <div style={hud.troopRow}>
+      {/* Troops - Bottom Left */}
+      <div style={hud.wrapLeft}>
         {ATTACK_TROOPS.map((t, i) => {
           const deployed = !!perf.deployed_types[t.key];
           const live = perf.troop_counts[t.key] ?? 0;
@@ -110,7 +109,6 @@ function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSel
           const allDead = deployed && live === 0;
           const selected = i === selectedTroopIdx && !cannonMode;
 
-          // available → full color | deployed → greyscale (fighting) | dead → very dim
           const imgFilter = allDead
             ? 'grayscale(1) brightness(0.45)'
             : deployed ? 'grayscale(0.7) brightness(0.75)' : 'none';
@@ -162,29 +160,35 @@ function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSel
         })}
       </div>
 
-      <div style={hud.sep} />
-
-      {/* Cannon + energy */}
-      <div style={hud.cannonWrap}>
-        <button
-          style={{ ...hud.cannonBtn, ...(cannonMode ? hud.cannonActive : {}) }}
-          onClick={onCannon}
-          title="Ship Cannon"
-          onMouseOver={e => !cannonMode && (e.currentTarget.style.filter = 'brightness(1.15)')}
-          onMouseOut={e => !cannonMode && (e.currentTarget.style.filter = 'none')}
-        >
-          <CannonBallIcon size={46} />
-          <span style={hud.cannonLabel}>CANNON</span>
-        </button>
-        {cannonEnergy && (
-          <div style={hud.energyPanel}>
-            <span style={hud.energyIcon}>⚡</span>
-            <span style={hud.energyValue}>{cannonEnergy.energy}</span>
-            <span style={hud.energyCost}>(-{cannonEnergy.nextCost})</span>
-          </div>
-        )}
+      {/* Cannon + Energy - Bottom Right */}
+      <div style={hud.wrapRight}>
+        <div style={hud.cannonGroup}>
+          {cannonEnergy && (
+            <div style={hud.energyPill}>
+              <span style={hud.energyIcon}>⚡</span>
+              <span style={hud.energyValue}>{cannonEnergy.energy}</span>
+            </div>
+          )}
+          <button
+            style={{ ...hud.cannonBtn, ...(cannonMode ? hud.cannonActive : {}) }}
+            onClick={onCannon}
+            title="Ship Cannon"
+            onMouseOver={e => !cannonMode && (e.currentTarget.style.filter = 'brightness(1.15)')}
+            onMouseOut={e => !cannonMode && (e.currentTarget.style.filter = 'none')}
+          >
+            <CannonBallIcon size={46} />
+            
+            {/* Cost Badge on the Button */}
+            {cannonEnergy && (
+              <div style={hud.cannonCostBadge}>
+                {cannonEnergy.nextCost}
+                <span style={hud.cannonCostIcon}>⚡</span>
+              </div>
+            )}
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -240,23 +244,33 @@ export default memo(ActionButtons);
 
 // ── Attack HUD styles ─────────────────────────────────────────────────────
 const hud = {
-  wrap: {
+  wrapLeft: {
     position: 'fixed',
-    bottom: 14,
-    left: '50%',
-    transform: 'translateX(-50%)',
+    bottom: 20,
+    left: 20,
     display: 'flex',
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    background: 'linear-gradient(175deg, rgba(8,28,52,0.96) 0%, rgba(4,18,38,0.98) 100%)',
-    border: '2px solid rgba(40,140,200,0.5)',
-    borderRadius: 22,
-    padding: '10px 14px',
-    boxShadow: '0 12px 48px rgba(0,0,0,0.8), 0 0 0 1px rgba(40,160,220,0.12), inset 0 1px 0 rgba(80,180,255,0.07)',
+    gap: 8,
     pointerEvents: 'all',
     zIndex: 10,
-    userSelect: 'none',
+  },
+  wrapRight: {
+    position: 'fixed',
+    bottom: 20,
+    right: 20,
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+    pointerEvents: 'all',
+    zIndex: 10,
+  },
+  wrapTopRight: {
+    position: 'fixed',
+    top: 20,
+    right: 20,
+    pointerEvents: 'all',
+    zIndex: 10,
   },
   homeBtn: {
     width: 56, height: 56,
@@ -320,6 +334,7 @@ const hud = {
   },
   cannonBtn: {
     width: 82, height: 82,
+    position: 'relative',
     background: 'linear-gradient(180deg, rgba(12,45,80,0.94), rgba(6,24,48,0.97))',
     borderWidth: 2,
     borderStyle: 'solid',
@@ -341,26 +356,50 @@ const hud = {
     WebkitTextStroke: '0.5px #003050',
     textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1,
   },
-  cannonWrap: {
-    display: 'flex', alignItems: 'center', gap: 6,
+  cannonCostBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 4,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 900,
+    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
   },
-  energyPanel: {
-    background: 'rgba(0,20,40,0.85)',
-    border: '2px solid rgba(125,244,255,0.3)',
-    borderRadius: 10,
-    padding: '6px 10px',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-    backdropFilter: 'blur(4px)',
+  cannonCostIcon: {
+    background: '#d64817',
+    borderRadius: '50%',
+    width: 12, height: 12,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 8,
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3)',
+    color: '#fff',
+  },
+  cannonGroup: {
+    display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
+  },
+  energyPill: {
+    background: 'linear-gradient(180deg, #3a3a3a 0%, #1e1e1e 100%)',
+    border: '2px solid #111',
+    borderRadius: 8,
+    padding: '6px 12px',
+    display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8,
+    boxShadow: '0 4px 8px rgba(0,0,0,0.6)',
   },
   energyIcon: {
     fontSize: 16, lineHeight: 1,
+    background: '#d64817',
+    borderRadius: '50%',
+    width: 24, height: 24,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.3)',
+    color: '#fff',
   },
   energyValue: {
-    fontSize: 18, fontWeight: 900, color: '#FFD700',
-    textShadow: '0 1px 4px rgba(0,0,0,0.8)',
-  },
-  energyCost: {
-    fontSize: 10, fontWeight: 700, color: '#E53935',
+    fontSize: 22, fontWeight: 900, color: '#fff',
+    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
   },
 };
 

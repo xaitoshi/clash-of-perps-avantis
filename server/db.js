@@ -441,6 +441,8 @@ function findEnemy(playerId) {
   if (!player) return { error: 'Player not found' };
   const enemy = stmts.findEnemy.get(playerId, player.trophies);
   if (!enemy) return { error: 'No enemies found' };
+  // Repair enemy buildings before attack (buildings auto-rebuild like in CoC)
+  repairAllBuildings(enemy.id);
   const buildings = stmts.getBuildings.all(enemy.id);
   const resources = getResources(enemy.id);
   return {

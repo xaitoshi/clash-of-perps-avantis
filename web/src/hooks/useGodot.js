@@ -68,6 +68,7 @@ export function GodotProvider({ children }) {
           break;
         case 'enemy_mode':
           setEnemyMode(data);
+          if (data.active) { setCannonEnergy({ energy: 10, nextCost: 1 }); setBattleResult(null); }
           if (!data.active) { setSelectedBuilding(null); setCannonMode(false); setSelectedTroopIdx(0); }
           break;
         case 'troop_idx_changed':
