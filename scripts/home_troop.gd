@@ -188,36 +188,40 @@ func _cache_grid_bounds() -> void:
 # ── Animations ────────────────────────────────────────────────
 
 func _setup_animations() -> void:
-	# Same approach as BaseTroop: create a new AnimationPlayer, collect all
-	# animations from the rig files into a single library.
+	# Reuse BaseTroop's animation library cache for efficiency
 	_anim_player = AnimationPlayer.new()
 	_anim_player.name = "HomeTroopAnimPlayer"
 	add_child(_anim_player)
 	_anim_player.root_node = _anim_player.get_path_to(self)
 
-	var lib = AnimationLibrary.new()
-	for file_path in ANIM_FILES:
-		var res = load(file_path)
-		if res == null:
-			continue
-		var container = Node3D.new()
-		add_child(container)
-		var instance = res.instantiate()
-		container.add_child(instance)
-		# Hide imported meshes so they don't render
-		_hide_meshes(container)
-		var src = _find_anim_player(instance)
-		if src:
-			for anim_name in src.get_animation_list():
-				if anim_name == "RESET" or anim_name == "T-Pose":
-					continue
-				var anim = src.get_animation(anim_name)
-				if anim and not lib.has_animation(anim_name):
-					var dup = anim.duplicate()
-					if anim_name.begins_with("Running") or anim_name.begins_with("Walking") or anim_name.begins_with("Idle") or anim_name == "Cheering":
-						dup.loop_mode = Animation.LOOP_LINEAR
-					lib.add_animation(anim_name, dup)
-		container.free()
+	var cache_key: String = ",".join(ANIM_FILES)
+	var lib: AnimationLibrary
+	if BaseTroop._anim_lib_cache.has(cache_key):
+		lib = BaseTroop._anim_lib_cache[cache_key]
+	else:
+		lib = AnimationLibrary.new()
+		for file_path in ANIM_FILES:
+			var res = load(file_path)
+			if res == null:
+				continue
+			var container = Node3D.new()
+			add_child(container)
+			var instance = res.instantiate()
+			container.add_child(instance)
+			_hide_meshes(container)
+			var src = _find_anim_player(instance)
+			if src:
+				for anim_name in src.get_animation_list():
+					if anim_name == "RESET" or anim_name == "T-Pose":
+						continue
+					var anim = src.get_animation(anim_name)
+					if anim and not lib.has_animation(anim_name):
+						var dup = anim.duplicate()
+						if anim_name.begins_with("Running") or anim_name.begins_with("Walking") or anim_name.begins_with("Idle") or anim_name == "Cheering":
+							dup.loop_mode = Animation.LOOP_LINEAR
+						lib.add_animation(anim_name, dup)
+			container.free()
+		BaseTroop._anim_lib_cache[cache_key] = lib
 
 	_anim_player.add_animation_library("", lib)
 	_play_anim("Idle_A")

@@ -2987,7 +2987,7 @@ func _create_port_panel() -> void:
 		return
 	port_panel = PanelContainer.new()
 	port_panel.visible = false
-	port_panel.custom_minimum_size = Vector2(340, 280)
+	port_panel.custom_minimum_size = Vector2(380, 500)
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.08, 0.14, 0.22, 1.0)
 	style.set_corner_radius_all(14)
@@ -2998,10 +2998,10 @@ func _create_port_panel() -> void:
 	port_panel.anchor_right = 0.5
 	port_panel.anchor_top = 0.5
 	port_panel.anchor_bottom = 0.5
-	port_panel.offset_left = -170
-	port_panel.offset_right = 170
-	port_panel.offset_top = -140
-	port_panel.offset_bottom = 140
+	port_panel.offset_left = -190
+	port_panel.offset_right = 190
+	port_panel.offset_top = -250
+	port_panel.offset_bottom = 250
 	canvas.add_child(port_panel)
 
 	var margin = MarginContainer.new()
@@ -3011,9 +3011,14 @@ func _create_port_panel() -> void:
 	margin.add_theme_constant_override("margin_bottom", 14)
 	port_panel.add_child(margin)
 
+	var port_scroll = ScrollContainer.new()
+	port_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	margin.add_child(port_scroll)
+
 	port_vbox = VBoxContainer.new()
 	port_vbox.add_theme_constant_override("separation", 10)
-	margin.add_child(port_vbox)
+	port_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	port_scroll.add_child(port_vbox)
 
 
 func _refresh_port_panel() -> void:
@@ -3077,32 +3082,78 @@ func _refresh_port_panel() -> void:
 	var sep = HSeparator.new()
 	port_vbox.add_child(sep)
 
-	# Ship status
-	port_ship_count_label = Label.new()
-	port_ship_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	port_ship_count_label.add_theme_font_size_override("font_size", 16)
-	port_ship_count_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 	var port_node = b.get("node", null)
 	var has_ship = is_instance_valid(port_node) and port_node.has_meta("has_ship")
-	port_ship_count_label.text = "This port has a ship" if has_ship else "No ship at this port"
-	port_vbox.add_child(port_ship_count_label)
+	var ship_level: int = port_node.get_meta("ship_level", 0) if has_ship and is_instance_valid(port_node) else 0
+	var ship_capacity: int = ship_level  # Lv1=1, Lv2=2, Lv3=3
+	var ship_troops: Array = port_node.get_meta("ship_troops", []) if has_ship and is_instance_valid(port_node) else []
 
-	# Buy ship button
-	var buy_btn = Button.new()
-	buy_btn.custom_minimum_size = Vector2(0, 44)
 	if has_ship:
-		buy_btn.text = "Ship already docked"
-		_style_button(buy_btn, Color(0.3, 0.3, 0.3), Color(0.35, 0.35, 0.35))
-		buy_btn.disabled = true
-	elif resources.get("gold", 0) < SHIP_COST_GOLD:
-		buy_btn.text = "Buy Ship (%d Gold)" % SHIP_COST_GOLD
-		_style_button(buy_btn, Color(0.3, 0.3, 0.3), Color(0.35, 0.35, 0.35))
-		buy_btn.disabled = true
+		# Ship info
+		var ship_name = ["", "Small Ship", "Medium Ship", "Large Ship"][clampi(ship_level, 0, 3)]
+		var info_lbl = Label.new()
+		info_lbl.text = "%s (Lv.%d) — Crew: %d / %d" % [ship_name, ship_level, ship_troops.size(), ship_capacity]
+		info_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		info_lbl.add_theme_color_override("font_color", Color(0.7, 0.9, 1.0))
+		port_vbox.add_child(info_lbl)
+
+		# Show loaded troops
+		if ship_troops.size() > 0:
+			for i in range(ship_troops.size()):
+				var troop_name: String = ship_troops[i]
+				var tlvl = troop_levels.get(troop_name, 1)
+				var slot_lbl = Label.new()
+				slot_lbl.text = "  %d. %s (Lv.%d)" % [i + 1, troop_name, tlvl]
+				slot_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 0.6))
+				slot_lbl.add_theme_font_size_override("font_size", 14)
+				port_vbox.add_child(slot_lbl)
+
+		# Load troop buttons (if ship has space)
+		if ship_troops.size() < ship_capacity:
+			var load_title = Label.new()
+			load_title.text = "Load troop onto ship:"
+			load_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			load_title.add_theme_color_override("font_color", Color(0.8, 0.8, 0.6))
+			load_title.add_theme_font_size_override("font_size", 14)
+			port_vbox.add_child(load_title)
+			for troop_name in ["Knight", "Mage", "Barbarian", "Archer", "Ranger"]:
+				var tlvl = troop_levels.get(troop_name, 0)
+				if tlvl < 1:
+					continue
+				var load_btn = Button.new()
+				load_btn.text = "Load %s (Lv.%d)" % [troop_name, tlvl]
+				load_btn.custom_minimum_size = Vector2(0, 36)
+				_style_button(load_btn, Color(0.2, 0.4, 0.3), Color(0.25, 0.5, 0.35))
+				var tn = troop_name
+				load_btn.pressed.connect(func(): _load_troop_to_ship(tn))
+				port_vbox.add_child(load_btn)
+		else:
+			var full_lbl = Label.new()
+			full_lbl.text = "Ship is full!"
+			full_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			full_lbl.add_theme_color_override("font_color", Color(0.9, 0.6, 0.3))
+			port_vbox.add_child(full_lbl)
 	else:
-		buy_btn.text = "Buy Ship (%d Gold)" % SHIP_COST_GOLD
-		_style_button(buy_btn, Color(0.15, 0.35, 0.55), Color(0.2, 0.45, 0.65))
-	buy_btn.pressed.connect(_buy_ship)
-	port_vbox.add_child(buy_btn)
+		# No ship — buy buttons for each available level
+		var no_ship_lbl = Label.new()
+		no_ship_lbl.text = "No ship docked"
+		no_ship_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		no_ship_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		port_vbox.add_child(no_ship_lbl)
+
+		for slvl in range(1, level + 1):
+			var ship_names = ["", "Small Ship (1 slot)", "Medium Ship (2 slots)", "Large Ship (3 slots)"]
+			var buy_btn = Button.new()
+			buy_btn.text = "Buy %s (%d Gold)" % [ship_names[slvl], SHIP_COST_GOLD]
+			buy_btn.custom_minimum_size = Vector2(0, 44)
+			if resources.get("gold", 0) >= SHIP_COST_GOLD:
+				_style_button(buy_btn, Color(0.15, 0.35, 0.55), Color(0.2, 0.45, 0.65))
+			else:
+				_style_button(buy_btn, Color(0.3, 0.3, 0.3), Color(0.35, 0.35, 0.35))
+				buy_btn.disabled = true
+			var sl = slvl
+			buy_btn.pressed.connect(func(): _buy_ship_level(sl))
+			port_vbox.add_child(buy_btn)
 
 	# Close button
 	var close_btn = Button.new()
@@ -3118,31 +3169,26 @@ func _refresh_port_panel() -> void:
 	port_vbox.add_child(close_btn)
 
 
-func _buy_ship() -> void:
-	if resources["gold"] < SHIP_COST_GOLD:
+func _buy_ship_level(ship_lvl: int) -> void:
+	if resources.get("gold", 0) < SHIP_COST_GOLD:
 		return
-	# Check if this port already has a ship
 	var port_node: Node3D = selected_building.get("node", null)
-	if is_instance_valid(port_node) and port_node.has_meta("has_ship"):
+	if not is_instance_valid(port_node):
 		return
-	var server_id: int = selected_building.get("server_id", -1)
-	var net: Node = _net
-	if net and net.has_token() and server_id > 0:
-		var result: Dictionary = await net.buy_ship(server_id)
-		if result.has("error"):
-			return
-		if result.has("resources"):
-			_apply_resources_from_server(result.resources)
-	else:
-		resources["gold"] -= SHIP_COST_GOLD
-		_update_resource_ui()
+	if port_node.has_meta("has_ship"):
+		return
+	resources["gold"] -= SHIP_COST_GOLD
+	_update_resource_ui()
+	port_node.set_meta("has_ship", true)
+	port_node.set_meta("ship_level", ship_lvl)
+	port_node.set_meta("ship_troops", [])
 	owned_ships += 1
-	_refresh_port_panel()
+	# Override selected_building level to spawn correct ship model
+	var old_level = selected_building.get("level", 1)
+	selected_building["level"] = ship_lvl
 	_spawn_port_ship()
-
-	if typeof(selected_building) == TYPE_DICTIONARY and selected_building.size() > 0:
-		_select_building(selected_building)
-
+	selected_building["level"] = old_level
+	_refresh_port_panel()
 	var bridge: Node = _bridge
 	if bridge:
 		bridge.send_to_react("resources", {
@@ -3150,6 +3196,19 @@ func _buy_ship() -> void:
 			"wood": resources.get("wood", 0),
 			"ore": resources.get("ore", 0),
 		})
+
+
+func _load_troop_to_ship(troop_name: String) -> void:
+	var port_node: Node3D = selected_building.get("node", null)
+	if not is_instance_valid(port_node) or not port_node.has_meta("has_ship"):
+		return
+	var ship_level: int = port_node.get_meta("ship_level", 1)
+	var ship_troops: Array = port_node.get_meta("ship_troops", [])
+	if ship_troops.size() >= ship_level:
+		return  # Ship is full
+	ship_troops.append(troop_name)
+	port_node.set_meta("ship_troops", ship_troops)
+	_refresh_port_panel()
 
 func _animate_main_ship() -> void:
 	# Determine water level
@@ -3388,28 +3447,44 @@ func _refresh_barracks_panel() -> void:
 	var sep2 = HSeparator.new()
 	barracks_vbox.add_child(sep2)
 
+	var total_capacity = _get_total_ship_capacity()
+	var total_troops = _home_troops.size()
+	var slots_free = total_capacity - total_troops
+
 	var buy_title = Label.new()
-	buy_title.text = "Buy Troops (%d Gold each)" % BUY_TROOP_COST
+	buy_title.text = "Buy Troops — %d / %d slots" % [total_troops, total_capacity]
 	buy_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	buy_title.add_theme_color_override("font_color", Color(0.9, 0.75, 0.3))
 	barracks_vbox.add_child(buy_title)
 
-	for troop_name in ["Knight", "Mage", "Barbarian", "Archer", "Ranger"]:
-		var tdef2 = troop_defs[troop_name]
-		var lvl2 = troop_levels[troop_name]
-		if lvl2 < 1:
-			continue  # Can only buy trained troops
-		var buy_btn = Button.new()
-		buy_btn.text = "Buy %s (Lv.%d)" % [troop_name, lvl2]
-		buy_btn.custom_minimum_size = Vector2(0, 44)
-		if resources.get("gold", 0) >= BUY_TROOP_COST:
-			_style_button(buy_btn, Color(0.4, 0.35, 0.15), Color(0.5, 0.45, 0.2))
-		else:
-			_style_button(buy_btn, Color(0.3, 0.3, 0.3), Color(0.35, 0.35, 0.35))
-			buy_btn.disabled = true
-		var tn2 = troop_name
-		buy_btn.pressed.connect(func(): _buy_troop(tn2))
-		barracks_vbox.add_child(buy_btn)
+	if total_capacity <= 0:
+		var no_ship_lbl = Label.new()
+		no_ship_lbl.text = "Buy a ship at Port first!"
+		no_ship_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		no_ship_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		barracks_vbox.add_child(no_ship_lbl)
+	else:
+		for troop_name in ["Knight", "Mage", "Barbarian", "Archer", "Ranger"]:
+			var lvl2 = troop_levels[troop_name]
+			if lvl2 < 1:
+				continue
+			var buy_btn = Button.new()
+			buy_btn.text = "Buy %s — %d Gold (Lv.%d)" % [troop_name, BUY_TROOP_COST, lvl2]
+			buy_btn.custom_minimum_size = Vector2(0, 44)
+			if slots_free > 0 and resources.get("gold", 0) >= BUY_TROOP_COST:
+				_style_button(buy_btn, Color(0.4, 0.35, 0.15), Color(0.5, 0.45, 0.2))
+			else:
+				_style_button(buy_btn, Color(0.3, 0.3, 0.3), Color(0.35, 0.35, 0.35))
+				buy_btn.disabled = true
+			var tn2 = troop_name
+			buy_btn.pressed.connect(func(): _buy_troop(tn2))
+			barracks_vbox.add_child(buy_btn)
+		if slots_free <= 0 and total_capacity > 0:
+			var full_lbl = Label.new()
+			full_lbl.text = "All ship slots full!"
+			full_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			full_lbl.add_theme_color_override("font_color", Color(0.9, 0.5, 0.3))
+			barracks_vbox.add_child(full_lbl)
 
 	# Close button
 	var close_btn = Button.new()
@@ -3503,8 +3578,21 @@ func _upgrade_troop(troop_name: String) -> void:
 	_refresh_troop_levels_from_server()
 
 
+func _get_total_ship_capacity() -> int:
+	var total: int = 0
+	for bs in get_tree().get_nodes_in_group("building_systems"):
+		for b in bs.placed_buildings:
+			if b.get("id") == "port":
+				var pnode = b.get("node", null)
+				if is_instance_valid(pnode) and pnode.has_meta("has_ship"):
+					total += pnode.get_meta("ship_level", 1)
+	return total
+
+
 func _buy_troop(troop_name: String) -> void:
 	if resources.get("gold", 0) < BUY_TROOP_COST:
+		return
+	if _home_troops.size() >= _get_total_ship_capacity():
 		return
 	var tdef = troop_defs.get(troop_name, {})
 	var model_path = tdef.get("model", "")
@@ -3526,9 +3614,21 @@ func _buy_troop(troop_name: String) -> void:
 	troop.init_troop(troop_name, troop_levels.get(troop_name, 1))
 	get_tree().root.add_child(troop)
 	troop.add_to_group("home_troops")
-	var spawn_pos = _get_random_grid_world_pos()
+	# Spawn near the barracks/barn building that was selected
+	var spawn_pos = _get_building_spawn_pos()
 	troop.global_position = spawn_pos
 	_home_troops.append({"node": troop, "name": troop_name})
+
+
+func _get_building_spawn_pos() -> Vector3:
+	var bnode = selected_building.get("node", null)
+	if is_instance_valid(bnode):
+		var angle = randf_range(0, TAU)
+		var offset = Vector3(cos(angle) * 0.2, 0, sin(angle) * 0.2)
+		var pos = bnode.global_position + offset
+		pos.y = grid_y
+		return pos
+	return _get_random_grid_world_pos()
 
 
 func _get_random_grid_world_pos() -> Vector3:
