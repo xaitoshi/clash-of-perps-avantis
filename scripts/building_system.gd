@@ -461,10 +461,6 @@ var troop_defs: Dictionary = {
 	},
 }
 const BUY_TROOP_COST: int = 100
-const HOME_TROOP_SCALE: float = 0.1
-const PATROL_SPEED: float = 0.3
-const PATROL_WAIT_MIN: float = 2.0
-const PATROL_WAIT_MAX: float = 5.0
 
 
 # ── Node Cache ────────────────────────────────────────────────
@@ -3517,22 +3513,22 @@ func _buy_troop(troop_name: String) -> void:
 	resources["gold"] -= BUY_TROOP_COST
 	_update_resource_ui()
 	_refresh_barracks_panel()
-	# Spawn troop on island
 	var model_res = load(model_path)
 	if model_res == null:
 		return
+	var home_script = load("res://scripts/home_troop.gd")
 	var troop = model_res.instantiate()
-	var s = HOME_TROOP_SCALE
+	troop.set_script(home_script)
+	troop.name = "HomeTroop_%d" % (randi() % 99999)
+	var s: float = 0.1
 	troop.scale = Vector3(s, s, s)
+	# Init troop type and level before adding to tree (_ready will use them)
+	troop.init_troop(troop_name, troop_levels.get(troop_name, 1))
 	get_tree().root.add_child(troop)
 	troop.add_to_group("home_troops")
 	var spawn_pos = _get_random_grid_world_pos()
 	troop.global_position = spawn_pos
-	var anim_player = _find_anim_player_recursive(troop)
-	if anim_player and anim_player.has_animation("Idle"):
-		anim_player.play("Idle")
-	_home_troops.append({"node": troop, "anim": anim_player, "name": troop_name})
-	_start_patrol(troop, anim_player)
+	_home_troops.append({"node": troop, "name": troop_name})
 
 
 func _get_random_grid_world_pos() -> Vector3:
@@ -3545,44 +3541,6 @@ func _get_random_grid_world_pos() -> Vector3:
 	return world
 
 
-func _start_patrol(troop: Node3D, anim_player: AnimationPlayer) -> void:
-	if not is_instance_valid(troop):
-		return
-	var wait = randf_range(PATROL_WAIT_MIN, PATROL_WAIT_MAX)
-	var tw = create_tween()
-	tw.tween_interval(wait)
-	tw.tween_callback(func():
-		if not is_instance_valid(troop):
-			return
-		var target = _get_random_grid_world_pos()
-		var dist = troop.global_position.distance_to(target)
-		var duration = dist / PATROL_SPEED
-		var dir = target - troop.global_position
-		dir.y = 0
-		if dir.length_squared() > 0.001:
-			troop.global_transform = troop.global_transform.looking_at(troop.global_position + dir, Vector3.UP)
-		if anim_player and is_instance_valid(anim_player) and anim_player.has_animation("Running_A"):
-			anim_player.play("Running_A")
-		var move_tw = create_tween()
-		move_tw.tween_property(troop, "global_position", target, duration).set_trans(Tween.TRANS_LINEAR)
-		move_tw.tween_callback(func():
-			if not is_instance_valid(troop):
-				return
-			if anim_player and is_instance_valid(anim_player) and anim_player.has_animation("Idle"):
-				anim_player.play("Idle")
-			_start_patrol(troop, anim_player)
-		)
-	)
-
-
-func _find_anim_player_recursive(node: Node) -> AnimationPlayer:
-	if node is AnimationPlayer:
-		return node
-	for child in node.get_children():
-		var result = _find_anim_player_recursive(child)
-		if result:
-			return result
-	return null
 
 
 func _on_attack_pressed() -> void:
@@ -4138,7 +4096,6 @@ func _return_home() -> void:
 	for ht in _home_troops:
 		if is_instance_valid(ht.get("node")):
 			ht.node.visible = true
-			_start_patrol(ht.node, ht.get("anim"))
 	for bs in _building_systems:
 		bs.is_viewing_enemy = false
 	var bridge = _bridge

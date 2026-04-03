@@ -56,6 +56,8 @@ shader_parameter/tile = Vector2(40, 40)
 shader_parameter/height = 0.2
 shader_parameter/wave_size = Vector2(3, 3)
 shader_parameter/wave_speed = 0.8
+shader_parameter/paused = false
+shader_parameter/frozen_time = 0.0
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_lgr22"]
 size = Vector2(40, 40)
