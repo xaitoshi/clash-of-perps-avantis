@@ -3,6 +3,7 @@ import { memo } from 'react';
 import goldIcon from '../assets/resources/gold_bar.png';
 import woodIcon from '../assets/resources/wood_bar.png';
 import stoneIcon from '../assets/resources/stone_bar.png';
+import trophyIcon from '../assets/resources/free-icon-cup-with-star-109765.png';
 
 const fmt = (n) => (n || 0).toLocaleString().replace(/,/g, ' ');
 
@@ -12,158 +13,185 @@ function BattleResultOverlay({ result, onClose }) {
   const isVictory = result.type === 'victory';
 
   return (
-    <div style={S.backdrop}>
-      <div style={{ ...S.panel, borderColor: isVictory ? '#FFD700' : '#B71C1C' }}>
-        {/* Title */}
-        <div style={{ ...S.title, color: isVictory ? '#FFD700' : '#E53935' }}>
-          {isVictory ? 'VICTORY' : 'DEFEAT'}
+    <div style={styles.backdrop}>
+      <div style={styles.content}>
+        
+        {/* Title Group */}
+        <div style={styles.titleGroup}>
+          <div style={styles.glowBackground}></div>
+          <div style={styles.titleText}>
+            {isVictory ? 'VICTORY' : 'DEFEAT'}
+          </div>
+          <div style={styles.subtitleText}>
+            {isVictory ? 'This village is free once again!' : 'All troops were lost!'}
+          </div>
         </div>
 
-        <div style={S.subtitle}>
-          {isVictory ? 'Town Hall Destroyed!' : result.reason === 'timeout' ? 'Time Ran Out!' : 'All Troops Lost!'}
-        </div>
-
-        {/* Loot (only on victory) */}
+        {/* Loot Panel */}
         {isVictory && result.loot && (
-          <div style={S.lootSection}>
-            <div style={S.lootTitle}>Loot Captured (30%)</div>
-            <div style={S.lootRow}>
-              <LootItem icon={goldIcon} value={result.loot.gold} label="Gold" />
-              <LootItem icon={woodIcon} value={result.loot.wood} label="Wood" />
-              <LootItem icon={stoneIcon} value={result.loot.ore} label="Ore" />
+          <div style={styles.panel}>
+            <div style={styles.panelTitle}>You received</div>
+            <div style={styles.resourceRow}>
+               {/* Show trophies if we have them, fallback to 1 for visuals */}
+               <LootItem icon={trophyIcon} value={result.loot.trophies || 1} /> 
+               <LootItem icon={goldIcon} value={result.loot.gold} />
+               <LootItem icon={woodIcon} value={result.loot.wood} />
+               <LootItem icon={stoneIcon} value={result.loot.ore} />
             </div>
           </div>
         )}
 
-        {/* Defeat message */}
+        {/* Defeat Panel */}
         {!isVictory && (
-          <div style={S.defeatMsg}>
-            Better luck next time! Upgrade your troops and try again.
-          </div>
+           <div style={styles.panel}>
+            <div style={styles.panelTitle}>Better luck next time!</div>
+            <div style={styles.subtitleText}>
+              Upgrade your troops and try again.
+            </div>
+           </div>
         )}
 
-        {/* Return button */}
-        <button style={{ ...S.btn, background: isVictory ? 'linear-gradient(180deg, #4CAF50 0%, #2E7D32 100%)' : 'linear-gradient(180deg, #B71C1C 0%, #7F0000 100%)' }} onClick={onClose}>
-          RETURN HOME
-        </button>
+        {/* Return Button */}
+        <div style={styles.btnWrap} onClick={onClose}>
+          <span style={styles.btnText}>Return</span>
+        </div>
       </div>
     </div>
   );
 }
 
-function LootItem({ icon, value, label }) {
+function LootItem({ icon, value }) {
   if (!value) return null;
   return (
-    <div style={S.lootItem}>
-      <img src={icon} alt={label} style={S.lootIcon} />
-      <div style={S.lootValues}>
-        <span style={S.lootAmount}>+{fmt(value)}</span>
-        <span style={S.lootLabel}>{label}</span>
-      </div>
+    <div style={styles.lootItem}>
+      <img src={icon} alt="" style={styles.lootIcon} />
+      <span style={styles.lootValue}>{fmt(value)}</span>
     </div>
   );
 }
 
-const S = {
+const textOutline = '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 3px 6px rgba(0,0,0,0.8)';
+
+const styles = {
   backdrop: {
     position: 'fixed', inset: 0, zIndex: 200,
-    background: 'rgba(0,0,0,0.65)',
+    background: 'rgba(0,0,0,0.5)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     pointerEvents: 'all',
     animation: 'fadeIn 0.3s ease-out',
+    fontFamily: '"Inter", "Segoe UI", sans-serif',
+  },
+  content: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 640,
+    gap: 20,
+    padding: '0 20px',
+  },
+  titleGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    position: 'relative',
+    marginBottom: 8,
+  },
+  glowBackground: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: 300,
+    height: 100,
+    background: 'radial-gradient(ellipse at center, rgba(255,215,0,0.8) 0%, rgba(255,215,0,0) 70%)',
+    opacity: 0.8,
+    zIndex: -1,
+    filter: 'blur(16px)',
+  },
+  titleText: {
+    fontSize: 56,
+    fontWeight: 900,
+    color: '#fff',
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+    fontStyle: 'italic',
+    WebkitTextStroke: '2px #0a0a0a',
+    textShadow: '0 4px 0 #0a0a0a, 0 8px 16px rgba(0,0,0,0.8)',
+    lineHeight: 1,
+    zIndex: 2,
+    textAlign: 'center',
+  },
+  subtitleText: {
+    fontSize: 16,
+    fontWeight: 900,
+    color: '#fff',
+    textShadow: textOutline,
+    marginTop: 8,
+    textAlign: 'center',
   },
   panel: {
-    background: 'linear-gradient(180deg, #2a2015 0%, #1a140d 100%)',
-    border: '4px solid',
-    borderRadius: 24,
-    padding: '32px 40px',
-    textAlign: 'center',
-    minWidth: 320,
-    maxWidth: 420,
-    boxShadow: '0 20px 60px rgba(0,0,0,0.8), inset 0 2px 8px rgba(255,255,255,0.1)',
+    width: '100%',
+    background: '#3c453c', // Dark greenish-grey
+    borderRadius: 12,
+    padding: '16px 20px 24px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 20,
+    boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.1), inset 0 -4px 0 rgba(0,0,0,0.3), 0 10px 20px rgba(0,0,0,0.5)',
   },
-  title: {
-    fontSize: 48,
-    fontWeight: 900,
-    letterSpacing: 4,
-    textShadow: '0 4px 12px rgba(0,0,0,0.8)',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-  },
-  subtitle: {
+  panelTitle: {
     fontSize: 16,
-    fontWeight: 700,
-    color: '#a3906a',
-    marginTop: 4,
-    marginBottom: 20,
+    fontWeight: 900,
+    color: '#fff',
+    textShadow: textOutline,
   },
-  lootSection: {
-    background: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    padding: '16px 20px',
-    marginBottom: 20,
-    border: '2px solid rgba(255,215,0,0.2)',
-  },
-  lootTitle: {
-    fontSize: 12,
-    fontWeight: 800,
-    color: '#a3906a',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-  lootRow: {
+  resourceRow: {
     display: 'flex',
     justifyContent: 'center',
-    gap: 20,
+    gap: 36,
   },
   lootItem: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 6,
+    gap: 10,
   },
   lootIcon: {
-    width: 40,
-    height: 40,
+    width: 52,
+    height: 52,
     objectFit: 'contain',
-    filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.5))',
+    filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))',
+    transform: 'translateY(0)',
+    transition: 'transform 0.2s',
   },
-  lootValues: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-  },
-  lootAmount: {
-    fontSize: 20,
+  lootValue: {
+    fontSize: 16,
     fontWeight: 900,
-    color: '#4CAF50',
-    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
+    color: '#fff',
+    textShadow: textOutline,
   },
-  lootLabel: {
-    fontSize: 10,
-    fontWeight: 700,
-    color: '#a3906a',
-    textTransform: 'uppercase',
+  btnWrap: {
+    background: 'linear-gradient(180deg, #74c4ff 0%, #3ba4f4 100%)',
+    borderRadius: 6,
+    padding: '12px 48px',
+    cursor: 'pointer',
+    marginTop: 12,
+    boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.4), inset 0 -4px 0 #1e70b3, 0 8px 16px rgba(0,0,0,0.3)',
+    border: '2px solid #0a0a0a',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  defeatMsg: {
-    fontSize: 14,
-    color: '#a3906a',
-    marginBottom: 20,
-    lineHeight: 1.5,
-  },
-  btn: {
-    padding: '14px 36px',
-    border: '3px solid rgba(255,255,255,0.2)',
-    borderRadius: 14,
+  btnText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 900,
-    cursor: 'pointer',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    boxShadow: '0 6px 16px rgba(0,0,0,0.4)',
-    transition: 'transform 0.1s',
-  },
+    textShadow: textOutline,
+    letterSpacing: '0.5px',
+    transform: 'translateY(-1px)',
+  }
 };
 
 export default memo(BattleResultOverlay);

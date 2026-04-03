@@ -337,6 +337,8 @@ const SHIP_EXPLOSION_DURATION: float = 0.9
 const SHIP_EXPLOSION_FRAME_COUNT: int = 86
 const SHIP_EXPLOSION_FRAME_DIR: String = "res://Model/Ship/FootageCrate-Particle_Explosion_Small/FootageCrate-Particle_Explosion_Small-%05d.png"
 var _ship_cannon_cooldown: float = 0.0
+var _cannon_energy: int = 10
+var _cannon_next_cost: int = 1
 var _attack_ship_wave_tweens: Array = []
 var _ship_flash: MeshInstance3D = null
 var _ship_flash_timer: float = 0.0
@@ -2235,9 +2237,17 @@ func _cancel_placement() -> void:
 
 func _destroy_all_buildings() -> void:
 	for b in placed_buildings:
+		# Free skeleton guards attached to tombstones
+		if b.get("id", "") == "tombstone":
+			_remove_tombstone_skeletons(b)
+		# Free tower archer units
+		if b.has("tower_unit_node") and is_instance_valid(b.get("tower_unit_node")):
+			b.tower_unit_node.queue_free()
 		var icon: Control = b.get("_collect_icon")
 		if is_instance_valid(icon):
 			icon.queue_free()
+		if b.has("hp_bar") and is_instance_valid(b.get("hp_bar")):
+			b.hp_bar.queue_free()
 		if b.node and is_instance_valid(b.node):
 			b.node.queue_free()
 	placed_buildings.clear()
@@ -3437,12 +3447,21 @@ func _on_find_pressed() -> void:
 
 func _on_combat_session_created(data: Dictionary) -> void:
 	_combat_session_id = data.get("sessionId", "")
+	_cannon_energy = 10
+	_cannon_next_cost = 1
 	print("[Combat] Session started: ", _combat_session_id)
 
 
 func _on_combat_tick(data: Dictionary) -> void:
 	if not is_viewing_enemy:
 		return
+	# Update cannon energy from server
+	_cannon_energy = data.get("cannonEnergy", _cannon_energy)
+	_cannon_next_cost = data.get("cannonNextCost", _cannon_next_cost)
+	# Send energy to React for UI display
+	var bridge: Node = _bridge
+	if bridge:
+		bridge.send_to_react("cannon_energy", {"energy": _cannon_energy, "next_cost": _cannon_next_cost})
 	# Update building HP from server authoritative state
 	var server_buildings: Array = data.get("buildings", [])
 	for sb in server_buildings:
@@ -3867,14 +3886,22 @@ func _exit_ship_cannon_mode() -> void:
 func _fire_ship_cannon(bdata: Dictionary) -> void:
 	if _ship_cannon_cooldown > 0:
 		return
+	# Check cannon energy
+	if _cannon_energy < _cannon_next_cost:
+		return
 	if not _ship_attack_node or not is_instance_valid(_ship_attack_node):
 		_ship_attack_node = get_tree().root.find_child("MainShipAttack", true, false)
 	if not _ship_attack_node:
 		return
-	var ship = _ship_attack_node
-	var bnode = bdata.get("node", null) as Node3D
+	var ship: Node3D = _ship_attack_node
+	var bnode: Node3D = bdata.get("node", null) as Node3D
 	if not bnode or not is_instance_valid(bnode):
 		return
+	# Send cannon fire to server
+	var net_node: Node = _net
+	if net_node and _combat_session_id != "":
+		var bid: String = "b_%d" % bdata.get("server_id", -1)
+		net_node.ws_cannon_fire(_combat_session_id, bid)
 	_ship_cannon_cooldown = SHIP_CANNON_RELOAD
 	var ball = MeshInstance3D.new()
 	var sphere = SphereMesh.new()
@@ -4021,15 +4048,11 @@ func _return_home() -> void:
 	for bs in _building_systems:
 		bs._destroy_all_buildings()
 
-	# Restore home buildings from server on all grids
+	# Restore home buildings from server — login() emits auth_ok which triggers
+	# _on_server_auth_ok → _load_buildings_from_server on each BS automatically.
+	# So we only call login() and let the signal do the work.
 	if net and net.has_token():
-		var state = await net.login()
-		if state.has("buildings") and state.buildings is Array:
-			for bs in _building_systems:
-				bs._load_buildings_from_server(state.buildings)
-		_apply_resources_from_server(state)
-		if state.has("trophies"):
-			net.trophies = state.trophies
+		await net.login()
 		_update_player_name_label()
 
 	# Restore home UI

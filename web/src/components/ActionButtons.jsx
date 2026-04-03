@@ -65,7 +65,7 @@ const CannonBallIcon = ({ size = 48 }) => (
 );
 
 // ── Attack HUD (shown during enemy mode) ──────────────────────────────────
-function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSelectTroop }) {
+function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSelectTroop, cannonEnergy }) {
   const [perf, setPerf] = useState({ troop_counts: {}, deployed_types: {} });
   const perfRef = useRef(perf);
 
@@ -164,17 +164,26 @@ function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSel
 
       <div style={hud.sep} />
 
-      {/* Cannon */}
-      <button
-        style={{ ...hud.cannonBtn, ...(cannonMode ? hud.cannonActive : {}) }}
-        onClick={onCannon}
-        title="Ship Cannon"
-        onMouseOver={e => !cannonMode && (e.currentTarget.style.filter = 'brightness(1.15)')}
-        onMouseOut={e => !cannonMode && (e.currentTarget.style.filter = 'none')}
-      >
-        <CannonBallIcon size={46} />
-        <span style={hud.cannonLabel}>CANNON</span>
-      </button>
+      {/* Cannon + energy */}
+      <div style={hud.cannonWrap}>
+        <button
+          style={{ ...hud.cannonBtn, ...(cannonMode ? hud.cannonActive : {}) }}
+          onClick={onCannon}
+          title="Ship Cannon"
+          onMouseOver={e => !cannonMode && (e.currentTarget.style.filter = 'brightness(1.15)')}
+          onMouseOut={e => !cannonMode && (e.currentTarget.style.filter = 'none')}
+        >
+          <CannonBallIcon size={46} />
+          <span style={hud.cannonLabel}>CANNON</span>
+        </button>
+        {cannonEnergy && (
+          <div style={hud.energyPanel}>
+            <span style={hud.energyIcon}>⚡</span>
+            <span style={hud.energyValue}>{cannonEnergy.energy}</span>
+            <span style={hud.energyCost}>(-{cannonEnergy.nextCost})</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -182,7 +191,7 @@ function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSel
 // ── Main component ────────────────────────────────────────────────────────
 function ActionButtons() {
   const { sendToGodot, setFuturesOpen } = useSend();
-  const { enemyMode, cannonMode, selectedTroopIdx } = useUI();
+  const { enemyMode, cannonMode, selectedTroopIdx, cannonEnergy } = useUI();
 
   const handleReturnHome  = useCallback(() => sendToGodot('return_home'),     [sendToGodot]);
   const handleFindEnemy   = useCallback(() => sendToGodot('find_enemy'),       [sendToGodot]);
@@ -199,6 +208,7 @@ function ActionButtons() {
         cannonMode={cannonMode}
         selectedTroopIdx={selectedTroopIdx ?? 0}
         onSelectTroop={handleSelectTroop}
+        cannonEnergy={cannonEnergy}
       />
     );
   }
@@ -330,6 +340,27 @@ const hud = {
     color: '#7df4ff', fontSize: 10, fontWeight: 900,
     WebkitTextStroke: '0.5px #003050',
     textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1,
+  },
+  cannonWrap: {
+    display: 'flex', alignItems: 'center', gap: 6,
+  },
+  energyPanel: {
+    background: 'rgba(0,20,40,0.85)',
+    border: '2px solid rgba(125,244,255,0.3)',
+    borderRadius: 10,
+    padding: '6px 10px',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+    backdropFilter: 'blur(4px)',
+  },
+  energyIcon: {
+    fontSize: 16, lineHeight: 1,
+  },
+  energyValue: {
+    fontSize: 18, fontWeight: 900, color: '#FFD700',
+    textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+  },
+  energyCost: {
+    fontSize: 10, fontWeight: 700, color: '#E53935',
   },
 };
 

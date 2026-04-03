@@ -3,6 +3,7 @@ const {
   TROOP_STATS, DEFENSE_STATS, SKELETON_GUARD,
   MAX_SHIPS, TROOPS_PER_SHIP, SAIL_DELAY_SEC,
   TICK_RATE_SEC, MAX_TICKS, LOOT_PERCENT, VALID_TROOP_TYPES,
+  CANNON_INITIAL_ENERGY, CANNON_ENERGY_PER_DESTROY, CANNON_DAMAGE, cannonShotCost,
 } = require('./combat_defs');
 
 // ---------- Helpers ----------
@@ -60,6 +61,10 @@ class CombatSession {
     this.guards = [];
     this.defenses = [];
     this.townHallId = null;
+
+    // Cannon energy
+    this.cannonEnergy = CANNON_INITIAL_ENERGY;
+    this.cannonShotsFired = 0;
 
     this._initBuildings(defenderBuildings);
   }
@@ -329,7 +334,9 @@ class CombatSession {
     for (const b of this.buildings) {
       if (b.hp <= 0 && !b._dead) {
         b._dead = true;
+        this.cannonEnergy += CANNON_ENERGY_PER_DESTROY;
         this.events.push({ type: 'building_destroyed', buildingId: b.id, buildingType: b.type });
+        this.events.push({ type: 'cannon_energy_update', energy: this.cannonEnergy });
       }
     }
     // Troops
@@ -373,6 +380,45 @@ class CombatSession {
     }
   }
 
+  // --- Cannon ---
+
+  fireCannon(buildingId) {
+    if (this.status !== 'active') return { error: 'Session not active' };
+    const nextShotCost = cannonShotCost(this.cannonShotsFired + 1);
+    if (this.cannonEnergy < nextShotCost) {
+      return { error: 'Not enough energy', energy: this.cannonEnergy, cost: nextShotCost };
+    }
+    const target = this.buildings.find(b => b.id === buildingId && b.hp > 0);
+    if (!target) return { error: 'Building not found or already destroyed' };
+
+    this.cannonEnergy -= nextShotCost;
+    this.cannonShotsFired++;
+    target.hp -= CANNON_DAMAGE;
+
+    this.events.push({ type: 'cannon_hit', buildingId: target.id, damage: CANNON_DAMAGE, targetHp: Math.max(0, target.hp) });
+    this.events.push({ type: 'cannon_energy_update', energy: this.cannonEnergy, nextCost: cannonShotCost(this.cannonShotsFired + 1) });
+
+    // Check if this killed the building
+    if (target.hp <= 0 && !target._dead) {
+      target._dead = true;
+      this.cannonEnergy += CANNON_ENERGY_PER_DESTROY;
+      this.events.push({ type: 'building_destroyed', buildingId: target.id, buildingType: target.type });
+    }
+
+    // Check victory
+    if (this.townHallId && target.id === this.townHallId && target.hp <= 0) {
+      this.status = 'victory';
+    }
+
+    return {
+      ok: true,
+      energy: this.cannonEnergy,
+      nextCost: cannonShotCost(this.cannonShotsFired + 1),
+      damage: CANNON_DAMAGE,
+      buildingHp: Math.max(0, target.hp),
+    };
+  }
+
   // --- State Serialization ---
 
   getState() {
@@ -384,6 +430,8 @@ class CombatSession {
       timeRemaining: Math.max(0, MAX_TICKS - this.tick) * TICK_RATE_SEC,
       shipsPlaced: this.shipsPlaced,
       maxShips: MAX_SHIPS,
+      cannonEnergy: this.cannonEnergy,
+      cannonNextCost: cannonShotCost(this.cannonShotsFired + 1),
       troops: this.troops.filter(t => t.hp > 0).map(t => ({
         id: t.id, type: t.type, level: t.level,
         hp: t.hp, maxHp: t.maxHp,

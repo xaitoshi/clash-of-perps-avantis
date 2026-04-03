@@ -64,6 +64,13 @@ const TICK_RATE_SEC = TICK_RATE_MS / 1000;
 const MAX_TICKS = Math.ceil(TIME_LIMIT_SEC / TICK_RATE_SEC); // 360
 const LOOT_PERCENT = 0.30;      // winner takes 30% of loser's resources
 
+// Cannon energy system
+const CANNON_INITIAL_ENERGY = 10;
+const CANNON_ENERGY_PER_DESTROY = 2;  // +2 energy per building destroyed
+const CANNON_DAMAGE = 500;
+// Shot cost: 1st=1, 2nd=2, 3rd=3, ... (escalating)
+function cannonShotCost(shotNumber) { return shotNumber; }
+
 // Valid troop types (order matches attack_system.gd SHIP_TROOPS)
 const VALID_TROOP_TYPES = ['knight', 'mage', 'barbarian', 'archer', 'ranger'];
 
@@ -81,4 +88,8 @@ module.exports = {
   MAX_TICKS,
   LOOT_PERCENT,
   VALID_TROOP_TYPES,
+  CANNON_INITIAL_ENERGY,
+  CANNON_ENERGY_PER_DESTROY,
+  CANNON_DAMAGE,
+  cannonShotCost,
 };

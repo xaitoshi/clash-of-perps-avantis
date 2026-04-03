@@ -159,6 +159,8 @@ signal combat_ship_placed(data: Dictionary)
 signal combat_ship_rejected(reason: String)
 signal combat_victory(data: Dictionary)
 signal combat_defeat(data: Dictionary)
+signal cannon_fired(data: Dictionary)
+signal cannon_rejected(data: Dictionary)
 
 var _combat_ws: WebSocketPeer = null
 var _combat_ws_connected: bool = false
@@ -214,6 +216,10 @@ func _on_combat_ws_message(raw: String) -> void:
 			combat_victory.emit(msg)
 		"attack_defeat":
 			combat_defeat.emit(msg)
+		"cannon_fired":
+			cannon_fired.emit(msg)
+		"cannon_rejected":
+			cannon_rejected.emit(msg)
 
 func ws_attack_start(defender_id: String) -> void:
 	if not _combat_ws or not _combat_ws_connected:
@@ -238,6 +244,10 @@ func ws_place_ship(session_id: String, x: float, z: float, troop_type: String) -
 func ws_attack_end(session_id: String) -> void:
 	if _combat_ws and _combat_ws_connected:
 		_combat_ws.send_text(JSON.stringify({"type": "attack_end", "session_id": session_id}))
+
+func ws_cannon_fire(session_id: String, building_id: String) -> void:
+	if _combat_ws and _combat_ws_connected:
+		_combat_ws.send_text(JSON.stringify({"type": "cannon_fire", "session_id": session_id, "building_id": building_id}))
 
 func remove_building(building_id: int) -> Dictionary:
 	var http = HTTPRequest.new()

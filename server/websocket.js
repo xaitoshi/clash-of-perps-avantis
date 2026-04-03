@@ -166,6 +166,24 @@ function handleMessage(ws, playerId, msg) {
       }
       break;
     }
+    case 'cannon_fire': {
+      const session = combatManager._getPlayerSession(playerId, msg.session_id);
+      if (!session) {
+        ws.send(JSON.stringify({ type: 'cannon_rejected', reason: 'Invalid session' }));
+        break;
+      }
+      const res = session.fireCannon(msg.building_id);
+      if (res.error) {
+        ws.send(JSON.stringify({ type: 'cannon_rejected', reason: res.error, energy: res.energy, cost: res.cost }));
+      } else {
+        ws.send(JSON.stringify({ type: 'cannon_fired', ...res }));
+        // If victory triggered by cannon, finalize
+        if (session.status === 'victory') {
+          combatManager._finalizeSession(session);
+        }
+      }
+      break;
+    }
     case 'attack_end':
       combatManager.endSession(playerId, 'abandoned');
       break;
