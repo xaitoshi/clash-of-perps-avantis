@@ -3702,9 +3702,9 @@ func _sail_ships_away() -> void:
 		for ship in sailing_ships:
 			if not is_instance_valid(ship):
 				continue
-			# Forward direction based on current rotation
-			var rot_y = ship.rotation.y
-			var forward = Vector3(sin(rot_y), 0, cos(rot_y))
+			# Use +X axis as forward for all ships
+			var forward: Vector3 = ship.global_transform.basis.x.normalized()
+			forward.y = 0
 			var target_pos = ship.global_position + forward * 4.0
 			target_pos.y = ship.global_position.y
 			sail_tween.tween_property(ship, "global_position", target_pos, 2.0).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
