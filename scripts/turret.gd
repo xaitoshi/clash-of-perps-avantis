@@ -58,10 +58,17 @@ var _pool_built: int = 0       # how many pool entries created so far
 func _ready() -> void:
 	set_process(true)
 	_apply_stats()
+	# Find actual turret model (has "RootNode"), skip base outline
 	for child in get_children():
 		if child is Node3D and not (child is AnimationPlayer):
-			_model = child
-			break
+			if _find_node_by_name(child, "RootNode"):
+				_model = child
+				break
+	if not _model:
+		for child in get_children():
+			if child is Node3D and not (child is AnimationPlayer):
+				_model = child
+				break
 	if _model:
 		_aim_node = _find_node_by_name(_model, "RootNode")
 		_stand    = _find_node_by_name(_model, "Stand")
@@ -188,12 +195,20 @@ func set_level(lvl: int) -> void:
 
 func _process(delta: float) -> void:
 	delta = minf(delta, 0.1)
-	# Lazy init barrel
-	if not _barrel:
+	# Lazy init model/barrel (runs once)
+	if not _model:
+		# Find the actual turret model (has "RootNode" child), skip base outline
 		for child in get_children():
 			if child is Node3D and not (child is AnimationPlayer):
-				_model = child
-				break
+				if _find_node_by_name(child, "RootNode"):
+					_model = child
+					break
+		# Fallback: first Node3D child
+		if not _model:
+			for child in get_children():
+				if child is Node3D and not (child is AnimationPlayer):
+					_model = child
+					break
 		if _model:
 			_aim_node = _find_node_by_name(_model, "RootNode")
 			_stand    = _find_node_by_name(_model, "Stand")
@@ -206,6 +221,12 @@ func _process(delta: float) -> void:
 				idle_anim.loop_mode = Animation.LOOP_LINEAR
 				_anim_player.play("idle")
 		return
+
+	# Ensure pool is built
+	if not _pool_ready:
+		_build_pool_full()
+		if not _pool_ready:
+			return
 
 	# Skip everything if no enemies exist (saves CPU in idle)
 	var troops_exist: bool = BaseTroop._get_troops_cached().size() > 0
@@ -225,11 +246,11 @@ func _process(delta: float) -> void:
 		_find_target()
 
 	if _target and is_instance_valid(_target):
-		if _aim_node:
-			var diff: Vector3 = _target.global_position - global_position
-			diff.y = 0
-			var d_sq: float = diff.length_squared()
-			if d_sq > 0.0001:
+		var diff: Vector3 = _target.global_position - global_position
+		diff.y = 0
+		var d_sq: float = diff.length_squared()
+		if d_sq > 0.0001:
+			if _aim_node:
 				var parent_basis_inv: Basis = _aim_node.get_parent().global_transform.basis.inverse()
 				var local_dir: Vector3 = parent_basis_inv * (diff / sqrt(d_sq))
 				var y_angle: float = atan2(local_dir.x, local_dir.z)
