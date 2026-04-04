@@ -89,12 +89,12 @@ function handleMessage(ws, playerId, msg) {
       break;
 
     case 'add_resources':
-      result = db.addResources(playerId, msg.gold || 0, msg.wood || 0, msg.ore || 0);
+      result = db.addResources(playerId, Number(msg.gold) || 0, Number(msg.wood) || 0, Number(msg.ore) || 0);
       ws.send(JSON.stringify({ type: 'resources', data: result }));
       break;
 
     case 'subtract_resources':
-      result = db.subtractResources(playerId, msg.gold || 0, msg.wood || 0, msg.ore || 0);
+      result = db.subtractResources(playerId, Number(msg.gold) || 0, Number(msg.wood) || 0, Number(msg.ore) || 0);
       ws.send(JSON.stringify({ type: 'resources', data: result }));
       break;
 
@@ -137,9 +137,6 @@ function handleMessage(ws, playerId, msg) {
       result = db.recalculateTrophies(playerId);
       ws.send(JSON.stringify({ type: 'trophies', data: result }));
       break;
-
-    // Combat is now replay-based (POST /attack/result).
-    // No real-time combat messages needed over WebSocket.
 
     default:
       ws.send(JSON.stringify({ error: `Unknown message type: ${msg.type}` }));

@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { usePlayer } from '../hooks/useGodot';
+import { usePlayer, useBuilding } from '../hooks/useGodot';
 import { colors } from '../styles/theme';
 import trophyIcon from '../assets/resources/free-icon-cup-with-star-109765.png';
 
@@ -7,9 +7,10 @@ const formatNumber = (n) => (n || 0).toLocaleString().replace(/,/g, ' ');
 
 function PlayerInfo({ onOpenProfile }) {
   const playerState = usePlayer();
+  const { buildingDefs } = useBuilding();
   if (!playerState) return null;
 
-  const townHallLevel = playerState.buildings?.town_hall?.level || 1;
+  const townHallLevel = buildingDefs?.th_level || 1;
 
   return (
     <div style={styles.wrap} onClick={onOpenProfile}>

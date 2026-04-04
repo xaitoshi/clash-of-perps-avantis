@@ -9,12 +9,7 @@ const WS_URL = 'wss://ws.pacifica.fi/ws';
 const BUILDER_CODE = 'clashofperps';
 const GAME_API = import.meta.env.VITE_GAME_API || '/api';
 
-// ---------- Gold Reward Rates ----------
-const GOLD_PER_USD_VOLUME = 5;        // 5 gold per $1 traded
-const GOLD_FIRST_DEPOSIT = 500;       // one-time bonus
-const GOLD_FIRST_TRADE = 300;         // one-time bonus
-const GOLD_DAILY_TRADE = 200;         // once per day
-const GOLD_PROFIT_RATE = 0.10;        // 10% of PnL in gold (1 gold per $0.10 profit)
+// Gold rewards are calculated server-side via POST /trading/claim-gold
 
 // Round down to lot size (avoids floating point errors)
 function roundToLot(amount, lotSize) {
@@ -79,11 +74,6 @@ export function usePacifica() {
   const wsRef = useRef(null);
   const marketsRef = useRef([]);
   const withdrawTimerRef = useRef(null);
-  const rewardsRef = useRef({
-    firstDeposit: false,
-    firstTrade: false,
-    lastDailyDate: null,
-  });
 
   const clearError = useCallback(() => setError(null), []);
   const clearGoldEarned = useCallback(() => setGoldEarned(null), []);
@@ -182,6 +172,18 @@ export function usePacifica() {
     });
     return res.json();
   }, [publicKey, signMessage]);
+
+  // Auto-activate: retry on 403 — wraps signedRequest with activation fallback
+  const activatedRef = useRef(false);
+  const signedRequestWithActivation = useCallback(async (method, endpoint, type, payload) => {
+    const res = await signedRequest(method, endpoint, type, payload);
+    if (res.code === 403 && !activatedRef.current) {
+      activatedRef.current = true;
+      await activate();
+      return signedRequest(method, endpoint, type, payload);
+    }
+    return res;
+  }, [signedRequest, activate]);
 
   // ---------- Market Data (public) ----------
   const fetchMarkets = useCallback(async () => {
@@ -301,12 +303,8 @@ export function usePacifica() {
       fetchAccount();
       fetchWalletUsdc();
 
-      // Gold reward: first deposit
-      if (!rewardsRef.current.firstDeposit) {
-        rewardsRef.current.firstDeposit = true;
-        saveRewards();
-        grantGold(GOLD_FIRST_DEPOSIT, 'First deposit bonus!');
-      }
+      // First deposit gold is handled server-side via POST /trading/claim-gold
+      claimGold();
 
       return { success: true, signature: sig };
     } catch (e) {
@@ -341,7 +339,7 @@ export function usePacifica() {
     } finally {
       setLoading(false);
     }
-  }, [publicKey, signedRequest, fetchPositions, fetchOrders, fetchAccount]);
+  }, [publicKey, signedRequestWithActivation, fetchPositions, fetchOrders, fetchAccount]);
 
   const placeLimitOrder = useCallback(async (symbol, side, price, amount, tif) => {
     if (!publicKey) return;
@@ -365,7 +363,7 @@ export function usePacifica() {
     } finally {
       setLoading(false);
     }
-  }, [publicKey, signedRequest, fetchOrders, fetchAccount]);
+  }, [publicKey, signedRequestWithActivation, fetchOrders, fetchAccount]);
 
   const closePosition = useCallback(async (symbol, side, amount) => {
     if (!publicKey) return;
@@ -389,7 +387,7 @@ export function usePacifica() {
     } finally {
       setLoading(false);
     }
-  }, [publicKey, signedRequest, fetchPositions, fetchAccount]);
+  }, [publicKey, signedRequestWithActivation, fetchPositions, fetchAccount]);
 
   const cancelOrder = useCallback(async (symbol, orderId) => {
     if (!publicKey) return;
@@ -399,7 +397,7 @@ export function usePacifica() {
       fetchOrders();
       return res;
     } catch (e) { setError(e.message); }
-  }, [publicKey, signedRequest, fetchOrders]);
+  }, [publicKey, signedRequestWithActivation, fetchOrders]);
 
   const setTpsl = useCallback(async (symbol, side, takeProfit, stopLoss) => {
     if (!publicKey) return;
@@ -426,7 +424,7 @@ export function usePacifica() {
       fetchLeverageSettings();
       return res;
     } catch (e) { setError(e.message); }
-  }, [publicKey, signedRequest, fetchLeverageSettings]);
+  }, [publicKey, signedRequestWithActivation, fetchLeverageSettings]);
 
   const setMarginMode = useCallback(async (symbol, isIsolated) => {
     if (!publicKey) return;
@@ -441,7 +439,7 @@ export function usePacifica() {
       fetchLeverageSettings();
       return res;
     } catch (e) { setError(e.message); }
-  }, [publicKey, signedRequest, fetchLeverageSettings]);
+  }, [publicKey, signedRequestWithActivation, fetchLeverageSettings]);
 
   const withdraw = useCallback(async (amount) => {
     if (!publicKey) return;
@@ -460,7 +458,7 @@ export function usePacifica() {
     } finally {
       setLoading(false);
     }
-  }, [publicKey, signedRequest, fetchAccount]);
+  }, [publicKey, signedRequestWithActivation, fetchAccount]);
 
   // ---------- WebSocket ----------
   useEffect(() => {
@@ -649,19 +647,6 @@ export function usePacifica() {
 
   // Fetch markets once
   useEffect(() => { fetchMarkets(); }, [fetchMarkets]);
-
-  // Auto-activate: retry on 403 — wraps signedRequest with activation fallback
-  const activatedRef = useRef(false);
-  const signedRequestWithActivation = useCallback(async (method, endpoint, type, payload) => {
-    const res = await signedRequest(method, endpoint, type, payload);
-    if (res.code === 403 && !activatedRef.current) {
-      activatedRef.current = true;
-      await activate();
-      // Retry the original request
-      return signedRequest(method, endpoint, type, payload);
-    }
-    return res;
-  }, [signedRequest, activate]);
 
   return {
     connected, walletAddr, account, positions, orders, prices, markets, walletUsdc, leverageSettings, marginModes, dataReady,

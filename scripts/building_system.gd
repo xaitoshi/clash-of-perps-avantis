@@ -201,6 +201,61 @@ func _send_resource_caps() -> void:
 	if bridge:
 		bridge.send_to_react("resource_caps", caps)
 
+# ── Town Hall Progression (mirrors server/db.js) ─────────────
+const TH_UNLOCK: Dictionary = {
+	"storage": 2,
+	"tombstone": 2,
+	"turret": 3,
+}
+
+# Max count per building per TH level: [th1, th2, th3]
+const TH_MAX_COUNT: Dictionary = {
+	"mine": [1, 2, 3],
+	"sawmill": [1, 2, 3],
+	"barn": [1, 1, 2],
+	"port": [1, 2, 5],
+	"archer_tower": [1, 2, 3],
+	"tombstone": [0, 1, 3],
+	"turret": [0, 0, 3],
+	"storage": [0, 1, 2],
+	"town_hall": [1, 1, 1],
+}
+
+const TH_UPGRADE_REQUIRES: Dictionary = {
+	1: ["mine", "sawmill", "barn", "port"],
+	2: ["mine", "sawmill", "barn", "port", "storage", "tombstone", "archer_tower"],
+}
+
+func _get_th_level() -> int:
+	for bs in _building_systems:
+		for b in bs.placed_buildings:
+			if b.get("id", "") == "town_hall":
+				return b.get("level", 1)
+	return 1
+
+func _is_building_unlocked(building_id: String) -> bool:
+	if not TH_UNLOCK.has(building_id):
+		return true
+	return _get_th_level() >= TH_UNLOCK[building_id]
+
+func _can_upgrade_th() -> Dictionary:
+	## Returns {"can": bool, "missing": []} for TH upgrade readiness
+	var th_level: int = _get_th_level()
+	var required: Array = TH_UPGRADE_REQUIRES.get(th_level, [])
+	var missing: Array = []
+	for req_type in required:
+		var found: bool = false
+		for bs in _building_systems:
+			for b in bs.placed_buildings:
+				if b.get("id", "") == req_type and b.get("level", 1) >= th_level:
+					found = true
+					break
+			if found:
+				break
+		if not found:
+			missing.append(req_type)
+	return {"can": missing.is_empty(), "missing": missing}
+
 const BUILDING_BASE_SHADER = """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_opaque, cull_disabled;
@@ -352,7 +407,6 @@ var _server_busy: bool = false
 var home_buildings_backup: Array[Dictionary] = []
 var home_grid_backup: Array[bool] = []
 var enemy_info: Dictionary = {}
-var _combat_session_id: String = ""
 var _battle_replay: Array = []  # [{t: float, type: String, ...}]
 var _battle_start_time: float = 0.0
 var return_button: Button
@@ -1630,6 +1684,14 @@ func _sync_react_buildings() -> void:
 		bridge.send_to_react("state", {"buildings": arr})
 		bridge.send_to_react("placed_counts", counts)
 		_send_resource_caps()
+		# Send TH progression info
+		var th_lvl: int = _get_th_level()
+		var max_counts: Dictionary = {}
+		for key in TH_MAX_COUNT:
+			var arr: Array = TH_MAX_COUNT[key]
+			var idx: int = clampi(th_lvl - 1, 0, arr.size() - 1)
+			max_counts[key] = arr[idx]
+		bridge.send_to_react("th_info", {"level": th_lvl, "unlock": TH_UNLOCK, "max_counts": max_counts})
 
 func _load_troop_levels_from_server(server_troops: Array) -> void:
 	for t in server_troops:
@@ -2520,6 +2582,20 @@ func _upgrade_selected() -> void:
 	var max_level = def.hp_levels.size() if def.has("hp_levels") else 3
 	if level >= max_level:
 		return
+	var bid: String = selected_building.get("id", "")
+	var th_level: int = _get_th_level()
+	# TH upgrade — check required buildings
+	if bid == "town_hall":
+		var check: Dictionary = _can_upgrade_th()
+		if not check.can:
+			var missing_str: String = ", ".join(check.missing)
+			_show_error("Upgrade all buildings first: " + missing_str)
+			return
+	else:
+		# Non-TH buildings can't exceed TH level
+		if level + 1 > th_level:
+			_show_error("Upgrade Town Hall to level %d first" % (level + 1))
+			return
 
 	var b = selected_building
 	var net = _net
@@ -3955,6 +4031,20 @@ func _switch_to_enemy_island() -> void:
 	_battle_start_time = Time.get_ticks_msec() / 1000.0
 	_cannon_energy = 10
 	_cannon_next_cost = 1
+	# Record grid config snapshot for server verification
+	_battle_replay.append({
+		"type": "battle_start",
+		"grid_config": {
+			"grid_width": grid_width,
+			"grid_height": grid_height,
+			"cell_size": cell_size,
+			"grid_extent_x": grid_extent_x,
+			"grid_extent_z": grid_extent_z,
+			"grid_center_x": grid_center.x,
+			"grid_center_z": grid_center.z,
+			"grid_rotation": grid_rotation,
+		}
+	})
 	# Instantly switch ships when button pressed
 	var _r = get_tree().root
 	if not _ship_attack_node or not is_instance_valid(_ship_attack_node):

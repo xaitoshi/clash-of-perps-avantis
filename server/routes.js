@@ -1,11 +1,7 @@
 const express = require('express');
-const crypto = require('crypto');
 const db = require('./db');
 
 const router = express.Router();
-
-// HMAC secret for trading reward verification
-const REWARD_SECRET = process.env.REWARD_SECRET || crypto.randomBytes(32).toString('hex');
 
 // ---------- Auth Middleware ----------
 
@@ -194,38 +190,64 @@ router.delete('/buildings/:id', auth, (req, res) => {
 
 // ==================== BATTLE ====================
 
-// Submit battle replay for verification (Clash of Clans style)
+// Submit battle replay for verification
 router.post('/attack/result', auth, (req, res) => {
   const { defender_id, actions, result: claimedResult } = req.body;
   if (!defender_id) return res.status(400).json({ error: 'defender_id required' });
   if (!actions || !Array.isArray(actions)) return res.status(400).json({ error: 'actions replay required' });
   if (!claimedResult) return res.status(400).json({ error: 'result required (victory/defeat)' });
 
-  // Basic validation
   const defenderBuildings = db.getPlayerBuildings(defender_id);
   if (!defenderBuildings || defenderBuildings.length === 0) {
     return res.status(400).json({ error: 'Defender has no buildings' });
   }
-  // Verify player actually placed ships (anti-cheat: can't claim victory with empty replay)
-  const shipActions = actions.filter(a => a.type === 'place_ship');
+
+  // Extract grid_config from battle_start action
+  const battleStartAction = actions.find(a => a.type === 'battle_start');
+  const gridConfig = battleStartAction?.grid_config;
+  const gameActions = actions.filter(a => a.type !== 'battle_start');
+
+  // Basic validation
+  const shipActions = gameActions.filter(a => a.type === 'place_ship');
   if (claimedResult === 'victory' && shipActions.length === 0) {
-    return res.status(403).json({ error: 'No ships deployed — victory not possible' });
+    db.storeReplay(req.player.id, defender_id, actions, defenderBuildings, claimedResult, 'rejected', 'No ships', null, null);
+    return res.status(403).json({ error: 'No ships deployed' });
   }
-  // Verify ship count doesn't exceed max
   if (shipActions.length > 5) {
+    db.storeReplay(req.player.id, defender_id, actions, defenderBuildings, claimedResult, 'rejected', 'Too many ships', null, null);
     return res.status(403).json({ error: 'Too many ships in replay' });
   }
-  console.log(`[BATTLE] ${claimedResult} by ${req.player.id} vs ${defender_id} (${shipActions.length} ships, ${actions.length} actions)`);
+
+  // Run server simulation verification
+  const { verifyReplay } = require('./combat_session');
+  const verification = verifyReplay({
+    defenderBuildings,
+    actions: gameActions,
+    claimedResult,
+    gridConfig,
+  });
+
+  console.log(`[BATTLE] ${claimedResult} by ${req.player.id} vs ${defender_id}: ${verification.reason} (TH ${Math.round((verification.townHallHpPct || 0) * 100)}%)`);
+
+  if (!verification.valid) {
+    db.storeReplay(req.player.id, defender_id, actions, defenderBuildings, claimedResult, 'rejected', verification.reason, null, verification);
+    return res.status(403).json({ error: 'Replay verification failed', reason: verification.reason });
+  }
 
   // Victory verified — grant loot
   if (claimedResult === 'victory') {
     const battleResult = db.battleVictory(req.player.id, defender_id);
-    if (battleResult.error) return res.status(400).json(battleResult);
-    return res.json({ ...battleResult, verification });
+    if (battleResult.error) {
+      db.storeReplay(req.player.id, defender_id, actions, defenderBuildings, claimedResult, 'error', battleResult.error, null, verification);
+      return res.status(400).json(battleResult);
+    }
+    db.storeReplay(req.player.id, defender_id, actions, defenderBuildings, claimedResult, 'accepted', verification.reason, battleResult.loot, verification);
+    return res.json(battleResult);
   }
 
-  // Defeat — no loot
-  res.json({ success: true, loot: { gold: 0, wood: 0, ore: 0 }, verification });
+  // Defeat — no loot, still store replay
+  db.storeReplay(req.player.id, defender_id, actions, defenderBuildings, claimedResult, 'accepted', 'Defeat', null, verification);
+  res.json({ success: true, loot: { gold: 0, wood: 0, ore: 0 } });
 });
 
 // ==================== TROOPS ====================
@@ -252,9 +274,6 @@ router.get('/find-enemy', auth, (req, res) => {
   res.json(result);
 });
 
-// Battle is now handled server-side via WebSocket combat sessions.
-// POST /attack/result removed — victory is only granted when server simulation
-// confirms town_hall HP <= 0. See server/combat_manager.js.
 
 // ==================== TROPHIES ====================
 
@@ -302,7 +321,12 @@ try {
 try { db.db.exec(`ALTER TABLE trading_rewards ADD COLUMN pnl_gold_pool REAL NOT NULL DEFAULT 0`); } catch {}
 
 // Rate limiter for claim-gold (max 1 per 5 seconds per player)
+// Rate limiter — auto-expires old entries every 10 minutes to prevent memory leak
 const claimCooldowns = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 60000;
+  for (const [k, v] of claimCooldowns) { if (v < cutoff) claimCooldowns.delete(k); }
+}, 600000);
 
 // Claim gold — server verifies trades via Pacifica API
 router.post('/trading/claim-gold', auth, async (req, res) => {

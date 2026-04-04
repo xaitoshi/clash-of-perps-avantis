@@ -57,21 +57,25 @@ try { db.exec(`ALTER TABLE players ADD COLUMN shield_until TEXT`); } catch {}
 try { db.exec(`ALTER TABLE players ADD COLUMN last_attacked_by TEXT`); } catch {}
 try { db.exec(`ALTER TABLE players ADD COLUMN last_attacked_at TEXT`); } catch {}
 
-// Attack sessions table
+// Battle replays — stores full replay data for verification and future replay viewer
 try {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS attack_sessions (
-      id            TEXT PRIMARY KEY,
-      attacker_id   TEXT NOT NULL REFERENCES players(id),
-      defender_id   TEXT NOT NULL REFERENCES players(id),
-      status        TEXT NOT NULL DEFAULT 'active',
-      troops_deployed TEXT NOT NULL DEFAULT '{}',
-      buildings_destroyed TEXT NOT NULL DEFAULT '[]',
-      loot_gold     INTEGER NOT NULL DEFAULT 0,
-      loot_wood     INTEGER NOT NULL DEFAULT 0,
-      loot_ore      INTEGER NOT NULL DEFAULT 0,
-      started_at    TEXT NOT NULL DEFAULT (datetime('now')),
-      ended_at      TEXT
+    CREATE TABLE IF NOT EXISTS battle_replays (
+      id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+      attacker_id           TEXT NOT NULL,
+      defender_id           TEXT NOT NULL,
+      claimed_result        TEXT NOT NULL,
+      verified_result       TEXT NOT NULL,
+      verification_reason   TEXT,
+      replay_data           TEXT NOT NULL,
+      buildings_snapshot    TEXT,
+      loot_gold             INTEGER DEFAULT 0,
+      loot_wood             INTEGER DEFAULT 0,
+      loot_ore              INTEGER DEFAULT 0,
+      sim_th_hp_pct         REAL,
+      sim_buildings_destroyed INTEGER DEFAULT 0,
+      duration_sec          REAL,
+      created_at            TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
 } catch {}
@@ -137,15 +141,54 @@ const stmts = {
 
   // Production
   updateLastCollected: db.prepare(`UPDATE buildings SET last_collected_at = ? WHERE id = ? AND player_id = ?`),
+
+  // Replay
+  insertReplay: db.prepare(`
+    INSERT INTO battle_replays (attacker_id, defender_id, claimed_result, verified_result, verification_reason, replay_data, buildings_snapshot, loot_gold, loot_wood, loot_ore, sim_th_hp_pct, sim_buildings_destroyed, duration_sec)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+
+  // Repair / Ship / Shield
+  repairBuilding: db.prepare(`UPDATE buildings SET hp = max_hp WHERE id = ? AND player_id = ?`),
+  setShipOnPort: db.prepare(`UPDATE buildings SET has_ship = 1 WHERE id = ? AND player_id = ?`),
+  setShield: db.prepare(`UPDATE players SET shield_until = ?, last_attacked_by = ?, last_attacked_at = datetime('now') WHERE id = ?`),
 };
 
 // ---------- Building Definitions (mirroring Godot) ----------
+
+// ---------- Town Hall Progression System ----------
+// Buildings unlocked per TH level. Not listed = available from TH1.
+const TH_UNLOCK = {
+  storage:   2,  // unlocked at TH2
+  tombstone: 2,  // unlocked at TH2
+  turret:    3,  // unlocked at TH3
+};
+
+// Max count per building type PER TH level: { type: [th1, th2, th3] }
+const TH_MAX_COUNT = {
+  mine:         [1, 2, 3],
+  sawmill:      [1, 2, 3],
+  barn:         [1, 1, 2],
+  port:         [1, 2, 5],
+  archer_tower: [1, 2, 3],
+  tombstone:    [0, 1, 3],  // unlocked at TH2
+  turret:       [0, 0, 3],  // unlocked at TH3
+  storage:      [0, 1, 2],  // unlocked at TH2
+  town_hall:    [1, 1, 1],
+};
+
+// Required buildings to upgrade Town Hall (all must be at TH's current level)
+const TH_UPGRADE_REQUIRES = {
+  1: ['mine', 'sawmill', 'barn', 'port'],
+  2: ['mine', 'sawmill', 'barn', 'port', 'storage', 'tombstone', 'archer_tower'],
+};
 
 const BUILDING_DEFS = {
   town_hall: {
     size: [4, 4], max_level: 3,
     hp_levels: [3500, 6000, 10000],
     cost: { gold: 0, wood: 0, ore: 0 },
+    upgrade_cost: { 2: { gold: 5000, wood: 3000, ore: 2000 }, 3: { gold: 15000, wood: 10000, ore: 8000 } },
     max_count: 1,
   },
   mine: {
@@ -309,15 +352,30 @@ function canAfford(playerId, gold = 0, wood = 0, ore = 0) {
   return current.gold >= gold && current.wood >= wood && current.ore >= ore;
 }
 
+function getTownHallLevel(playerId) {
+  const buildings = stmts.getBuildings.all(playerId);
+  for (const b of buildings) {
+    if (b.type === 'town_hall') return b.level;
+  }
+  return 1;
+}
+
 function placeBuilding(playerId, type, gridX, gridZ, gridIndex = 0) {
   const def = BUILDING_DEFS[type];
   if (!def) return { error: `Unknown building type: ${type}` };
 
-  // Check max count
-  if (def.max_count) {
+  // Check TH-based unlock and max count
+  const thLevel = getTownHallLevel(playerId);
+  const thMax = TH_MAX_COUNT[type];
+  if (thMax) {
+    const maxForTh = thMax[Math.min(thLevel - 1, thMax.length - 1)] || 0;
+    if (maxForTh === 0) {
+      const unlockAt = TH_UNLOCK[type];
+      return { error: `${type} unlocks at Town Hall level ${unlockAt || '?'}` };
+    }
     const existing = stmts.getBuildings.all(playerId).filter(b => b.type === type);
-    if (existing.length >= def.max_count) {
-      return { error: `Maximum ${def.max_count} ${type} allowed` };
+    if (existing.length >= maxForTh) {
+      return { error: `Maximum ${maxForTh} ${type} at Town Hall level ${thLevel}` };
     }
   }
 
@@ -354,12 +412,39 @@ function upgradeBuilding(playerId, buildingId) {
   }
 
   const nextLevel = building.level + 1;
-  const costMultiplier = nextLevel;
-  const cost = {
-    gold: def.cost.gold * costMultiplier,
-    wood: def.cost.wood * costMultiplier,
-    ore: def.cost.ore * costMultiplier,
-  };
+  const thLevel = getTownHallLevel(playerId);
+
+  // Town Hall upgrade — check all required buildings are at current TH level
+  if (building.type === 'town_hall') {
+    const required = TH_UPGRADE_REQUIRES[building.level];
+    if (required) {
+      const allBuildings = stmts.getBuildings.all(playerId);
+      for (const reqType of required) {
+        const found = allBuildings.find(b => b.type === reqType && b.level >= building.level);
+        if (!found) {
+          return { error: `Upgrade all ${reqType} to level ${building.level} first` };
+        }
+      }
+    }
+  } else {
+    // Non-TH buildings can't exceed TH level
+    if (nextLevel > thLevel) {
+      return { error: `Upgrade Town Hall to level ${nextLevel} first` };
+    }
+  }
+
+  // Cost — TH has special upgrade_cost, others use multiplier
+  let cost;
+  if (building.type === 'town_hall' && def.upgrade_cost?.[nextLevel]) {
+    cost = def.upgrade_cost[nextLevel];
+  } else {
+    const costMultiplier = nextLevel;
+    cost = {
+      gold: def.cost.gold * costMultiplier,
+      wood: def.cost.wood * costMultiplier,
+      ore: def.cost.ore * costMultiplier,
+    };
+  }
 
   if (!canAfford(playerId, cost.gold, cost.wood, cost.ore)) {
     return { error: 'Not enough resources', cost };
@@ -547,7 +632,7 @@ function repairAllBuildings(playerId) {
   const buildings = stmts.getBuildings.all(playerId);
   for (const b of buildings) {
     if (b.hp < b.max_hp) {
-      db.prepare('UPDATE buildings SET hp = max_hp WHERE id = ? AND player_id = ?').run(b.id, playerId);
+      stmts.repairBuilding.run(b.id, playerId);
     }
   }
 }
@@ -563,26 +648,12 @@ function buyShip(playerId, buildingId) {
     return { error: 'Not enough gold', cost: { gold: SHIP_COST_GOLD } };
   }
   subtractResources(playerId, SHIP_COST_GOLD, 0, 0);
-  db.prepare('UPDATE buildings SET has_ship = 1 WHERE id = ? AND player_id = ?').run(buildingId, playerId);
+  stmts.setShipOnPort.run(buildingId, playerId);
   return { success: true, resources: getResources(playerId) };
 }
 
 const LOOT_PERCENT = 0.30;
 
-function getPlayerBuildings(playerId) {
-  return stmts.getBuildings.all(playerId);
-}
-
-function createAttackSession(sessionId, attackerId, defenderId) {
-  db.prepare('INSERT INTO attack_sessions (id, attacker_id, defender_id) VALUES (?, ?, ?)').run(sessionId, attackerId, defenderId);
-}
-
-function updateAttackSession(sessionId, status, troopsDeployed, buildingsDestroyed) {
-  db.prepare(`
-    UPDATE attack_sessions SET status = ?, troops_deployed = ?, buildings_destroyed = ?, ended_at = datetime('now')
-    WHERE id = ?
-  `).run(status, troopsDeployed, buildingsDestroyed, sessionId);
-}
 
 const SHIELD_HOURS = 12; // 12-hour shield after being raided
 const ATTACK_COOLDOWN_HOURS = 2; // can't attack same player for 2 hours
@@ -617,8 +688,7 @@ function battleVictory(attackerId, defenderId) {
 
   // Grant shield to defender (12 hours)
   const shieldUntil = new Date(Date.now() + SHIELD_HOURS * 3600000).toISOString().replace('T', ' ').slice(0, 19);
-  db.prepare('UPDATE players SET shield_until = ?, last_attacked_by = ?, last_attacked_at = datetime(\'now\') WHERE id = ?')
-    .run(shieldUntil, attackerId, defenderId);
+  stmts.setShield.run(shieldUntil, attackerId, defenderId);
 
   return {
     success: true,
@@ -627,9 +697,23 @@ function battleVictory(attackerId, defenderId) {
   };
 }
 
+function storeReplay(attackerId, defenderId, replayData, buildingsSnapshot, claimedResult, verifiedResult, reason, loot, simResult) {
+  const actions = replayData.actions || replayData;
+  const duration = Array.isArray(actions) && actions.length > 1 ? actions[actions.length - 1].t - (actions[0].t || 0) : 0;
+  stmts.insertReplay.run(
+    attackerId, defenderId, claimedResult, verifiedResult, reason || '',
+    JSON.stringify(replayData), JSON.stringify(buildingsSnapshot),
+    loot?.gold || 0, loot?.wood || 0, loot?.ore || 0,
+    simResult?.townHallHpPct ?? null, simResult?.buildingsDestroyed ?? 0, duration
+  );
+}
+
 module.exports = {
   db,
   BUILDING_DEFS,
+  TH_UNLOCK,
+  TH_MAX_COUNT,
+  TH_UPGRADE_REQUIRES,
   TROOP_DEFS,
   registerPlayer,
   authenticatePlayer,
@@ -650,9 +734,7 @@ module.exports = {
   getFullPlayerState,
   buyShip,
   battleVictory,
-  getPlayerBuildings,
   getResourceCaps,
-  createAttackSession,
-  updateAttackSession,
+  storeReplay,
   TROPHY_TABLE,
 };

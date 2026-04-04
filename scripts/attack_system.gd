@@ -332,7 +332,11 @@ func _try_place_ship(hit: Vector3) -> bool:
 	var bs: Node = get_node_or_null("../BuildingSystem")
 	if bs and bs.is_viewing_enemy:
 		var t: float = Time.get_ticks_msec() / 1000.0 - bs._battle_start_time
-		bs._battle_replay.append({"t": t, "type": "place_ship", "x": hit.x, "z": hit.z, "troopType": troop_type_name})
+		var troop_lvl: int = 1
+		var level_key: String = _script_to_troop_key(SHIP_TROOPS[_next_troop_idx].script)
+		if "troop_levels" in bs and bs.troop_levels.has(level_key):
+			troop_lvl = bs.troop_levels[level_key]
+		bs._battle_replay.append({"t": t, "type": "place_ship", "x": hit.x, "z": hit.z, "troopType": troop_type_name, "troopLevel": troop_lvl})
 	# Auto-advance to next undeployed troop type
 	for offset in range(1, SHIP_TROOPS.size() + 1):
 		var candidate: int = (_next_troop_idx + offset) % SHIP_TROOPS.size()

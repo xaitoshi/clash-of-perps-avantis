@@ -87,6 +87,9 @@ export function GodotProvider({ children }) {
         case 'resource_caps':
           setResourceCaps({ gold: data.gold || 5000, wood: data.wood || 5000, ore: data.ore || 5000 });
           break;
+        case 'th_info':
+          setBuildingDefs(prev => ({ ...prev, th_level: data.level || 1, th_unlock: data.unlock || {}, th_max_counts: data.max_counts || {} }));
+          break;
         case 'error':
           setError(data.message);
           if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
@@ -118,6 +121,7 @@ export function GodotProvider({ children }) {
     };
     return () => {
       window.onGodotMessage = null;
+      window._playerToken = null;
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
     };
   }, []);

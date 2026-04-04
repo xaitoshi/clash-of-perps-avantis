@@ -1,5 +1,5 @@
 import { useState, memo, useCallback, useMemo } from 'react';
-import { useSend, useBuilding, usePlayer } from '../hooks/useGodot';
+import { useSend, useBuilding, usePlayer, useResources } from '../hooks/useGodot';
 
 import goldIcon from '../assets/resources/gold_bar.png';
 import woodIcon from '../assets/resources/wood_bar.png';
@@ -16,6 +16,7 @@ import imgArcherTower from '../assets/buildings/archertower.png';
 
 const TABS = [
   { id: 'Economy', label: 'Economy' },
+  { id: 'Military', label: 'Military' },
   { id: 'Defense', label: 'Defense' },
 ];
 
@@ -35,13 +36,13 @@ const DESC_MAP = {
 const CATEGORY_MAP = {
   mine: 'Economy',
   sawmill: 'Economy',
-  barn: 'Economy',
+  barn: 'Military',
   turret: 'Defense',
   tombstone: 'Defense',
   archtower: 'Defense',
   archer_tower: 'Defense',
   archertower: 'Defense',
-  port: 'Economy',
+  port: 'Military',
   town_hall: 'Economy',
 };
 
@@ -75,28 +76,28 @@ const RES_ICONS = {
 };
 
 const tabBase = {
-  padding: '0 24px',
+  padding: '0 28px',
   fontSize: 16,
-  fontWeight: 800,
+  fontWeight: 900,
   fontFamily: '"Inter", "Segoe UI", sans-serif',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  transition: 'all 0.1s',
+  transition: 'all 0.15s cubic-bezier(0.18, 0.89, 0.32, 1.28)',
   outline: 'none',
   border: 'none',
   borderBottom: 'none',
-  borderRadius: '12px 12px 0 0',
-  borderLeft: '2px solid transparent',
-  borderRight: '2px solid transparent',
-  borderTop: '2px solid transparent',
+  borderRadius: '16px 16px 0 0',
+  borderLeft: '4px solid transparent',
+  borderRight: '4px solid transparent',
+  borderTop: '4px solid transparent',
 };
 
 const TAB_STYLE_ACTIVE = {
   ...tabBase,
-  background: '#e8dfc8',
-  color: '#222',
+  background: '#fdf8e7',
+  color: '#5C3A21',
   borderColor: '#d4c8b0',
   marginBottom: -6,
   height: 56,
@@ -105,13 +106,13 @@ const TAB_STYLE_ACTIVE = {
 
 const TAB_STYLE_INACTIVE = {
   ...tabBase,
-  background: '#a2b4bd',
-  color: '#fff',
-  borderColor: '#8a9ea8',
+  background: '#d4c8b0',
+  color: '#77573d',
+  borderColor: '#bba882',
   marginBottom: 0,
-  height: 52,
+  height: 50,
   zIndex: 10,
-  boxShadow: 'inset 0 -4px 10px rgba(0,0,0,0.05)',
+  boxShadow: 'inset 0 -4px 10px rgba(0,0,0,0.08)',
 };
 
 const TAB_CONTENT_ACTIVE = {
@@ -134,20 +135,38 @@ function ShopPanel({ onClose }) {
   const { sendToGodot } = useSend();
   const { buildingDefs } = useBuilding();
   const { playerState } = usePlayer();
+  const resources = useResources();
 
   const [activeTab, setActiveTab] = useState('Economy');
   const buildings = buildingDefs?.buildings || {};
   const placedCounts = buildingDefs?.placed_counts || {};
+  const thLevel = buildingDefs?.th_level || 1;
+  const thUnlock = buildingDefs?.th_unlock || {};
+  const thMaxCounts = buildingDefs?.th_max_counts || {};
 
+  // Build list with status: available, maxed, locked, unaffordable
   const filteredBuildings = useMemo(
-    () => Object.entries(buildings).filter(([id, def]) => {
-      if (id === 'barracks' || id === 'flag') return false;
-      // Hide buildings that reached max_count (e.g. town_hall max 1)
-      const maxCount = def.max_count || 0;
-      if (maxCount > 0 && (placedCounts[id] || 0) >= maxCount) return false;
-      return getCategory(id) === activeTab;
-    }),
-    [buildings, activeTab, placedCounts]
+    () => Object.entries(buildings)
+      .filter(([id]) => id !== 'barracks' && id !== 'flag' && getCategory(id) === activeTab)
+      .map(([id, def]) => {
+        const placed = placedCounts[id] || 0;
+        const maxCount = thMaxCounts[id] ?? def.max_count ?? 99;
+        const unlockAt = thUnlock[id];
+        const locked = unlockAt && thLevel < unlockAt;
+        const maxed = placed >= maxCount;
+        const cost = def.cost || {};
+        const canAfford = (resources.gold || 0) >= (cost.gold || 0) &&
+                          (resources.wood || 0) >= (cost.wood || 0) &&
+                          (resources.ore || 0) >= (cost.ore || 0);
+        return [id, def, { placed, maxCount, locked, maxed, canAfford, unlockAt }];
+      })
+      .sort((a, b) => {
+        // Available first, then maxed, then locked
+        const sa = a[2].locked ? 2 : a[2].maxed ? 1 : 0;
+        const sb = b[2].locked ? 2 : b[2].maxed ? 1 : 0;
+        return sa - sb;
+      }),
+    [buildings, activeTab, placedCounts, thLevel, thUnlock, thMaxCounts, resources]
   );
 
   const handlePlacement = useCallback((id) => {
@@ -155,8 +174,10 @@ function ShopPanel({ onClose }) {
   }, [sendToGodot]);
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.container} onClick={stopPropagation}>
+    <>
+      <style>{animCSS}</style>
+      <div style={styles.overlay} onClick={onClose}>
+        <div style={styles.container} onClick={stopPropagation}>
         <div style={styles.tabArea}>
           <div style={styles.tabContainer}>
             {TABS.map(tab => {
@@ -174,26 +195,55 @@ function ShopPanel({ onClose }) {
               );
             })}
           </div>
+          <button style={styles.closeBtn} onClick={onClose}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
         </div>
 
-        <div style={styles.cardArea}>
+        <div style={styles.cardArea} className="grad-scrollbar">
           <div style={styles.cardScroll}>
-            {filteredBuildings.map(([id, def]) => (
+            {filteredBuildings.map(([id, def, status]) => {
+              const disabled = status.locked || status.maxed || !status.canAfford;
+              return (
               <div
                 key={id}
-                style={styles.card}
-                onClick={() => handlePlacement(id)}
+                style={{
+                  ...styles.card,
+                  ...(status.locked ? styles.cardLocked : {}),
+                  ...(status.maxed ? styles.cardMaxed : {}),
+                  ...(!status.canAfford && !status.locked && !status.maxed ? styles.cardUnaffordable : {}),
+                }}
+                onClick={() => !disabled && handlePlacement(id)}
               >
+                {/* Count badge */}
+                {!status.locked && (
+                  <div style={{
+                    ...styles.countBadge,
+                    background: status.maxed ? '#E53935' : '#4CAF50',
+                  }}>
+                    {status.placed}/{status.maxCount}
+                  </div>
+                )}
+
+                {/* Lock overlay */}
+                {status.locked && (
+                  <div style={styles.lockOverlay}>
+                    <span style={styles.lockIcon}>🔒</span>
+                    <span style={styles.lockText}>TH {status.unlockAt}</span>
+                  </div>
+                )}
+
                 <div style={styles.cardImgTop}>
                   <div style={styles.iconHighlight} />
                   {THUMBNAIL_MAP[id] ? (
-                    <img 
-                      src={THUMBNAIL_MAP[id]} 
+                    <img
+                      src={THUMBNAIL_MAP[id]}
                       style={{
                         ...styles.thumbnail,
-                        transform: `scale(${THUMBNAIL_SCALE_MAP[id] || 1})`
-                      }} 
-                      alt={def.name} 
+                        transform: `scale(${THUMBNAIL_SCALE_MAP[id] || 1})`,
+                        ...(status.locked ? { filter: 'brightness(0.2) blur(2px)' } : {}),
+                      }}
+                      alt={def.name}
                     />
                   ) : (
                     <div style={styles.placeholderBox}>🏠</div>
@@ -202,13 +252,17 @@ function ShopPanel({ onClose }) {
 
                 <div style={styles.cardInfo}>
                   <div style={styles.cardName}>{def.name}</div>
-                  <div style={styles.cardDesc}>{DESC_MAP[id] || ''}</div>
+                  <div style={styles.cardDesc}>{status.locked ? `Unlocks at TH ${status.unlockAt}` : status.maxed ? 'Max built' : DESC_MAP[id] || ''}</div>
 
+                  {!status.locked && (
                   <div style={styles.costContainer}>
                     <div style={styles.costRow}>
                       {Object.entries(def.cost || {}).map(([res, amount]) => (
                         amount > 0 && (
-                          <div key={res} style={styles.costPill}>
+                          <div key={res} style={{
+                            ...styles.costPill,
+                            ...((resources[res] || 0) < amount ? { color: '#E53935' } : {}),
+                          }}>
                             <span style={styles.costValue}>{amount.toLocaleString()}</span>
                             <img src={RES_ICONS[res] || goldIcon} style={styles.resIconSmall} alt={res} />
                           </div>
@@ -219,17 +273,16 @@ function ShopPanel({ onClose }) {
                       )}
                     </div>
                   </div>
+                  )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
-
-        <button style={styles.closeBtn} onClick={onClose}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -259,21 +312,21 @@ const styles = {
   cardArea: {
     background: '#e8dfc8',
     borderTop: '6px solid #d4c8b0',
-    padding: '20px 20px 10px 20px',
+    padding: '24px 20px 10px 20px',
     minHeight: 'auto',
     overflowX: 'auto',
     display: 'flex',
     position: 'relative',
     zIndex: 10,
-    boxShadow: '0 -10px 30px rgba(0,0,0,0.3)',
+    boxShadow: '0 -10px 30px rgba(0,0,0,0.3), inset 0 6px 10px rgba(0,0,0,0.05)',
     borderRadius: '24px 24px 0 0',
   },
   cardScroll: {
     display: 'flex',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     margin: '0 auto',
-    gap: 12,
+    gap: 16,
     paddingBottom: 20,
     position: 'relative',
     zIndex: 10,
@@ -282,14 +335,15 @@ const styles = {
     width: 160,
     height: 240,
     background: '#fdf8e7',
-    borderRadius: 12,
-    border: '3px solid #d4c8b0',
+    borderRadius: 16,
+    border: '4px solid #d4c8b0',
     display: 'flex',
     flexDirection: 'column',
     cursor: 'pointer',
     overflow: 'hidden',
-    boxShadow: '0 4px 6px rgba(0,0,0,0.2)',
-    transition: 'transform 0.1s',
+    boxShadow: '0 6px 12px rgba(0,0,0,0.15), inset 0 -4px 0 rgba(0,0,0,0.05)',
+    transition: 'transform 0.15s cubic-bezier(0.18, 0.89, 0.32, 1.28), box-shadow 0.1s',
+    flexShrink: 0,
   },
   cardImgTop: {
     height: 110,
@@ -317,6 +371,41 @@ const styles = {
     fontSize: 44,
     zIndex: 1,
     filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.3))',
+  },
+  cardLocked: {
+    opacity: 0.4,
+    filter: 'grayscale(1)',
+    cursor: 'default',
+    pointerEvents: 'none',
+  },
+  cardMaxed: {
+    opacity: 0.5,
+    cursor: 'default',
+    pointerEvents: 'none',
+  },
+  cardUnaffordable: {
+    opacity: 0.6,
+    filter: 'grayscale(0.5)',
+    cursor: 'default',
+    pointerEvents: 'none',
+  },
+  countBadge: {
+    position: 'absolute', top: 6, right: 6, zIndex: 10,
+    borderRadius: 8, padding: '2px 8px',
+    fontSize: 12, fontWeight: 900, color: '#fff',
+    border: '2px solid rgba(0,0,0,0.3)',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+  },
+  lockOverlay: {
+    position: 'absolute', inset: 0, zIndex: 10,
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    gap: 4, borderRadius: 14,
+  },
+  lockIcon: { fontSize: 28 },
+  lockText: {
+    fontSize: 12, fontWeight: 900, color: '#5C3A21',
+    textShadow: '0 1px 2px rgba(255,255,255,0.5)',
   },
   cardInfo: {
     padding: '4px 8px 8px 8px',
@@ -392,8 +481,8 @@ const styles = {
   },
   closeBtn: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    bottom: -8,
+    right: 16,
     width: 36,
     height: 36,
     borderRadius: '50%',
@@ -409,3 +498,22 @@ const styles = {
     padding: 0,
   },
 };
+
+const animCSS = `
+  /* Gradient Scrollbar Horizontal */
+  .grad-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
+  .grad-scrollbar::-webkit-scrollbar-track { background: #fdf8e7; border-radius: 5px; margin: 10px; }
+  .grad-scrollbar::-webkit-scrollbar-thumb { background: linear-gradient(90deg, #d4c8b0 0%, #bba882 100%); border-radius: 5px; border: 2px solid #fdf8e7; }
+  .grad-scrollbar::-webkit-scrollbar-thumb:hover { background: linear-gradient(90deg, #bba882 0%, #a3906a 100%); }
+  
+  /* Hover active state for building card */
+  .grad-scrollbar > div > div:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.2), inset 0 -4px 0 rgba(0,0,0,0.05);
+  }
+  
+  .grad-scrollbar > div > div:active {
+    transform: translateY(2px) scale(0.98);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1), inset 0 -2px 0 rgba(0,0,0,0.05);
+  }
+`;
