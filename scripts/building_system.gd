@@ -90,6 +90,7 @@ var building_defs: Dictionary = {
 		"is_main": true,
 		"max_count": 1,
 		"cost": {},
+		"upgrade_cost": {2: {"gold": 5000, "wood": 3000, "ore": 2000}, 3: {"gold": 15000, "wood": 10000, "ore": 8000}},
 	},
 	"turret": {
 		"name": "Turret",
@@ -1688,9 +1689,9 @@ func _sync_react_buildings() -> void:
 		var th_lvl: int = _get_th_level()
 		var max_counts: Dictionary = {}
 		for key in TH_MAX_COUNT:
-			var arr: Array = TH_MAX_COUNT[key]
-			var idx: int = clampi(th_lvl - 1, 0, arr.size() - 1)
-			max_counts[key] = arr[idx]
+			var limits: Array = TH_MAX_COUNT[key]
+			var idx: int = clampi(th_lvl - 1, 0, limits.size() - 1)
+			max_counts[key] = limits[idx]
 		bridge.send_to_react("th_info", {"level": th_lvl, "unlock": TH_UNLOCK, "max_counts": max_counts})
 
 func _load_troop_levels_from_server(server_troops: Array) -> void:
@@ -2464,9 +2465,18 @@ func _select_building(b: Dictionary) -> void:
 		var cost = def.get("cost", {})
 		var multiplier = level + 1
 		var upgrade_cost := {}
-		if level < max_level:
+		# TH has special upgrade_cost
+		if b.id == "town_hall" and def.has("upgrade_cost"):
+			var th_costs: Dictionary = def.get("upgrade_cost", {})
+			if th_costs.has(level + 1):
+				upgrade_cost = th_costs[level + 1]
+		elif level < max_level:
 			for res_name in cost:
 				upgrade_cost[res_name] = cost[res_name] * multiplier
+		# HP at next level
+		var next_hp: int = max_hp
+		if def.has("hp_levels") and level < def.hp_levels.size():
+			next_hp = def.hp_levels[level]  # level is 1-based, array is 0-based, so [level] = next
 		var bs_has_ship = false
 		if b.has("node") and is_instance_valid(b["node"]) and b["node"].has_meta("has_ship"):
 			bs_has_ship = true
@@ -2474,6 +2484,7 @@ func _select_building(b: Dictionary) -> void:
 		bridge.send_to_react("building_selected", {
 			"id": b.id, "name": def.name, "level": level,
 			"hp": hp, "max_hp": max_hp, "max_level": max_level,
+			"next_hp": next_hp,
 			"upgrade_cost": upgrade_cost,
 			"is_enemy": is_viewing_enemy,
 			"is_barracks": b.id in ["barracks", "barn"],

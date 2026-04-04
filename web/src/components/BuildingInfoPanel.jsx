@@ -62,9 +62,9 @@ function BuildingInfoPanel({ onOpenTroops }) {
   if (!building || building.is_barracks) return null;
 
   const isMaxLevel = building.level >= building.max_level;
-  
-  // Calculate mock upgrade stats based on 20% increase
-  const upgHealth = Math.floor(building.max_hp * 0.2);
+
+  // Real next-level HP from Godot building_defs (no more mock +20%)
+  const nextHp = building.next_hp || building.max_hp;
 
   const renderActions = () => (
     <div style={styles.actionsWrap}>
@@ -195,7 +195,7 @@ function BuildingInfoPanel({ onOpenTroops }) {
                 <span style={styles.statIcon}>❤️</span>
                 <span style={styles.statValue}>{building.max_hp}</span>
                 <span style={styles.statArrow}>▶</span>
-                <span style={styles.statUpgrade}>{building.max_hp + upgHealth}</span>
+                <span style={styles.statUpgrade}>{nextHp}</span>
               </div>
               <div style={styles.statRow}>
                 <span style={styles.statLabel}>Level</span>
