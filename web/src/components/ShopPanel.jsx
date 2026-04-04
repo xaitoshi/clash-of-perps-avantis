@@ -216,23 +216,20 @@ function ShopPanel({ onClose }) {
                 onClick={() => !disabled && handlePlacement(id)}
               >
                 {/* Count badge */}
-                {!status.locked && (
-                  <div style={{
-                    ...styles.countBadge,
-                    background: status.maxed ? '#E53935' : '#4CAF50',
-                  }}>
+                {!status.locked && status.maxCount > 0 && (
+                  <div style={styles.countBadge}>
                     {status.placed}/{status.maxCount}
                   </div>
                 )}
 
-                {/* Lock overlay */}
-                {status.locked && (
+                {status.locked ? (
                   <div style={styles.lockOverlay}>
                     <span style={styles.lockIcon}>🔒</span>
-                    <span style={styles.lockText}>TH {status.unlockAt}</span>
+                    <span style={styles.lockName}>{def.name}</span>
+                    <span style={styles.lockText}>Unlocks at TH {status.unlockAt}</span>
                   </div>
-                )}
-
+                ) : (
+                <>
                 <div style={styles.cardImgTop}>
                   <div style={styles.iconHighlight} />
                   {THUMBNAIL_MAP[id] ? (
@@ -241,7 +238,6 @@ function ShopPanel({ onClose }) {
                       style={{
                         ...styles.thumbnail,
                         transform: `scale(${THUMBNAIL_SCALE_MAP[id] || 1})`,
-                        ...(status.locked ? { filter: 'brightness(0.2) blur(2px)' } : {}),
                       }}
                       alt={def.name}
                     />
@@ -252,9 +248,8 @@ function ShopPanel({ onClose }) {
 
                 <div style={styles.cardInfo}>
                   <div style={styles.cardName}>{def.name}</div>
-                  <div style={styles.cardDesc}>{status.locked ? `Unlocks at TH ${status.unlockAt}` : status.maxed ? 'Max built' : DESC_MAP[id] || ''}</div>
+                  <div style={styles.cardDesc}>{status.maxed ? 'Max built' : DESC_MAP[id] || ''}</div>
 
-                  {!status.locked && (
                   <div style={styles.costContainer}>
                     <div style={styles.costRow}>
                       {Object.entries(def.cost || {}).map(([res, amount]) => (
@@ -273,8 +268,9 @@ function ShopPanel({ onClose }) {
                       )}
                     </div>
                   </div>
-                  )}
                 </div>
+                </>
+                )}
               </div>
               );
             })}
@@ -390,11 +386,8 @@ const styles = {
     pointerEvents: 'none',
   },
   countBadge: {
-    position: 'absolute', top: 6, right: 6, zIndex: 10,
-    borderRadius: 8, padding: '2px 8px',
-    fontSize: 12, fontWeight: 900, color: '#fff',
-    border: '2px solid rgba(0,0,0,0.3)',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+    position: 'absolute', top: 6, right: 8, zIndex: 10,
+    fontSize: 13, fontWeight: 900, color: '#5C3A21',
   },
   lockOverlay: {
     position: 'absolute', inset: 0, zIndex: 10,
@@ -402,10 +395,12 @@ const styles = {
     alignItems: 'center', justifyContent: 'center',
     gap: 4, borderRadius: 14,
   },
-  lockIcon: { fontSize: 28 },
+  lockIcon: { fontSize: 32 },
+  lockName: {
+    fontSize: 14, fontWeight: 900, color: '#5C3A21', marginTop: 4,
+  },
   lockText: {
-    fontSize: 12, fontWeight: 900, color: '#5C3A21',
-    textShadow: '0 1px 2px rgba(255,255,255,0.5)',
+    fontSize: 11, fontWeight: 700, color: '#a3906a',
   },
   cardInfo: {
     padding: '4px 8px 8px 8px',

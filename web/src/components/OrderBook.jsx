@@ -99,7 +99,7 @@ export default memo(OrderBook);
 const S = {
   container: {
     display: 'flex', flexDirection: 'column', height: '100%',
-    background: '#fdf8e7', fontFamily: '"Inter","Segoe UI",sans-serif',
+    background: '#fdf8e7',
     fontSize: 11, overflow: 'hidden',
   },
   header: {

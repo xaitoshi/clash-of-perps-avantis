@@ -88,7 +88,7 @@ export function GodotProvider({ children }) {
           setResourceCaps({ gold: data.gold || 5000, wood: data.wood || 5000, ore: data.ore || 5000 });
           break;
         case 'th_info':
-          setBuildingDefs(prev => ({ ...prev, th_level: data.level || 1, th_unlock: data.unlock || {}, th_max_counts: data.max_counts || {} }));
+          setBuildingDefs(prev => ({ ...prev, th_level: data.level || 1, th_unlock: data.unlock || {}, th_max_counts: data.max_counts || {}, th_progress: data.progress || 0, th_progress_total: data.progress_total || 0 }));
           break;
         case 'error':
           setError(data.message);

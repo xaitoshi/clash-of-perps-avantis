@@ -1692,7 +1692,37 @@ func _sync_react_buildings() -> void:
 			var limits: Array = TH_MAX_COUNT[key]
 			var idx: int = clampi(th_lvl - 1, 0, limits.size() - 1)
 			max_counts[key] = limits[idx]
-		bridge.send_to_react("th_info", {"level": th_lvl, "unlock": TH_UNLOCK, "max_counts": max_counts})
+		# Calculate TH upgrade progress — count each building and each level as a step
+		# e.g. TH1→2 needs mine×1 + sawmill×1 + barn×1 + port×1 = 4 buildings to BUILD (4 steps)
+		# Plus all max_count buildings at each level = more granular progress
+		var total_req: int = 0
+		var done_req: int = 0
+		# Count all building slots for current TH level
+		for btype in TH_MAX_COUNT:
+			if btype == "town_hall":
+				continue
+			var limits_arr: Array = TH_MAX_COUNT[btype]
+			var max_at_th: int = limits_arr[clampi(th_lvl - 1, 0, limits_arr.size() - 1)]
+			if max_at_th <= 0:
+				continue
+			# Each slot × each level up to th_lvl = steps
+			for slot_i in max_at_th:
+				for lvl_i in range(1, th_lvl + 1):
+					total_req += 1
+			# Count what player actually has
+			var placed_of_type: Array = []
+			for bs2 in _building_systems:
+				for b2 in bs2.placed_buildings:
+					if b2.get("id", "") == btype:
+						placed_of_type.append(b2.get("level", 1))
+			placed_of_type.sort()
+			placed_of_type.reverse()
+			for slot_i in max_at_th:
+				var blvl: int = placed_of_type[slot_i] if slot_i < placed_of_type.size() else 0
+				for lvl_i in range(1, th_lvl + 1):
+					if blvl >= lvl_i:
+						done_req += 1
+		bridge.send_to_react("th_info", {"level": th_lvl, "unlock": TH_UNLOCK, "max_counts": max_counts, "progress": done_req, "progress_total": total_req})
 
 func _load_troop_levels_from_server(server_troops: Array) -> void:
 	for t in server_troops:
@@ -3258,6 +3288,10 @@ func _refresh_port_panel() -> void:
 	)
 	port_vbox.add_child(close_btn)
 
+
+func _buy_ship() -> void:
+	var lvl: int = selected_building.get("level", 1)
+	_buy_ship_level(lvl)
 
 func _buy_ship_level(ship_lvl: int) -> void:
 	if resources.get("gold", 0) < SHIP_COST_GOLD:

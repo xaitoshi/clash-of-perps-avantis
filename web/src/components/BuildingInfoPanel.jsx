@@ -1,4 +1,4 @@
-import { memo, useCallback, useState, useEffect } from 'react';
+import { memo, useCallback, useState, useEffect, useRef } from 'react';
 import { useSend, useBuilding } from '../hooks/useGodot';
 
 import goldIcon from '../assets/resources/gold_bar.png';
@@ -47,7 +47,7 @@ function BuildingInfoPanel({ onOpenTroops }) {
   const { sendToGodot } = useSend();
   const { selectedBuilding: building } = useBuilding();
   
-  const [view, setView] = useState('ACTIONS'); // ACTIONS, INFO, UPGRADE
+  const [view, setView] = useState('ACTIONS'); // ACTIONS, INFO, UPGRADE, BUY_SHIP
 
   useEffect(() => {
     setView('ACTIONS');
@@ -59,27 +59,36 @@ function BuildingInfoPanel({ onOpenTroops }) {
     setView('ACTIONS'); // Close after upgrading
   }, [sendToGodot]);
 
-  if (!building || building.is_barracks) return null;
+  const handleBuyShip = useCallback(() => {
+    sendToGodot('buy_ship');
+    setView('ACTIONS'); // Close after upgrading
+  }, [sendToGodot]);
+
+  if (!building) return null;
 
   const isMaxLevel = building.level >= building.max_level;
-
-  // Real next-level HP from Godot building_defs (no more mock +20%)
-  const nextHp = building.next_hp || building.max_hp;
+  const upgHealth = Math.floor(building.max_hp * 0.2);
 
   const renderActions = () => (
     <div style={styles.actionsWrap}>
-      <button 
-        style={{ ...styles.circleBtn, ...styles.btnInfo }} 
-        onClick={() => setView('INFO')}
-        onMouseOver={e => e.currentTarget.style.transform = 'scale(1.05)'}
-        onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
-        onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
-        onMouseUp={e => e.currentTarget.style.transform = 'scale(1.05)'}
-      >
-        <span style={styles.iconLarge}>i</span>
-      </button>
+      <div style={styles.actionLabel}>
+        <span style={styles.actionName}>{building.name}</span>
+        <span style={styles.actionLevel}>Level {building.level}</span>
+      </div>
+      {(building.is_enemy || isMaxLevel) && (
+        <button
+          style={{ ...styles.circleBtn, ...styles.btnInfo }}
+          onClick={() => setView('INFO')}
+          onMouseOver={e => e.currentTarget.style.transform = 'scale(1.05)'}
+          onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+          onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
+          onMouseUp={e => e.currentTarget.style.transform = 'scale(1.05)'}
+        >
+          <span style={styles.iconLarge}>i</span>
+        </button>
+      )}
 
-      {building.id === 'barn' && !building.is_enemy && (
+      {(building.id === 'barn' || building.is_barracks) && !building.is_enemy && (
         <button 
           style={{ ...styles.circleBtn, ...styles.btnTroops }} 
           onClick={onOpenTroops}
@@ -100,7 +109,7 @@ function BuildingInfoPanel({ onOpenTroops }) {
       {building.id === 'port' && !building.is_enemy && !building.has_ship && (
         <button 
           style={{ ...styles.circleBtn, ...styles.btnTroops }} 
-          onClick={() => { sendToGodot('buy_ship'); setView('ACTIONS'); }}
+          onClick={() => setView('BUY_SHIP')}
           onMouseOver={e => e.currentTarget.style.transform = 'scale(1.05)'}
           onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
           onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
@@ -123,7 +132,7 @@ function BuildingInfoPanel({ onOpenTroops }) {
           onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
           onMouseUp={e => e.currentTarget.style.transform = 'scale(1.05)'}
         >
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+          <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="19" x2="12" y2="5"></line>
             <polyline points="5 12 12 5 19 12"></polyline>
           </svg>
@@ -132,115 +141,206 @@ function BuildingInfoPanel({ onOpenTroops }) {
     </div>
   );
 
-  const renderInfo = () => (
-    <div style={styles.modalOverlay} onClick={handleDeselect}>
-      <div style={styles.modalContainer} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.header}>
-          <div style={styles.headerTitle}>{building.name}</div>
-          <button style={styles.closeBtn} onClick={handleDeselect}>✕</button>
+  const renderModal = (title, level, leftContent, centerImg, rightContent, mainActionText, onMainAction) => (
+    <div style={styles.overlay} onClick={handleDeselect}>
+       <div style={styles.closeArea} onClick={handleDeselect}>
+         <div style={styles.navBottomBar}>
+            <span style={styles.navIcons}>Close ✕</span>
+         </div>
+      </div>
+      
+      <div style={styles.panel} onClick={e => e.stopPropagation()}>
+        <div style={styles.mainTitleArea}>
+            <div style={styles.titleLines}>
+              <div style={styles.horizontalLine}></div>
+              <div style={styles.diamond}></div>
+            </div>
+            <h1 style={styles.mainTitle}>{title}</h1>
+            <div style={styles.titleLines}>
+              <div style={styles.diamond}></div>
+              <div style={styles.horizontalLine}></div>
+            </div>
         </div>
         
-        <div style={styles.body}>
-          <div style={styles.bodyTop}>
-            <div style={styles.imageContainer}>
-              <div style={styles.imageBg} />
-              {THUMBNAIL_MAP[building.id] ? (
-                <img src={THUMBNAIL_MAP[building.id]} alt={building.name} style={styles.image} />
-              ) : (
-                <div style={styles.placeholderImage}>🏠</div>
-              )}
-            </div>
-
-            <div style={styles.statsContainer}>
-              <div style={styles.statLevel}>Level {building.level}</div>
-              
-              <div style={styles.statRow}>
-                <span style={styles.statLabel}>Health</span>
-                <span style={styles.statIcon}>❤️</span>
-                <span style={styles.statValue}>{building.max_hp}</span>
-              </div>
-            </div>
+        <div style={{ ...styles.contentLayout, marginTop: 40 }}>
+          
+          {/* Left Column */}
+          <div style={styles.leftColumn}>
+             <h3 style={styles.sectionTitle}>Stats</h3>
+             <div style={styles.statsContainer}>
+                {leftContent}
+             </div>
+             
+             {/* Description */}
+             <div style={{marginTop: 'auto', padding: 16, background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)'}}>
+                <span style={{color: '#94a3b8', fontSize: 13, lineHeight: 1.5}}>
+                  {DESC_MAP[building.id] || "A critical component of your island outposts."}
+                </span>
+             </div>
           </div>
 
-          <div style={styles.description}>
-            {DESC_MAP[building.id] || "This is a key building in your village."}
+          {/* Center Column */}
+          <div style={styles.centerColumn}>
+             <div style={styles.characterWrapper}>
+               
+               {level && (
+                 <div style={styles.upgradeBadge}>
+                   <div style={styles.badgeBigPart}>
+                     <span style={styles.badgeLvlText}>Lvl</span>
+                     <span style={styles.badgeLvlNumber}>{level}</span>
+                   </div>
+                 </div>
+               )}
+
+               <div style={styles.characterSphere}>
+                  <div style={styles.sphereGlow}></div>
+                  <div style={styles.sphereCore}></div>
+                  <div style={styles.bigSoftGlow}></div>
+                  {centerImg}
+               </div>
+             </div>
+          </div>
+
+          {/* Right Column */}
+          <div style={styles.rightColumn}>
+             {rightContent}
+             
+             {mainActionText && (
+               <div style={{ marginTop: 'auto', marginBottom: 20 }}>
+                 <button 
+                   style={styles.actionBtn}
+                   onClick={onMainAction}
+                   onMouseOver={e => e.currentTarget.style.transform = 'scale(1.02)'}
+                   onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+                   onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
+                   onMouseUp={e => e.currentTarget.style.transform = 'scale(1.02)'}
+                 >
+                    {mainActionText}
+                 </button>
+               </div>
+             )}
           </div>
         </div>
+      
       </div>
     </div>
   );
 
-  const renderUpgrade = () => (
-    <div style={styles.modalOverlay} onClick={handleDeselect}>
-      <div style={styles.modalContainer} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.header}>
-          <div style={styles.headerTitle}>UPGRADE {building.name} TO LEVEL {building.level + 1}</div>
-          <button style={styles.closeBtn} onClick={handleDeselect}>✕</button>
-        </div>
-        
-        <div style={styles.body}>
-          <div style={styles.bodyTop}>
-            <div style={styles.imageContainer}>
-              <div style={styles.imageBg} />
-              {THUMBNAIL_MAP[building.id] ? (
-                <img src={THUMBNAIL_MAP[building.id]} alt={building.name} style={styles.image} />
-              ) : (
-                <div style={styles.placeholderImage}>🏠</div>
-              )}
-            </div>
-
-            <div style={styles.statsContainer}>
-              <div style={styles.statRow}>
-                <span style={styles.statLabel}>Health</span>
-                <span style={styles.statIcon}>❤️</span>
-                <span style={styles.statValue}>{building.max_hp}</span>
-                <span style={styles.statArrow}>▶</span>
-                <span style={styles.statUpgrade}>{nextHp}</span>
-              </div>
-              <div style={styles.statRow}>
-                <span style={styles.statLabel}>Level</span>
-                <span style={styles.statIcon}>⭐</span>
-                <span style={styles.statValue}>{building.level}</span>
-                <span style={styles.statArrow}>▶</span>
-                <span style={styles.statUpgrade}>{building.level + 1}</span>
-              </div>
-            </div>
-          </div>
-
-          <div style={styles.upgradeBottom}>
-            <div style={styles.costArea}>
-              <div style={styles.costDesc}>Upgrade cost</div>
-              <div style={styles.costButtons}>
-                {Object.entries(building.upgrade_cost || {}).map(([res, amount]) => (
-                  <div key={res} style={styles.costBadge}>
-                    <img src={ICONS[res]} alt={res} style={styles.costIcon} />
-                    <span style={styles.costAmount}>{amount.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <button 
-                style={styles.bigUpgradeBtn} 
-                onClick={handleUpgrade} 
-                onMouseOver={e => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                onMouseOut={e => { e.currentTarget.style.filter = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                onMouseDown={e => e.currentTarget.style.transform = 'translateY(4px)'}
-                onMouseUp={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-            >
-              <div style={styles.bigUpgradeText}>Upgrade</div>
-            </button>
-          </div>
-        </div>
+  const StatBox = ({ label, current, upgradeTo }) => (
+    <div style={styles.statBox}>
+      <div style={styles.statBoxLabel}>{label}</div>
+      <div style={styles.statBoxValues}>
+        <span style={styles.statCurrent}>{current}</span>
+        {upgradeTo && (
+           <>
+             <span style={styles.statArrow}>→</span>
+             <span style={styles.statUpgraded}>{upgradeTo}</span>
+           </>
+        )}
       </div>
     </div>
   );
+
+  const ResourceReqs = ({ costObj, title }) => (
+    <>
+      <h3 style={styles.sectionTitle}>{title || "Resource Cost"}</h3>
+      <div style={styles.reqGrid}>
+        {costObj && Object.keys(costObj).length > 0 ? Object.entries(costObj).map(([res, amt]) => {
+          if (amt === 0) return null;
+          return (
+            <div key={res} style={styles.reqBox}>
+              <img src={ICONS[res] || goldIcon} style={styles.reqIconImg} alt={res} />
+              <span style={styles.reqAmt}>{amt.toLocaleString()}</span>
+            </div>
+          );
+        }) : (
+          <div style={styles.reqBoxMax}>
+            <span style={{color: '#94a3b8', fontSize: 13}}>No Requirements</span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  const buildingImg = THUMBNAIL_MAP[building.id] ? (
+    <img 
+      src={THUMBNAIL_MAP[building.id]} 
+      alt={building.name} 
+      style={styles.characterImg} 
+    />
+  ) : (
+    <div style={{...styles.characterImg, display:'flex', alignItems:'center', justifyContent:'center', fontSize: 150}}>🏠</div>
+  );
+
+  const renderInfo = () => {
+    const leftContent = (
+      <>
+        <StatBox label="Health" current={building.max_hp} />
+        <StatBox label="Level" current={building.level} />
+      </>
+    );
+    const rightContent = (
+      <>
+         <h3 style={styles.sectionTitle}>Status</h3>
+         <div style={{...styles.reqBoxMax, padding: 16, background: 'rgba(255,255,255,0.02)', borderRadius: 16}}>
+           <span style={{color: '#f8fafc', fontSize: 16, fontWeight: 700}}>Functional</span>
+         </div>
+      </>
+    );
+    return renderModal(building.name.toUpperCase(), building.level, leftContent, buildingImg, rightContent, null, null);
+  };
+
+  const renderUpgrade = () => {
+    const leftContent = (
+      <>
+        <StatBox label="Health" current={building.max_hp} upgradeTo={building.max_hp + upgHealth} />
+        <StatBox label="Level" current={building.level} upgradeTo={building.level + 1} />
+      </>
+    );
+    const rightContent = <ResourceReqs costObj={building.upgrade_cost} title="Upgrade Cost" />;
+
+    return renderModal(
+      `UPGRADE ${building.name.toUpperCase()}`, 
+      building.level, 
+      leftContent, 
+      buildingImg, 
+      rightContent, 
+      "Upgrade Now", 
+      handleUpgrade
+    );
+  };
+
+  const renderBuyShip = () => {
+    const shipCost = building.ship_cost || { gold: 1500, wood: 1000 };
+    const leftContent = (
+      <>
+        <StatBox label="Troop Capacity" current={0} upgradeTo={10} />
+        <StatBox label="Barrage / Artillery" current={"None"} upgradeTo={250} />
+      </>
+    );
+    const rightContent = <ResourceReqs costObj={shipCost} title="Unlock Cost" />;
+    
+    const shipImg = THUMBNAIL_MAP['port'] || (
+       <div style={{...styles.characterImg, display:'flex', alignItems:'center', justifyContent:'center', fontSize: 150}}>🚢</div>
+    );
+
+    return renderModal(
+      "UNLOCK GUNBOAT", 
+      null, 
+      leftContent, 
+      shipImg, 
+      rightContent, 
+      "Unlock Ship", 
+      handleBuyShip
+    );
+  };
 
   return (
     <>
       {view === 'ACTIONS' && renderActions()}
       {view === 'INFO' && renderInfo()}
       {view === 'UPGRADE' && renderUpgrade()}
+      {view === 'BUY_SHIP' && renderBuyShip()}
     </>
   );
 }
@@ -249,6 +349,31 @@ export default memo(BuildingInfoPanel);
 
 const styles = {
   // ACTIONS VIEW
+  actionLabel: {
+    position: 'absolute',
+    bottom: '100%',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    marginBottom: 8,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    pointerEvents: 'none',
+  },
+  actionName: {
+    fontSize: 18,
+    fontWeight: 900,
+    color: '#fff',
+    textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 4px rgba(0,0,0,0.8)',
+    whiteSpace: 'nowrap',
+  },
+  actionLevel: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: '#FFD700',
+    textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
+    whiteSpace: 'nowrap',
+  },
   actionsWrap: {
     position: 'fixed',
     bottom: 80,
@@ -257,7 +382,7 @@ const styles = {
     display: 'flex',
     gap: 32,
     zIndex: 10,
-    pointerEvents: 'none', // letting clicks pass through the gap
+    pointerEvents: 'none',
   },
   circleBtn: {
     width: 68,
@@ -275,11 +400,11 @@ const styles = {
     transition: 'transform 0.1s cubic-bezier(0.4, 0, 0.2, 1)',
   },
   btnInfo: {
-    background: 'linear-gradient(180deg, #44a8ff, #1976d2)',
+    background: 'linear-gradient(180deg, #4aa6ef, #1e70b9)',
     textShadow: '0 2px 2px rgba(0,0,0,0.4)',
   },
   btnUpgrade: {
-    background: 'linear-gradient(180deg, #6fdc73, #388e3c)',
+    background: 'linear-gradient(180deg, #7ad23f, #479a1f)',
     textShadow: '0 2px 2px rgba(0,0,0,0.4)',
   },
   btnTroops: {
@@ -287,226 +412,308 @@ const styles = {
     textShadow: '0 2px 2px rgba(0,0,0,0.4)',
   },
   iconLarge: {
-    fontFamily: '"Times New Roman", Times, serif',
     fontSize: 48,
     fontWeight: 'bold',
     fontStyle: 'italic',
     lineHeight: 1,
   },
 
-  // MODAL VIEW
-  modalOverlay: {
+  // BARRACKS / DARK OVERLAY STYLE
+  overlay: {
     position: 'fixed',
     inset: 0,
-    background: 'rgba(0,0,0,0.3)',
+    background: 'rgba(12, 12, 28, 0.85)',
+    backdropFilter: 'blur(10px)',
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 20,
     pointerEvents: 'all',
   },
-  modalContainer: {
-    width: 440,
-    maxWidth: '90%',
-    display: 'flex',
-    flexDirection: 'column',
-    boxShadow: '0 24px 48px rgba(0,0,0,0.6)',
-    borderRadius: 8,
-    border: '2px solid rgba(0,0,0,0.8)',
-    overflow: 'hidden',
+  closeArea: {
+    position: 'absolute',
+    top: 20,
+    right: 40,
+    cursor: 'pointer',
+    color: '#64748b',
+    zIndex: 30,
   },
-  header: {
-    background: 'linear-gradient(180deg, #5fb4d1, #2b6c8a)',
-    padding: '16px',
+  navBottomBar: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 16,
+    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    paddingBottom: 8,
+  },
+  navIcons: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#94a3b8',
+    transition: 'color 0.2s',
+  },
+  panel: {
+    background: 'radial-gradient(ellipse at center top, #16223F 0%, #0B1121 60%, #03050B 100%)',
+    borderRadius: 32,
+    border: '1px solid rgba(255, 255, 255, 0.05)',
+    width: 1000,
+    height: 600,
+    maxWidth: '95vw',
+    maxHeight: '90vh',
+    boxShadow: '0 40px 80px rgba(0,0,0,0.8), inset 0 2px 0 rgba(255,255,255,0.05)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '40px 0',
+    overflow: 'hidden',
     position: 'relative',
-    borderBottom: '4px solid #1c4b63',
+    cursor: 'default',
   },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 22,
+  mainTitleArea: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 24,
+    marginBottom: 12,
+  },
+  titleLines: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    opacity: 0.3,
+  },
+  horizontalLine: {
+    width: 80,
+    height: 1,
+    background: 'rgba(70, 184, 232, 0.3)',
+  },
+  diamond: {
+    width: 6,
+    height: 6,
+    background: 'rgba(70, 184, 232, 0.5)',
+    transform: 'rotate(45deg)',
+  },
+  mainTitle: {
+    margin: 0,
+    fontSize: 36,
     fontWeight: 900,
-    fontFamily: '"Impact", "Arial Black", sans-serif',
-    fontStyle: 'italic',
-    letterSpacing: '1px',
-    textShadow: '2px 2px 0 #1b495d, -1px -1px 0 #1b495d, 1px -1px 0 #1b495d, -1px 1px 0 #1b495d, 0 4px 4px rgba(0,0,0,0.6)',
-    textTransform: 'uppercase',
+    color: '#ffffff',
+    letterSpacing: -1,
+    textShadow: '0 4px 20px rgba(255,255,255,0.2)',
   },
-  closeBtn: {
-    position: 'absolute',
-    right: 12,
-    fontSize: 28,
-    fontWeight: 900,
-    color: '#a1cce0',
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    textShadow: '0 -1px 0 rgba(0,0,0,0.4)',
-    outline: 'none',
-    lineHeight: 1,
+  contentLayout: {
+    display: 'flex',
+    width: '100%',
+    padding: '0 40px',
+    justifyContent: 'space-between',
+    alignItems: 'stretch',
+    flex: 1,
   },
-  body: {
-    background: '#eedebe',
-    padding: 24,
+  leftColumn: {
+    width: '280px',
     display: 'flex',
     flexDirection: 'column',
     gap: 20,
-    borderTop: '2px solid #fff',
-  },
-  bodyTop: {
-    display: 'flex',
-    gap: 24,
-    alignItems: 'center',
-  },
-  imageContainer: {
+    marginTop: 20,
     position: 'relative',
-    width: 140,
-    height: 140,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    zIndex: 10,
   },
-  imageBg: {
-    position: 'absolute',
-    inset: 10,
-    background: 'rgba(0,0,0,0.1)',
-    borderRadius: '50%',
-    filter: 'blur(10px)',
+  sectionTitle: {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 800,
+    color: '#e2e8f0',
+    marginBottom: 8,
   },
-  image: {
-    position: 'relative',
-    zIndex: 2,
-    width: '100%',
-    height: '100%',
-    objectFit: 'contain',
-    filter: 'drop-shadow(0 10px 10px rgba(0,0,0,0.4))',
-  },
-  placeholderImage: {
-    position: 'relative',
-    zIndex: 2,
-    fontSize: 64,
-  },
-
   statsContainer: {
-    flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: 8,
+    gap: 12,
   },
-  statLevel: {
-    fontSize: 18,
-    fontWeight: 900,
-    color: '#6e5436',
-    marginBottom: 8,
+  statBox: {
+    background: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 16,
+    padding: '12px 16px',
+    border: '1px solid rgba(255, 255, 255, 0.03)',
+    boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.02), 0 4px 8px rgba(0,0,0,0.2)',
+  },
+  statBoxLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: '#94a3b8',
     textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 4,
   },
-  statRow: {
+  statBoxValues: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'baseline',
     gap: 8,
-    fontSize: 17,
-    fontWeight: 900,
-    color: '#444',
   },
-  statLabel: {
-    width: 70,
-    textAlign: 'left',
-    color: '#8b7054',
-  },
-  statIcon: {
-    width: 24,
-    textAlign: 'center',
-  },
-  statValue: {
-    color: '#5a4225',
+  statCurrent: {
+    fontSize: 24,
+    fontWeight: 800,
+    color: '#f8fafc',
   },
   statArrow: {
-    color: '#8b7054',
-    fontSize: 14,
-    margin: '0 4px',
+    fontSize: 16,
+    color: '#64748b',
   },
-  statUpgrade: {
-    color: '#4CAF50',
-    textShadow: '0 1px 1px rgba(255,255,255,0.8)',
-  },
-
-  description: {
-    textAlign: 'center',
-    fontSize: 17,
+  statUpgraded: {
+    fontSize: 24,
     fontWeight: 900,
-    color: '#6e5436',
-    paddingTop: 16,
-    borderTop: '2px dashed rgba(110,84,54, 0.3)',
-    textShadow: '0 1px 1px #fff',
+    color: '#34d399',
+    textShadow: '0 0 16px rgba(52, 211, 153, 0.4)',
   },
 
-  upgradeBottom: {
+  centerColumn: {
+    flex: 1,
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    borderTop: '2px dashed rgba(110,84,54, 0.3)',
-    paddingTop: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
   },
-  costArea: {
+  characterWrapper: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
-    gap: 8,
-  },
-  costDesc: {
-    fontSize: 14,
-    fontWeight: 900,
-    color: '#6e5436',
-    textTransform: 'uppercase',
-  },
-  costButtons: {
-    display: 'flex',
-    gap: 8,
-  },
-  costBadge: {
-    background: '#8c8376',
-    borderRadius: 6,
-    padding: '6px 12px 6px 8px',
-    display: 'flex',
     alignItems: 'center',
-    gap: 8,
-    border: '2px solid #5a544c',
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
   },
-  costIcon: {
-    width: 20,
-    height: 20,
-    objectFit: 'contain',
-  },
-  costAmount: {
-    color: '#fff',
-    fontWeight: 900,
-    fontSize: 16,
-    textShadow: '0 1px 1px #000',
-  },
-
-  bigUpgradeBtn: {
-    background: '#7bc944',
-    border: '3px solid #f8f1de',
-    borderRadius: 8,
-    padding: '14px 28px',
-    cursor: 'pointer',
-    boxShadow: '0 6px 0 #4a8a25, 0 8px 12px rgba(0,0,0,0.4)',
-    outline: 'none',
-    minWidth: 150,
+  characterSphere: {
+    width: 240,
+    height: 240,
+    position: 'relative',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), filter 0.1s',
   },
-  bigUpgradeText: {
+  sphereCore: {
+    width: 140,
+    height: 140,
+    borderRadius: '50%',
+    background: 'radial-gradient(circle at 30% 30%, #46b8e8 0%, #2a9ccb 40%, #15516b 100%)',
+    boxShadow: 'inset 0 10px 30px rgba(255,255,255,0.2), 0 20px 40px rgba(0,0,0,0.5)',
+    zIndex: 2,
+  },
+  sphereGlow: {
+    position: 'absolute',
+    inset: -60,
+    borderRadius: '50%',
+    background: 'conic-gradient(from 0deg, transparent, rgba(70, 184, 232, 0.3), transparent)',
+    animation: 'spin 12s linear infinite',
+    zIndex: 1,
+  },
+  bigSoftGlow: {
+    position: 'absolute',
+    width: 600,
+    height: 600,
+    borderRadius: '50%',
+    background: 'radial-gradient(circle, rgba(70, 184, 232, 0.15) 0%, transparent 60%)',
+    zIndex: 1,
+  },
+  characterImg: {
+    position: 'absolute',
+    width: 350,
+    height: 350,
+    objectFit: 'contain',
+    zIndex: 5,
+    pointerEvents: 'none',
+    filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.6))',
+  },
+  upgradeBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 20,
+    background: 'linear-gradient(135deg, #FBC02D 0%, #F57F17 100%)',
+    borderRadius: 24,
+    padding: '4px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    boxShadow: '0 8px 24px rgba(245, 127, 23, 0.4), inset 0 2px 0 rgba(255,255,255,0.3)',
+    zIndex: 10,
+  },
+  badgeBigPart: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 4,
+    marginBottom: 2,
+  },
+  badgeLvlText: {
+    fontSize: 14,
+    fontWeight: 800,
     color: '#fff',
-    fontWeight: 900,
-    fontSize: 22,
-    textTransform: 'uppercase',
-    textShadow: '0 2px 2px rgba(0,0,0,0.4)',
-    letterSpacing: '1px',
-    fontStyle: 'italic',
   },
+  badgeLvlNumber: {
+    fontSize: 32,
+    fontWeight: 900,
+    color: '#cbd5e1',
+  },
+
+  rightColumn: {
+    width: '280px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 20,
+    marginTop: 20,
+    position: 'relative',
+    zIndex: 10,
+  },
+  reqGrid: {
+    display: 'flex',
+    justifyContent: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  reqBox: {
+    background: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid rgba(255, 255, 255, 0.05)',
+    borderRadius: 24,
+    width: 110,
+    height: 110,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    boxShadow: '0 8px 16px rgba(0,0,0,0.2), inset 0 2px 4px rgba(255,255,255,0.02)',
+    transition: 'transform 0.2s, background 0.2s',
+  },
+  reqBoxMax: {
+    gridColumn: '1 / -1',
+    display: 'flex',
+    justifyContent: 'flex-start',
+  },
+  reqIconImg: {
+    width: 56,
+    height: 56,
+    objectFit: 'contain',
+    filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.5))',
+    marginBottom: 4,
+  },
+  reqAmt: {
+    fontSize: 20,
+    fontWeight: 900,
+    color: '#f8fafc',
+    textShadow: '0 2px 2px rgba(0,0,0,0.5)',
+  },
+  actionBtn: {
+    background: 'linear-gradient(180deg, #FBC02D 0%, #F57F17 100%)',
+    border: 'none',
+    boxShadow: '0 8px 20px rgba(245, 127, 23, 0.3), inset 0 2px 0 rgba(255,255,255,0.4)',
+    borderRadius: 20,
+    padding: '16px 24px',
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 900,
+    cursor: 'pointer',
+    width: '100%',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    textShadow: '0 2px 2px rgba(0,0,0,0.3)',
+    transition: 'transform 0.1s',
+  }
 };

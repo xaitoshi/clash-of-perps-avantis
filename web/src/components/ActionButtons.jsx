@@ -199,15 +199,23 @@ function ActionButtons() {
   const resources = useResources();
   const { buildingDefs } = useBuilding();
 
-  // Count how many building types the player can afford to build
+  // Count how many buildings the player can actually build right now
   const affordableCount = useMemo(() => {
     const defs = buildingDefs?.buildings || {};
     const placed = buildingDefs?.placed_counts || {};
+    const thMaxCounts = buildingDefs?.th_max_counts || {};
+    const thUnlock = buildingDefs?.th_unlock || {};
+    const thLevel = buildingDefs?.th_level || 1;
     let count = 0;
     for (const [id, def] of Object.entries(defs)) {
       if (id === 'barracks' || id === 'flag') continue;
-      const maxCount = def.max_count || 0;
-      if (maxCount > 0 && (placed[id] || 0) >= maxCount) continue;
+      // Check TH unlock
+      const unlockAt = thUnlock[id];
+      if (unlockAt && thLevel < unlockAt) continue;
+      // Check TH-based max count
+      const maxCount = thMaxCounts[id] ?? def.max_count ?? 99;
+      if ((placed[id] || 0) >= maxCount) continue;
+      // Check resources
       const cost = def.cost || {};
       if ((resources.gold || 0) >= (cost.gold || 0) &&
           (resources.wood || 0) >= (cost.wood || 0) &&

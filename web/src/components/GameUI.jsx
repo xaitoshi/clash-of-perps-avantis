@@ -42,12 +42,7 @@ export default function GameUI() {
   const handleDeselectBuilding = useCallback(() => sendToGodot('deselect_building'), [sendToGodot]);
   const handleOpenTroops = useCallback(() => setShowTroops(true), []);
 
-  const barnAsTroops = useMemo(() => {
-    if (showTroops && selectedBuilding?.id === 'barn') {
-      return { ...selectedBuilding, is_barracks: true };
-    }
-    return null;
-  }, [showTroops, selectedBuilding]);
+
 
   if (!ready) return null;
 
@@ -83,19 +78,14 @@ export default function GameUI() {
         <ProfileModal onClose={() => setShowProfile(false)} />
       )}
 
-      {barnAsTroops ? (
+      {showTroops && selectedBuilding && (selectedBuilding.id === 'barn' || selectedBuilding.is_barracks) && !selectedBuilding.is_enemy ? (
         <BarracksPanel
-          building={barnAsTroops}
+          building={{ ...selectedBuilding, is_barracks: true }}
           onClose={handleCloseTroops}
         />
-      ) : selectedBuilding && selectedBuilding.is_barracks && !selectedBuilding.is_enemy ? (
-        <BarracksPanel
-          building={selectedBuilding}
-          onClose={handleDeselectBuilding}
-        />
-      ) : (
+      ) : selectedBuilding ? (
         <BuildingInfoPanel onOpenTroops={handleOpenTroops} />
-      )}
+      ) : null}
     </div>
   );
 }

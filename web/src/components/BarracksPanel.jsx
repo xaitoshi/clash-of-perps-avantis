@@ -396,7 +396,6 @@ const styles = {
     justifyContent: 'center',
     zIndex: 20,
     pointerEvents: 'all',
-    fontFamily: '"Inter", "Segoe UI", sans-serif',
   },
   closeArea: {
     position: 'absolute',
