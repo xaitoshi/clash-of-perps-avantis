@@ -118,11 +118,48 @@ func _move_to_board(delta: float) -> void:
 		return
 	var dir = diff.normalized()
 	var board_speed = move_speed * 1.5  # run faster to port
-	global_position += dir * board_speed * delta
-	global_position.y = _grid_y
-	# Face direction
-	if dir.length_squared() > 0.001:
-		look_at(global_position - dir, Vector3.UP)
+
+	# Separation from other home troops
+	var sep = Vector3.ZERO
+	for other in get_tree().get_nodes_in_group("home_troops"):
+		if other == self or not is_instance_valid(other):
+			continue
+		var to_other = global_position - other.global_position
+		to_other.y = 0
+		var d = to_other.length()
+		if d < separation_radius and d > 0.001:
+			sep += to_other.normalized() * (separation_radius - d) / separation_radius
+
+	# Building avoidance — steer around buildings between barracks and port
+	for bs_node in get_tree().get_nodes_in_group("building_systems"):
+		if not "placed_buildings" in bs_node:
+			continue
+		for b in bs_node.placed_buildings:
+			var bnode = b.get("node")
+			if not is_instance_valid(bnode):
+				continue
+			var to_bldg = global_position - bnode.global_position
+			to_bldg.y = 0
+			var bd = to_bldg.length()
+			if bd < building_avoid_radius and bd > 0.001:
+				sep += to_bldg.normalized() * (building_avoid_radius - bd) / building_avoid_radius * 2.0
+
+	var velocity = dir * board_speed + sep * separation_force
+	velocity.y = 0
+	var new_pos = global_position + velocity * delta
+	new_pos.x = clampf(new_pos.x, _grid_center.x - _grid_half_x, _grid_center.x + _grid_half_x)
+	new_pos.z = clampf(new_pos.z, _grid_center.z - _grid_half_z, _grid_center.z + _grid_half_z)
+	new_pos.y = _grid_y
+	global_position = new_pos
+
+	# Smooth rotation toward movement direction
+	var face_dir = velocity.normalized()
+	if face_dir.length_squared() > 0.001:
+		var face_target = global_position - face_dir
+		face_target.y = global_position.y
+		var cur_basis = global_transform.basis
+		var look_tr = Transform3D(Basis.IDENTITY, global_position).looking_at(face_target, Vector3.UP)
+		global_transform.basis = cur_basis.slerp(look_tr.basis, minf(delta * 8.0, 1.0))
 
 
 func _move_toward_target(delta: float) -> void:
@@ -255,6 +292,12 @@ func _setup_animations() -> void:
 						var dup = anim.duplicate()
 						if anim_name.begins_with("Running") or anim_name.begins_with("Walking") or anim_name.begins_with("Idle") or anim_name == "Cheering":
 							dup.loop_mode = Animation.LOOP_LINEAR
+						# Strip root-level scale/position tracks so
+						# animations don't override the spawn scale
+						for ti in range(dup.get_track_count() - 1, -1, -1):
+							var path: String = str(dup.track_get_path(ti))
+							if path == ".:scale" or path == ":scale" or path == ".:position" or path == ":position":
+								dup.remove_track(ti)
 						lib.add_animation(anim_name, dup)
 			container.free()
 		BaseTroop._anim_lib_cache[cache_key] = lib

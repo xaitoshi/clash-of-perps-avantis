@@ -257,6 +257,12 @@ func _setup_animations() -> void:
 						var dup: Animation = anim.duplicate()
 						if anim_name.begins_with("Running") or anim_name.begins_with("Walking") or anim_name.begins_with("Idle") or anim_name == "Cheering":
 							dup.loop_mode = Animation.LOOP_LINEAR
+						# Strip root-level scale/position tracks so
+						# animations don't override the spawn scale
+						for ti in range(dup.get_track_count() - 1, -1, -1):
+							var path: String = str(dup.track_get_path(ti))
+							if path == ".:scale" or path == ":scale" or path == ".:position" or path == ":position":
+								dup.remove_track(ti)
 						lib.add_animation(anim_name, dup)
 			instance.free()
 		_anim_lib_cache[cache_key] = lib

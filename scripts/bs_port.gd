@@ -150,6 +150,42 @@ func _get_all_port_ships() -> Array:
 						ships.append(ship)
 	return ships
 
+## Returns {pos: Vector3, port_node: Node3D} of the nearest port whose ship has
+## free troop slots. Returns {} if none found.
+func _find_port_with_free_slot(from_pos: Vector3) -> Dictionary:
+	var best: Dictionary = {}
+	var best_dist: float = INF
+	for bsys in bs.get_tree().get_nodes_in_group("building_systems"):
+		for b in bsys.placed_buildings:
+			if b.get("id") == "port":
+				var pnode = b.get("node", null)
+				if not is_instance_valid(pnode) or not pnode.has_meta("has_ship"):
+					continue
+				var ship_level: int = pnode.get_meta("ship_level", 1)
+				var ship_troops: Array = pnode.get_meta("ship_troops", [])
+				if ship_troops.size() >= ship_level:
+					continue  # full
+				var d: float = from_pos.distance_to(pnode.global_position)
+				if d < best_dist:
+					best_dist = d
+					best = {"pos": pnode.global_position, "port_node": pnode}
+	return best
+
+
+## Returns the number of free troop slots across all ships.
+func _get_free_ship_slots() -> int:
+	var free: int = 0
+	for bsys in bs.get_tree().get_nodes_in_group("building_systems"):
+		for b in bsys.placed_buildings:
+			if b.get("id") == "port":
+				var pnode = b.get("node", null)
+				if is_instance_valid(pnode) and pnode.has_meta("has_ship"):
+					var ship_level: int = pnode.get_meta("ship_level", 1)
+					var ship_troops: Array = pnode.get_meta("ship_troops", [])
+					free += ship_level - ship_troops.size()
+	return free
+
+
 ## Returns the global position of the nearest port that has a ship, measured
 ## from from_pos. Returns Vector3.INF if no port with a ship is found.
 func _find_nearest_port_with_ship(from_pos: Vector3) -> Vector3:

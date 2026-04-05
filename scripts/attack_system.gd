@@ -487,10 +487,10 @@ func _deploy_troops_from_ship(ship_pos: Vector3, sail_dir: Vector3, ship_idx: in
 			var troop = model_res.instantiate()
 			troop.set_script(script_res)
 			troop.name = "Troop_%d" % (randi() % 99999)
-			var s = troop_scale
-			troop.scale = Vector3(s, s, s)
 
 			get_tree().current_scene.add_child(troop)
+			var s = troop_scale
+			troop.scale = Vector3(s, s, s)
 
 			var offset = lat_dir * (randf_range(-0.5, 0.5)) * 0.15
 			troop.global_position = BaseTroop._clamp_to_island(spawn_pos + offset)

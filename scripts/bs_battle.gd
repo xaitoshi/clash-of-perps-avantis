@@ -44,6 +44,42 @@ var _had_troops: bool = false
 var _skeleton_respawn_timer: float = 0.0
 
 # ---------------------------------------------------------------------------
+# Cleanup helpers
+# ---------------------------------------------------------------------------
+
+## Frees all home troops and port ships immediately — called when switching
+## to enemy island so they don't linger in the background.
+## MainShipBase and MainShipAttack are never touched.
+func _free_home_troops_and_ships() -> void:
+	# Free home troops
+	for ht in bs._home_troops:
+		var troop = ht.get("node")
+		if is_instance_valid(troop):
+			troop.queue_free()
+	bs._home_troops.clear()
+	# Free port ship nodes (not MainShipBase/MainShipAttack)
+	for data in bs._saved_port_ships:
+		var bsys = data.get("bs")
+		var gp = data.get("grid_pos")
+		if not bsys or not is_instance_valid(bsys):
+			continue
+		for b2 in bsys.placed_buildings:
+			if b2.get("id") == "port" and b2.grid_pos == gp:
+				var pnode = b2.get("node", null)
+				if is_instance_valid(pnode) and pnode.has_meta("ship_node"):
+					var ship = pnode.get_meta("ship_node")
+					if is_instance_valid(ship):
+						ship.queue_free()
+				break
+	# Free saved ship transforms (port ships that sailed away)
+	for data in bs._saved_ship_transforms:
+		var ship = data.get("node")
+		if is_instance_valid(ship) and ship != bs._ship_attack_node and ship != bs._ship_base_node:
+			ship.queue_free()
+	bs._saved_ship_transforms.clear()
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -207,9 +243,8 @@ func _switch_to_enemy_island() -> void:
 		bs._ship_attack_node.visible = true
 	if bs._ship_base_node:
 		bs._ship_base_node.visible = false
-	for ht in bs._home_troops:
-		if is_instance_valid(ht.get("node")):
-			ht.node.visible = false
+	# Free home troops and port ships immediately — consumed by the attack
+	_free_home_troops_and_ships()
 	for bsys in bs._building_systems:
 		bsys._production._hide_all_collect_icons()
 		bsys._battle.is_viewing_enemy = true
@@ -303,6 +338,8 @@ func _switch_to_enemy_island_after_sail() -> void:
 	})
 	if bs._ship_attack_node:
 		bs._ship_attack_node.visible = true
+	# Free home troops and port ships immediately — they are consumed by the attack
+	_free_home_troops_and_ships()
 	for bsys in bs.get_tree().get_nodes_in_group("building_systems"):
 		bsys._production._hide_all_collect_icons()
 		bsys._battle.is_viewing_enemy = true
@@ -443,42 +480,16 @@ func _return_home() -> void:
 	await cloud.reveal_finished
 	if bridge:
 		bridge.send_to_react("cloud_transition", {"visible": false})
-	for data in bs._saved_ship_transforms:
-		var ship = data.get("node")
-		if is_instance_valid(ship):
-			ship.global_position = data.pos
-			ship.rotation.y = data.rot_y
-			ship.visible = true
+	# Ships and troops were already freed in _free_home_troops_and_ships
+	# when we switched to enemy island. Just clean up remaining state.
 	bs._saved_ship_transforms.clear()
+	bs._saved_port_ships.clear()
+	bs._port.owned_ships = 0
+	bs._home_troops.clear()
 	if bs._ship_attack_node:
 		bs._ship_attack_node.visible = false
 	if bs._ship_base_node:
 		bs._ship_base_node.visible = true
-	for data in bs._saved_port_ships:
-		var bsys = data.get("bs")
-		var gp = data.get("grid_pos")
-		if bsys and is_instance_valid(bsys):
-			for b2 in bsys.placed_buildings:
-				if b2.get("id") == "port" and b2.grid_pos == gp:
-					var pnode = b2.get("node", null)
-					if is_instance_valid(pnode):
-						pnode.set_meta("has_ship", true)
-						for child in bs.get_tree().root.get_children():
-							if child is Node3D and child.global_position.distance_to(pnode.global_position) < 1.5:
-								if child != bs._ship_attack_node and child != bs._ship_base_node and child.scene_file_path in bs.SHIP_MODELS:
-									pnode.set_meta("ship_node", child)
-									pnode.set_meta("ship_level", data.get("ship_level", 1))
-									pnode.set_meta("ship_troops", data.get("ship_troops", []))
-									break
-					break
-	bs._saved_port_ships.clear()
-	for ht in bs._home_troops:
-		var troop = ht.get("node")
-		if is_instance_valid(troop):
-			troop.visible = true
-			troop.set_process(true)
-			if "state" in troop:
-				troop.state = 0
 
 
 ## Handles town hall destruction: destroys all remaining enemy buildings with
@@ -490,6 +501,13 @@ func _on_town_hall_destroyed() -> void:
 		for b in to_destroy:
 			if b.id == "tombstone":
 				bsys._remove_tombstone_skeletons(b)
+			# Port → sink its ship before destroying the port
+			if b.id == "port":
+				var pnode: Node3D = b.get("node", null)
+				if is_instance_valid(pnode) and pnode.has_meta("ship_node"):
+					var ship: Node3D = pnode.get_meta("ship_node")
+					if is_instance_valid(ship):
+						bs._sink_ship(ship)
 			if b.has("hp_bar") and is_instance_valid(b.hp_bar):
 				b.hp_bar.queue_free()
 			var icon: Control = b.get("_collect_icon")

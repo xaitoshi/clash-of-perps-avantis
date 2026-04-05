@@ -3283,8 +3283,8 @@ func _refresh_barracks_panel() -> void:
 	barracks_vbox.add_child(sep2)
 
 	var total_capacity = _get_total_ship_capacity()
-	var total_troops = _home_troops.size()
-	var slots_free = total_capacity - total_troops
+	var slots_free = _port._get_free_ship_slots()
+	var total_troops = total_capacity - slots_free
 
 	var buy_title = Label.new()
 	buy_title.text = "Buy Troops — %d / %d slots" % [total_troops, total_capacity]
@@ -3420,14 +3420,25 @@ func _get_total_ship_capacity() -> int:
 func _buy_troop(troop_name: String) -> void:
 	if resources.get("gold", 0) < BUY_TROOP_COST:
 		return
-	if _home_troops.size() >= _get_total_ship_capacity():
+	# Check free ship slots instead of total capacity
+	if _port._get_free_ship_slots() <= 0:
 		return
 	var tdef = troop_defs.get(troop_name, {})
 	var model_path = tdef.get("model", "")
 	if model_path == "":
 		return
+	# Find port with free slot BEFORE spending gold
+	var spawn_pos = _get_building_spawn_pos()
+	var port_info: Dictionary = _port._find_port_with_free_slot(spawn_pos)
+	if port_info.is_empty():
+		return
 	resources["gold"] -= BUY_TROOP_COST
 	_update_resource_ui()
+	# Reserve the slot immediately so concurrent buys don't over-fill
+	var port_node: Node3D = port_info.port_node
+	var ship_troops: Array = port_node.get_meta("ship_troops", [])
+	ship_troops.append(troop_name)
+	port_node.set_meta("ship_troops", ship_troops)
 	_refresh_barracks_panel()
 	var model_res = load(model_path)
 	if model_res == null:
@@ -3438,14 +3449,15 @@ func _buy_troop(troop_name: String) -> void:
 	troop.name = "HomeTroop_%d" % (randi() % 99999)
 	# Init troop type and level before adding to tree (_ready will use them)
 	troop.init_troop(troop_name, troop_levels.get(troop_name, 1))
-	var s: float = 0.1
-	troop.scale = Vector3(s, s, s)
 	get_tree().root.add_child(troop)
+	troop.scale = Vector3(0.1, 0.1, 0.1)
 	troop.add_to_group("home_troops")
-	# Spawn near the barracks/barn building that was selected
-	var spawn_pos = _get_building_spawn_pos()
 	troop.global_position = spawn_pos
-	_home_troops.append({"node": troop, "name": troop_name})
+	_home_troops.append({"node": troop, "name": troop_name, "port_node": port_node})
+	# Run to port and board the ship
+	var port_pos: Vector3 = port_info.pos
+	port_pos.y = grid_y
+	troop.board_ship(port_pos)
 
 
 func _get_building_spawn_pos() -> Vector3:
