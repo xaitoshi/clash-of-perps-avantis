@@ -150,10 +150,10 @@ function ShopPanel({ onClose }) {
       .filter(([id]) => id !== 'barracks' && id !== 'flag' && getCategory(id) === activeTab)
       .map(([id, def]) => {
         const placed = placedCounts[id] || 0;
-        const maxCount = thMaxCounts[id] ?? def.max_count ?? 99;
+        const maxCount = thMaxCounts[id] ?? (def.max_count > 0 ? def.max_count : 99);
         const unlockAt = thUnlock[id];
         const locked = unlockAt && thLevel < unlockAt;
-        const maxed = placed >= maxCount;
+        const maxed = maxCount < 99 && placed >= maxCount;
         const cost = def.cost || {};
         const canAfford = (resources.gold || 0) >= (cost.gold || 0) &&
                           (resources.wood || 0) >= (cost.wood || 0) &&
@@ -216,7 +216,7 @@ function ShopPanel({ onClose }) {
                 onClick={() => !disabled && handlePlacement(id)}
               >
                 {/* Count badge */}
-                {!status.locked && status.maxCount > 0 && (
+                {!status.locked && status.maxCount < 99 && (
                   <div style={styles.countBadge}>
                     {status.placed}/{status.maxCount}
                   </div>
@@ -328,6 +328,7 @@ const styles = {
     zIndex: 10,
   },
   card: {
+    position: 'relative',
     width: 160,
     height: 240,
     background: '#fdf8e7',

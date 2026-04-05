@@ -119,14 +119,17 @@ func _send_initial_state() -> void:
 	var bs = _get_building_system()
 	if bs:
 		var defs := {}
+		var th_lvl: int = bs._get_th_level()
 		for key in bs.building_defs:
 			var d = bs.building_defs[key]
+			var th_max: Array = bs.TH_MAX_COUNT.get(key, [])
+			var effective_max: int = th_max[clampi(th_lvl - 1, 0, th_max.size() - 1)] if th_max.size() > 0 else d.get("max_count", 0)
 			defs[key] = {
 				"name": d.name,
 				"cells": [d.cells.x, d.cells.y],
 				"cost": d.get("cost", {}),
 				"hp_levels": d.get("hp_levels", []),
-				"max_count": d.get("max_count", 0),
+				"max_count": effective_max,
 			}
 		var troop_defs := {}
 		for key in bs.troop_defs:
@@ -146,6 +149,8 @@ func _send_initial_state() -> void:
 			"ore": bs.resources.ore,
 		})
 		send_to_react("troop_levels", bs.troop_levels)
+		# Send TH info at startup
+		bs._sync_react_buildings()
 	# Check if need to register
 	var net = get_node_or_null("/root/Net")
 	if net and not net.has_token():
@@ -243,6 +248,12 @@ func _handle_react_action(action: String, data: Dictionary) -> void:
 				bsys._react_resource_positions = data
 		"ui_overlay":
 			_set_island_paused(data.get("active", false))
+		"watch_replay":
+			if bs:
+				var replay_data: Array = data.get("replay_data", [])
+				var buildings_snapshot: Array = data.get("buildings_snapshot", [])
+				var attacker_name: String = data.get("attacker_name", "Unknown")
+				bs._start_replay(replay_data, buildings_snapshot, attacker_name)
 
 
 func _do_register(player_name: String, wallet: String = "") -> void:

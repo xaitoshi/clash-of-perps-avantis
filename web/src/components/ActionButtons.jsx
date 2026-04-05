@@ -193,7 +193,18 @@ function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSel
 }
 
 // ── Main component ────────────────────────────────────────────────────────
-function ActionButtons() {
+// ── Shield icon for defense log ───────────────────────────────────────────
+const ShieldIcon = ({ size = 60 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+    <path d="M32 6 L54 16 L54 32 Q54 50 32 58 Q10 50 10 32 L10 16 Z" fill="#3b7dd8" stroke="#1a3a6a" strokeWidth="2.5"/>
+    <path d="M32 10 L50 18 L50 32 Q50 47 32 54 Q14 47 14 32 L14 18 Z" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5"/>
+    <path d="M26 28 L30 32 L38 24" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M24 36 L40 36" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round"/>
+    <path d="M27 41 L37 41" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
+function ActionButtons({ onOpenBattleLog }) {
   const { sendToGodot, setFuturesOpen } = useSend();
   const { enemyMode, cannonMode, selectedTroopIdx, cannonEnergy } = useUI();
   const resources = useResources();
@@ -252,10 +263,15 @@ function ActionButtons() {
   return (
     <>
       <div style={styles.wrapLeft}>
-        <CustomBtn onClick={handleFindEnemy}>
-          <img src={attackIcon} alt="attack" style={styles.attackIconImg} />
-          <span style={styles.btnLabel}>ATTACK</span>
-        </CustomBtn>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+          <CustomBtn onClick={onOpenBattleLog} width={110} height={110}>
+            <ShieldIcon />
+          </CustomBtn>
+          <CustomBtn onClick={handleFindEnemy}>
+            <img src={attackIcon} alt="attack" style={styles.attackIconImg} />
+            <span style={styles.btnLabel}>ATTACK</span>
+          </CustomBtn>
+        </div>
         <CustomBtn onClick={handleOpenShop} width={110} height={110}>
           {affordableCount > 0 && <div style={styles.notificationBadgeSmall}>{affordableCount}</div>}
           <img src={buildIcon} alt="build" style={styles.buildIconImgSmall} />

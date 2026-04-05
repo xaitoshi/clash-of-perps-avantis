@@ -12,16 +12,17 @@ function PlayerInfo({ onOpenProfile }) {
 
   const townHallLevel = buildingDefs?.th_level || 1;
   const thProgress = buildingDefs?.th_progress || 0;
-  const thTotal = buildingDefs?.th_progress_total || 1;
+  const thTotal = buildingDefs?.th_progress_total || 0;
   const progressPct = thTotal > 0 ? Math.min(100, (thProgress / thTotal) * 100) : 0;
 
   return (
     <div style={styles.wrap} onClick={onOpenProfile}>
       <div style={styles.levelCircleContainer}>
-        <div style={styles.levelCircle}>
+        <div style={{
+          ...styles.levelCircle,
+          background: `conic-gradient(from -90deg, #fff ${progressPct * 3.6}deg, #1a1a1a ${progressPct * 3.6}deg)`,
+        }}>
           <div style={styles.innerSquare}>
-            {/* Progress fill from bottom */}
-            <div style={{ ...styles.progressFill, height: `${progressPct}%` }} />
             <span style={styles.levelText}>{townHallLevel}</span>
           </div>
         </div>
@@ -68,7 +69,7 @@ const styles = {
     width: 68,
     height: 68,
     borderRadius: 14,
-    background: 'linear-gradient(135deg, #1a1a1a 50%, #fff 50%)',
+    background: '#1a1a1a',
     border: '3.5px solid #0a0a0a',
     boxShadow: '0 4px 10px rgba(0,0,0,0.7)',
     display: 'flex',
@@ -81,7 +82,7 @@ const styles = {
     width: '100%',
     height: '100%',
     borderRadius: 10,
-    background: 'linear-gradient(180deg, #3a6abf 0%, #2d5599 100%)',
+    background: 'linear-gradient(180deg, #5899ff 0%, #3d86ef 100%)',
     border: '2.5px solid #0a0a0a',
     display: 'flex',
     alignItems: 'center',
@@ -89,15 +90,6 @@ const styles = {
     position: 'relative',
     overflow: 'hidden',
     boxShadow: 'inset 0 2px 3px rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.3)',
-  },
-  progressFill: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    background: 'linear-gradient(180deg, #5899ff 0%, #3d86ef 100%)',
-    transition: 'height 0.5s ease-out',
-    borderRadius: '0 0 8px 8px',
   },
   levelText: {
     color: '#fff',

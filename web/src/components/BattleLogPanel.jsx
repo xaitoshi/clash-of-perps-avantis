@@ -1,0 +1,208 @@
+import { memo, useState, useEffect, useCallback } from 'react';
+import { useSend } from '../hooks/useGodot';
+
+const fmt = (n) => (n || 0).toLocaleString().replace(/,/g, ' ');
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const now = new Date();
+  const then = new Date(dateStr + 'Z');
+  const sec = Math.floor((now - then) / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.floor(hr / 24);
+  return `${d}d ago`;
+}
+
+function BattleLogPanel({ onClose }) {
+  const { sendToGodot } = useSend();
+  const [battles, setBattles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null);
+
+  const handleWatchReplay = useCallback((battle) => {
+    if (!battle.replay_data || !battle.buildings_snapshot) return;
+    sendToGodot('watch_replay', {
+      replay_data: battle.replay_data,
+      buildings_snapshot: battle.buildings_snapshot,
+      attacker_name: battle.attacker_name,
+    });
+    onClose();
+  }, [sendToGodot, onClose]);
+
+  useEffect(() => {
+    const token = window._playerToken;
+    if (!token) { setLoading(false); return; }
+    fetch('/api/battle-log', { headers: { 'x-token': token } })
+      .then(r => r.json())
+      .then(data => { setBattles(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  return (
+    <>
+      <div style={S.backdrop} onClick={onClose} />
+      <div style={S.modal}>
+        <div style={S.header}>
+          <span style={S.headerTitle}>Defense Log</span>
+          <button style={S.closeBtn} onClick={onClose}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={S.body}>
+          {loading && <div style={S.empty}>Loading...</div>}
+          {!loading && battles.length === 0 && (
+            <div style={S.empty}>No attacks yet. Your base is safe!</div>
+          )}
+
+          {battles.map((b) => {
+            const isVictory = b.result === 'victory';
+            const isExpanded = expanded === b.id;
+            const totalLoot = (b.loot?.gold || 0) + (b.loot?.wood || 0) + (b.loot?.ore || 0);
+            const thDmg = b.th_hp_pct != null ? Math.round((1 - b.th_hp_pct) * 100) : null;
+
+            return (
+              <div key={b.id} style={S.card} onClick={() => setExpanded(isExpanded ? null : b.id)}>
+                <div style={S.cardRow}>
+                  <div style={S.resultBadge(isVictory)}>
+                    {isVictory ? 'RAIDED' : 'DEFENDED'}
+                  </div>
+                  <div style={S.cardInfo}>
+                    <span style={S.attackerName}>{b.attacker_name}</span>
+                    <span style={S.time}>{timeAgo(b.created_at)}</span>
+                  </div>
+                  {totalLoot > 0 && (
+                    <span style={S.lootTotal}>-{fmt(totalLoot)}</span>
+                  )}
+                </div>
+
+                {isExpanded && (
+                  <div style={S.details}>
+                    {isVictory && b.loot && (
+                      <div style={S.detailRow}>
+                        <span style={S.detailLabel}>Stolen</span>
+                        <span style={S.detailVal}>
+                          {b.loot.gold > 0 && <span style={{ color: '#e8b830' }}>{fmt(b.loot.gold)} gold</span>}
+                          {b.loot.wood > 0 && <span style={{ color: '#6ab344' }}> {fmt(b.loot.wood)} wood</span>}
+                          {b.loot.ore > 0 && <span style={{ color: '#8a9aaa' }}> {fmt(b.loot.ore)} ore</span>}
+                        </span>
+                      </div>
+                    )}
+                    {thDmg != null && (
+                      <div style={S.detailRow}>
+                        <span style={S.detailLabel}>Town Hall damage</span>
+                        <span style={{ ...S.detailVal, color: thDmg > 50 ? '#E53935' : '#a3906a' }}>{thDmg}%</span>
+                      </div>
+                    )}
+                    {b.buildings_destroyed > 0 && (
+                      <div style={S.detailRow}>
+                        <span style={S.detailLabel}>Buildings destroyed</span>
+                        <span style={S.detailVal}>{b.buildings_destroyed}</span>
+                      </div>
+                    )}
+                    {b.duration > 0 && (
+                      <div style={S.detailRow}>
+                        <span style={S.detailLabel}>Duration</span>
+                        <span style={S.detailVal}>{Math.round(b.duration)}s</span>
+                      </div>
+                    )}
+                    {b.replay_data && (
+                      <div style={S.detailRow}>
+                        <span style={S.detailLabel}>Ships deployed</span>
+                        <span style={S.detailVal}>
+                          {(Array.isArray(b.replay_data) ? b.replay_data : []).filter(a => a.type === 'place_ship').length}
+                        </span>
+                      </div>
+                    )}
+                    {b.replay_data && (() => {
+                      const ships = (Array.isArray(b.replay_data) ? b.replay_data : []).filter(a => a.type === 'place_ship');
+                      const troops = {};
+                      ships.forEach(s => { troops[s.troopType] = (troops[s.troopType] || 0) + 1; });
+                      const entries = Object.entries(troops);
+                      if (entries.length === 0) return null;
+                      return (
+                        <div style={S.detailRow}>
+                          <span style={S.detailLabel}>Troops used</span>
+                          <span style={S.detailVal}>{entries.map(([t, c]) => `${t} x${c}`).join(', ')}</span>
+                        </div>
+                      );
+                    })()}
+                    {b.replay_data && b.buildings_snapshot && (
+                      <button
+                        style={S.watchBtn}
+                        onClick={(e) => { e.stopPropagation(); handleWatchReplay(b); }}
+                      >
+                        Watch Replay
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default memo(BattleLogPanel);
+
+const S = {
+  backdrop: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, pointerEvents: 'auto' },
+  modal: {
+    position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+    width: 380, maxHeight: '85vh', background: '#fdf8e7', border: '6px solid #d4c8b0', borderRadius: 24,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column',
+    zIndex: 201, pointerEvents: 'auto', overflow: 'hidden', fontFamily: '"Inter","Segoe UI",sans-serif',
+  },
+  header: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '14px 16px', background: '#d4c8b0', borderBottom: '4px solid #bba882',
+  },
+  headerTitle: { fontSize: 18, fontWeight: 900, color: '#5C3A21' },
+  closeBtn: {
+    width: 30, height: 30, borderRadius: '50%', background: '#E53935', border: '3px solid #fff',
+    color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+  },
+  body: {
+    flex: 1, padding: 12, display: 'flex', flexDirection: 'column', gap: 8,
+    overflowY: 'auto', scrollbarWidth: 'none',
+  },
+  empty: { textAlign: 'center', padding: 40, color: '#a3906a', fontWeight: 700, fontSize: 14 },
+  card: {
+    background: '#e8dfc8', border: '3px solid #d4c8b0', borderRadius: 12, padding: '10px 12px',
+    cursor: 'pointer', transition: 'background 0.15s',
+  },
+  cardRow: { display: 'flex', alignItems: 'center', gap: 10 },
+  resultBadge: (isRaided) => ({
+    padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 900, letterSpacing: '0.5px',
+    background: isRaided ? '#E53935' : '#43A047',
+    color: '#fff', textShadow: '0 1px 1px rgba(0,0,0,0.3)', flexShrink: 0,
+  }),
+  cardInfo: { flex: 1, display: 'flex', flexDirection: 'column', gap: 1 },
+  attackerName: { fontSize: 14, fontWeight: 900, color: '#5C3A21' },
+  time: { fontSize: 11, fontWeight: 700, color: '#a3906a' },
+  lootTotal: { fontSize: 14, fontWeight: 900, color: '#E53935', flexShrink: 0 },
+  details: {
+    marginTop: 8, paddingTop: 8, borderTop: '2px solid #d4c8b0',
+    display: 'flex', flexDirection: 'column', gap: 5,
+  },
+  detailRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  detailLabel: { fontSize: 12, fontWeight: 700, color: '#77573d' },
+  detailVal: { fontSize: 12, fontWeight: 900, color: '#5C3A21' },
+  watchBtn: {
+    marginTop: 6, width: '100%', padding: '8px 0',
+    background: 'linear-gradient(180deg, #74c4ff 0%, #3ba4f4 100%)',
+    border: '2px solid #1a6fb5', borderRadius: 8,
+    color: '#fff', fontSize: 13, fontWeight: 900, cursor: 'pointer',
+    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), 0 3px 6px rgba(0,0,0,0.3)',
+  },
+};

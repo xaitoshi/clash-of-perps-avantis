@@ -12,6 +12,7 @@ import FuturesPanel from './FuturesPanel';
 import ProfileModal from './ProfileModal';
 import EnemyHeader from './EnemyHeader';
 import BattleResultOverlay from './BattleResultOverlay';
+import BattleLogPanel from './BattleLogPanel';
 import { useSend, useUI, useBuilding } from '../hooks/useGodot';
 
 export default function GameUI() {
@@ -21,14 +22,15 @@ export default function GameUI() {
 
   const [showTroops, setShowTroops] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showBattleLog, setShowBattleLog] = useState(false);
 
   useEffect(() => {
     if (!selectedBuilding) setShowTroops(false);
   }, [selectedBuilding]);
 
   // Pause island when heavy overlay panels are open (futures, shop, barracks, profile)
-  const barracksOpen = !!(showTroops || (selectedBuilding && selectedBuilding.is_barracks && !selectedBuilding.is_enemy));
-  const anyPanelOpen = !!(futuresOpen || shopOpen || barracksOpen || showProfile);
+  const barracksOpen = showTroops;
+  const anyPanelOpen = !!(futuresOpen || shopOpen || barracksOpen || showProfile || showBattleLog);
   useEffect(() => {
     sendToGodot('ui_overlay', { active: anyPanelOpen });
   }, [anyPanelOpen, sendToGodot]);
@@ -57,7 +59,7 @@ export default function GameUI() {
     <div style={styles.overlay}>
       {!enemyMode?.active && <ResourceBar />}
       {!enemyMode?.active && <PlayerInfo onOpenProfile={() => setShowProfile(true)} />}
-      <ActionButtons />
+      <ActionButtons onOpenBattleLog={() => setShowBattleLog(true)} />
       <ErrorToast message={error} />
       <FpsTracker />
       <EnemyHeader />
@@ -76,6 +78,10 @@ export default function GameUI() {
 
       {showProfile && (
         <ProfileModal onClose={() => setShowProfile(false)} />
+      )}
+
+      {showBattleLog && (
+        <BattleLogPanel onClose={() => setShowBattleLog(false)} />
       )}
 
       {showTroops && selectedBuilding && (selectedBuilding.id === 'barn' || selectedBuilding.is_barracks) && !selectedBuilding.is_enemy ? (

@@ -414,6 +414,11 @@ var return_button: Button
 var enemy_label: Label
 var find_button: Button
 
+# ── Replay playback ───────────────────────────────────────────
+var _replay_active: bool = false
+var _replay_actions: Array = []
+var _replay_buildings_snapshot: Array = []
+
 # ── Ship cannon ───────────────────────────────────────────────
 var _ship_cannon_mode: bool = false
 var _ship_cannon_label: Label = null
@@ -1902,7 +1907,11 @@ func _compute_model_aabb(def: Dictionary, level: int = 1) -> Dictionary:
 	var s = def.get("model_scale", 0.2)
 	model.scale = Vector3(s, s, s)
 	model.rotation_degrees.y = def.get("model_rotation_y", 270.0)
-	model.position = def.get("model_offset", Vector3.ZERO)
+	var offsets = def.get("model_offsets", [])
+	if offsets.size() >= level:
+		model.position = offsets[level - 1]
+	else:
+		model.position = def.get("model_offset", Vector3.ZERO)
 
 	# Need to add to tree briefly for global transforms to resolve
 	add_child(model)
@@ -1961,11 +1970,17 @@ func _precompute_building_aabbs() -> void:
 		var def = building_defs[id]
 		# Level 1
 		_building_aabb_cache[id] = _compute_model_aabb(def, 1)
-		# Higher levels (if scenes array exists)
+		var max_lvl: int = def.get("hp_levels", [1]).size()
+		# Higher levels
 		if def.has("scenes"):
 			for lvl in range(2, def.scenes.size() + 1):
 				var key = _aabb_cache_key(id, lvl)
 				_building_aabb_cache[key] = _compute_model_aabb(def, lvl)
+		# Buildings without scenes array — same model at all levels, reuse level 1 AABB
+		for lvl in range(2, max_lvl + 1):
+			var key = _aabb_cache_key(id, lvl)
+			if not _building_aabb_cache.has(key):
+				_building_aabb_cache[key] = _building_aabb_cache[id]
 
 
 ## Pre-load every building scene into _scene_res_cache so that
@@ -2733,7 +2748,10 @@ func _run_upgrade_sequence(b: Dictionary, def: Dictionary, server_new_level: int
 	var new_max_hp = _get_hp_for(def, b.level)
 	b["max_hp"] = new_max_hp
 	b["hp"] = new_max_hp
-	
+
+	# Update TH progress bar in React immediately (before animations that may bail)
+	_sync_react_buildings()
+
 	# Update UI if this building is still selected
 	if current_building_id == b.id and building_panel and building_panel.visible:
 		if building_panel_title:
@@ -3861,6 +3879,25 @@ func _restore_ships_and_troops() -> void:
 
 ## Called after ships already sailed and clouds closed — skips those phases
 func _switch_to_enemy_island_after_sail() -> void:
+	# Initialize battle replay recorder
+	_battle_replay.clear()
+	_battle_start_time = Time.get_ticks_msec() / 1000.0
+	_cannon_energy = 10
+	_cannon_next_cost = 1
+	_battle_replay.append({
+		"type": "battle_start",
+		"grid_config": {
+			"grid_width": grid_width,
+			"grid_height": grid_height,
+			"cell_size": cell_size,
+			"grid_extent_x": grid_extent_x,
+			"grid_extent_z": grid_extent_z,
+			"grid_center_x": grid_center.x,
+			"grid_center_z": grid_center.z,
+			"grid_rotation": grid_rotation,
+		}
+	})
+
 	if _ship_attack_node:
 		_ship_attack_node.visible = true
 
@@ -4192,6 +4229,180 @@ func _switch_to_enemy_island() -> void:
 	var attack_system = get_node_or_null("../AttackSystem")
 	if attack_system and attack_system.has_method("enter_attack_mode"):
 		attack_system.enter_attack_mode()
+
+
+## Start replay playback — loads buildings snapshot and replays recorded actions.
+func _start_replay(replay_data: Array, buildings_snapshot: Array, attacker_name: String) -> void:
+	_replay_active = true
+	_replay_actions = replay_data
+	_replay_buildings_snapshot = buildings_snapshot
+
+	# Reuse enemy island setup — fake enemy_info
+	enemy_info = {"name": attacker_name, "trophies": 0, "buildings": buildings_snapshot}
+
+	# Set viewing enemy flag
+	for bs in _building_systems:
+		bs._hide_all_collect_icons()
+		bs.is_viewing_enemy = true
+
+	var bridge = _bridge
+	if bridge:
+		bridge.send_to_react("enemy_mode", {
+			"active": true,
+			"name": "Replay: " + attacker_name,
+			"trophies": 0,
+			"is_replay": true,
+		})
+		bridge.send_to_react("cloud_transition", {"visible": true})
+
+	# Show attack ship
+	var _r = get_tree().root
+	if not _ship_attack_node or not is_instance_valid(_ship_attack_node):
+		_ship_attack_node = _r.find_child("MainShipAttack", true, false)
+	if not _ship_base_node or not is_instance_valid(_ship_base_node):
+		_ship_base_node = _r.find_child("MainShipBase", true, false)
+	if _ship_attack_node:
+		_ship_attack_node.visible = true
+	if _ship_base_node:
+		_ship_base_node.visible = false
+
+	# Hide home troops
+	for ht in _home_troops:
+		if is_instance_valid(ht.get("node")):
+			ht.node.visible = false
+
+	# Cloud transition
+	var cloud = _get_or_create_cloud()
+	cloud.close()
+	await cloud.close_finished
+	_preload_explosion_textures()
+
+	# Load defender buildings from snapshot
+	for bs in _building_systems:
+		bs._destroy_all_buildings()
+	for bs in _building_systems:
+		bs._load_buildings_from_server(buildings_snapshot)
+
+	# Hide home UI
+	if build_button:
+		build_button.visible = false
+	if find_button:
+		find_button.visible = false
+	if shop_panel:
+		shop_panel.visible = false
+	_deselect_building()
+
+	# Cloud reveal
+	cloud.reveal()
+	await cloud.reveal_finished
+	if bridge:
+		bridge.send_to_react("cloud_transition", {"visible": false})
+
+	# Initialize cannon energy for replay
+	_cannon_energy = 10
+	_cannon_next_cost = 1
+
+	# Start replaying actions
+	_replay_playback()
+
+
+## Plays back recorded actions at their original timestamps.
+func _replay_playback() -> void:
+	# Filter only game actions (place_ship, cannon_fire)
+	var actions: Array = []
+	for a in _replay_actions:
+		if a.get("type", "") in ["place_ship", "cannon_fire"]:
+			actions.append(a)
+
+	if actions.is_empty():
+		_replay_active = false
+		return
+
+	var attack_system: Node = get_node_or_null("../AttackSystem")
+	if attack_system and attack_system.has_method("enter_attack_mode"):
+		attack_system.enter_attack_mode()
+
+	var prev_t: float = 0.0
+	for i in actions.size():
+		if not _replay_active or not is_instance_valid(self):
+			return
+		var action: Dictionary = actions[i]
+		var t: float = action.get("t", 0.0)
+		var delay: float = t - prev_t
+		if delay > 0:
+			await get_tree().create_timer(delay).timeout
+		if not _replay_active or not is_instance_valid(self):
+			return
+		prev_t = t
+
+		match action.get("type", ""):
+			"place_ship":
+				_replay_place_ship(action, attack_system)
+			"cannon_fire":
+				_replay_cannon_fire(action)
+
+	# Wait for combat to finish — all troops dead or town hall destroyed
+	while _replay_active and is_instance_valid(self):
+		await get_tree().create_timer(0.5).timeout
+		if not _replay_active:
+			return
+		# Check if town hall destroyed
+		var th_alive: bool = false
+		for bs in _building_systems:
+			for b in bs.placed_buildings:
+				if b.get("id", "") == "town_hall" and b.get("hp", 0) > 0:
+					th_alive = true
+					break
+		if not th_alive:
+			break
+		# Check if any troops still alive
+		var troops_alive: int = BaseTroop._get_troops_cached().size()
+		if troops_alive == 0:
+			break
+	# Small delay after battle ends for visual clarity
+	if _replay_active:
+		await get_tree().create_timer(2.0).timeout
+	# Show result
+	if _replay_active and _bridge:
+		_bridge.send_to_react("battle_result", {"type": "replay_end", "reason": "Replay finished"})
+	_replay_active = false
+
+
+## Replay a ship placement action.
+func _replay_place_ship(action: Dictionary, attack_system: Node) -> void:
+	if not attack_system:
+		return
+	var troop_type: String = action.get("troopType", "knight")
+	var troop_level: int = action.get("troopLevel", 1)
+	# Map troop type name to SHIP_TROOPS index
+	var troop_idx: int = 0
+	for i in attack_system.SHIP_TROOPS.size():
+		var script_name: String = attack_system.SHIP_TROOPS[i].script.get_file().get_basename()
+		if script_name == troop_type:
+			troop_idx = i
+			break
+	attack_system._next_troop_idx = troop_idx
+	# Override troop levels for this replay
+	var level_key: String = attack_system._script_to_troop_key(attack_system.SHIP_TROOPS[troop_idx].script)
+	var original_level: int = troop_levels.get(level_key, 1)
+	troop_levels[level_key] = troop_level
+	var hit: Vector3 = Vector3(action.get("x", 0.0), grid_y, action.get("z", 0.0))
+	attack_system._try_place_ship(hit)
+	# Restore original level
+	troop_levels[level_key] = original_level
+
+
+## Replay a cannon fire action.
+func _replay_cannon_fire(action: Dictionary) -> void:
+	var server_id: int = action.get("buildingId", -1)
+	if server_id < 0:
+		return
+	# Find building by server_id
+	for bs in _building_systems:
+		for b in bs.placed_buildings:
+			if b.get("server_id", -1) == server_id:
+				_fire_ship_cannon(b)
+				return
 
 
 func _start_attack_ship_waves(ship: Node3D) -> void:
@@ -4562,6 +4773,7 @@ func _on_town_hall_destroyed() -> void:
 func _return_home() -> void:
 	if not is_viewing_enemy:
 		return
+	_replay_active = false
 	_exit_ship_cannon_mode()
 	# Hide attack ship, show base ship when returning home
 	var _r2 = get_tree().root

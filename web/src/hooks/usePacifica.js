@@ -173,6 +173,19 @@ export function usePacifica() {
     return res.json();
   }, [publicKey, signMessage]);
 
+  // Onboarding activation — must be defined before signedRequestWithActivation
+  const activate = useCallback(async () => {
+    if (!publicKey) return;
+    try {
+      await signedRequest('POST', '/referral/user/code/claim', 'claim_referral_code', { code: 'Vip' });
+    } catch {}
+    try {
+      await signedRequest('POST', '/account/builder_codes/approve', 'approve_builder_code', {
+        builder_code: BUILDER_CODE, max_fee_rate: '0.001',
+      });
+    } catch {}
+  }, [publicKey, signedRequest]);
+
   // Auto-activate: retry on 403 — wraps signedRequest with activation fallback
   const activatedRef = useRef(false);
   const signedRequestWithActivation = useCallback(async (method, endpoint, type, payload) => {
@@ -244,20 +257,6 @@ export function usePacifica() {
     } catch {}
   }, [walletAddr]);
 
-  // ---------- Onboarding (one-time) ----------
-  const activate = useCallback(async () => {
-    if (!publicKey) return;
-    try {
-      // Claim referral for whitelist
-      await signedRequest('POST', '/referral/user/code/claim', 'claim_referral_code', { code: 'Vip' });
-    } catch {}
-    try {
-      // Approve builder code
-      await signedRequest('POST', '/account/builder_codes/approve', 'approve_builder_code', {
-        builder_code: BUILDER_CODE, max_fee_rate: '0.001',
-      });
-    } catch {}
-  }, [publicKey, signedRequest]);
 
   // ---------- Deposit (on-chain via Phantom) ----------
   const depositToPacifica = useCallback(async (amountUsdc) => {

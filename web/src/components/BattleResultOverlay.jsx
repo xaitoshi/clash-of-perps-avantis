@@ -10,19 +10,20 @@ function BattleResultOverlay({ result, onClose }) {
   if (!result) return null;
 
   const isVictory = result.type === 'victory';
+  const isReplay = result.type === 'replay_end';
 
   return (
     <div style={styles.backdrop}>
       <div style={styles.content}>
-        
+
         {/* Title Group */}
         <div style={styles.titleGroup}>
           <div style={styles.glowBackground}></div>
           <div style={styles.titleText}>
-            {isVictory ? 'VICTORY' : 'DEFEAT'}
+            {isReplay ? 'REPLAY END' : isVictory ? 'VICTORY' : 'DEFEAT'}
           </div>
           <div style={styles.subtitleText}>
-            {isVictory ? 'This village is free once again!' : 'All troops were lost!'}
+            {isReplay ? 'Replay finished' : isVictory ? 'This village is free once again!' : 'All troops were lost!'}
           </div>
         </div>
 

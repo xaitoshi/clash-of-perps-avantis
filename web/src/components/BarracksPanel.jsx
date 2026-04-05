@@ -266,14 +266,6 @@ function BarracksPanel({ building, onClose }) {
 
               {/* Character specific placement */}
               <div style={styles.characterSphere}>
-                {!hasImage && (
-                  <>
-                    <div style={styles.sphereGlow}></div>
-                    <div style={styles.sphereCore}></div>
-                  </>
-                )}
-                {hasImage && <div style={styles.bigSoftGlow}></div>}
-
                 {/* Level Up Effects */}
                 {isAnimatingUpgrade && (
                   <div 
@@ -418,18 +410,18 @@ const styles = {
     transition: 'color 0.2s',
   },
   panel: {
-    background: 'radial-gradient(ellipse at center top, #16223F 0%, #0B1121 60%, #03050B 100%)',
-    borderRadius: 32,
-    border: '1px solid rgba(255, 255, 255, 0.05)',
-    width: 1000,
-    height: 600,
+    background: 'linear-gradient(180deg, #4aa6ef 0%, #1e70b9 100%)',
+    borderRadius: 28,
+    border: '4px solid #AAB7B8',
+    width: 860,
+    height: 520,
     maxWidth: '95vw',
     maxHeight: '90vh',
-    boxShadow: '0 40px 80px rgba(0,0,0,0.8), inset 0 2px 0 rgba(255,255,255,0.05)',
+    boxShadow: '0 24px 48px rgba(0,0,0,0.6), inset 0 8px 16px rgba(0,0,0,0.4)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: '40px 0',
+    padding: '30px 0',
     overflow: 'hidden',
     position: 'relative',
   },
@@ -458,11 +450,11 @@ const styles = {
   },
   mainTitle: {
     margin: 0,
-    fontSize: 48,
+    fontSize: 32,
     fontWeight: 900,
     color: '#ffffff',
     letterSpacing: -1,
-    textShadow: '0 4px 20px rgba(255,255,255,0.2)',
+    textShadow: '0 4px 4px rgba(0,0,0,0.5), 0 8px 16px rgba(0,0,0,0.3)',
   },
   subTitleArea: {
     display: 'none',
@@ -470,16 +462,16 @@ const styles = {
   contentLayout: {
     display: 'flex',
     width: '100%',
-    padding: '0 40px',
+    padding: '0 30px',
     justifyContent: 'space-between',
     alignItems: 'stretch',
     flex: 1,
   },
   leftColumn: {
-    width: '280px',
+    width: '240px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 20,
+    gap: 16,
     marginTop: 20,
     position: 'relative',
     zIndex: 10,
@@ -487,9 +479,10 @@ const styles = {
   sectionTitle: {
     margin: 0,
     fontSize: 20,
-    fontWeight: 800,
-    color: '#e2e8f0',
+    fontWeight: 900,
+    color: '#ffffff',
     marginBottom: 8,
+    textShadow: '0 2px 4px rgba(0,0,0,0.4)',
   },
   progressContainer: {
     display: 'flex',
@@ -570,16 +563,16 @@ const styles = {
     height: '100%',
   },
   characterSphere: {
-    width: 240,
-    height: 240,
+    width: 200,
+    height: 200,
     position: 'relative',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sphereCore: {
-    width: 140,
-    height: 140,
+    width: 120,
+    height: 120,
     borderRadius: '50%',
     background: 'radial-gradient(circle at 30% 30%, #46b8e8 0%, #2a9ccb 40%, #15516b 100%)',
     boxShadow: 'inset 0 10px 30px rgba(255,255,255,0.2), 0 20px 40px rgba(0,0,0,0.5)',
@@ -603,8 +596,8 @@ const styles = {
   },
   characterImg: {
     position: 'absolute',
-    width: 550,
-    height: 550,
+    width: 320,
+    height: 320,
     objectFit: 'contain',
     zIndex: 5,
     pointerEvents: 'none',
@@ -649,10 +642,10 @@ const styles = {
     color: '#cbd5e1',
   },
   rightColumn: {
-    width: '280px',
+    width: '240px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 20,
+    gap: 16,
     marginTop: 20,
     position: 'relative',
     zIndex: 10,
@@ -661,20 +654,20 @@ const styles = {
     display: 'flex',
     justifyContent: 'center',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
   },
   reqBox: {
-    background: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.05)',
-    borderRadius: 24,
-    width: 110,
-    height: 110,
+    background: 'rgba(255, 255, 255, 0.1)',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    width: 90,
+    height: 90,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    boxShadow: '0 8px 16px rgba(0,0,0,0.2), inset 0 2px 4px rgba(255,255,255,0.02)',
+    gap: 4,
+    boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
     transition: 'transform 0.2s, background 0.2s',
   },
   reqBoxMax: {
@@ -684,32 +677,32 @@ const styles = {
     padding: '10px 0',
   },
   reqIconImg: {
-    width: 56,
-    height: 56,
+    width: 44,
+    height: 44,
     objectFit: 'contain',
     filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.5))',
     marginBottom: 4,
   },
   reqAmt: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 900,
-    color: '#f8fafc',
-    textShadow: '0 2px 2px rgba(0,0,0,0.5)',
+    color: '#ffffff',
+    textShadow: '0 2px 4px rgba(0,0,0,0.5)',
   },
   actionBtn: {
     background: 'linear-gradient(180deg, #FBC02D 0%, #F57F17 100%)',
     border: 'none',
     boxShadow: '0 8px 20px rgba(245, 127, 23, 0.3), inset 0 2px 0 rgba(255,255,255,0.4)',
     borderRadius: 20,
-    padding: '16px 24px',
+    padding: '14px 20px',
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 900,
     cursor: 'pointer',
     width: '100%',
     textAlign: 'center',
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1,
     textShadow: '0 2px 2px rgba(0,0,0,0.3)',
     transition: 'transform 0.1s',
   }

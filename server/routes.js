@@ -275,6 +275,38 @@ router.get('/find-enemy', auth, (req, res) => {
 });
 
 
+// ==================== BATTLE LOG ====================
+
+// Get attacks on the player's base (defense log)
+router.get('/battle-log', auth, (req, res) => {
+  const rows = db.db.prepare(`
+    SELECT r.id, r.attacker_id, r.claimed_result, r.verified_result,
+           r.loot_gold, r.loot_wood, r.loot_ore,
+           r.sim_th_hp_pct, r.sim_buildings_destroyed, r.duration_sec,
+           r.created_at, r.replay_data, r.buildings_snapshot,
+           p.name AS attacker_name, p.trophies AS attacker_trophies
+    FROM battle_replays r
+    LEFT JOIN players p ON p.id = r.attacker_id
+    WHERE r.defender_id = ? AND r.verified_result = 'accepted'
+    ORDER BY r.created_at DESC
+    LIMIT 50
+  `).all(req.player.id);
+
+  res.json(rows.map(r => ({
+    id: r.id,
+    attacker_name: r.attacker_name || 'Unknown',
+    attacker_trophies: r.attacker_trophies || 0,
+    result: r.claimed_result,
+    loot: { gold: r.loot_gold, wood: r.loot_wood, ore: r.loot_ore },
+    th_hp_pct: r.sim_th_hp_pct,
+    buildings_destroyed: r.sim_buildings_destroyed,
+    duration: r.duration_sec,
+    created_at: r.created_at,
+    replay_data: r.replay_data ? JSON.parse(r.replay_data) : null,
+    buildings_snapshot: r.buildings_snapshot ? JSON.parse(r.buildings_snapshot) : null,
+  })));
+});
+
 // ==================== TROPHIES ====================
 
 // Get trophies

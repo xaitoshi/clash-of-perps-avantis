@@ -172,8 +172,8 @@ function BuildingInfoPanel({ onOpenTroops }) {
              </div>
              
              {/* Description */}
-             <div style={{marginTop: 'auto', padding: 16, background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)'}}>
-                <span style={{color: '#94a3b8', fontSize: 13, lineHeight: 1.5}}>
+             <div style={{marginTop: 'auto', padding: 16, background: 'rgba(255, 255, 255, 0.1)', borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.15)', boxShadow: '0 4px 8px rgba(0,0,0,0.15)'}}>
+                <span style={{color: '#ffffff', fontSize: 13, lineHeight: 1.5, textShadow: '0 1px 2px rgba(0,0,0,0.4)'}}>
                   {DESC_MAP[building.id] || "A critical component of your island outposts."}
                 </span>
              </div>
@@ -193,9 +193,6 @@ function BuildingInfoPanel({ onOpenTroops }) {
                )}
 
                <div style={styles.characterSphere}>
-                  <div style={styles.sphereGlow}></div>
-                  <div style={styles.sphereCore}></div>
-                  <div style={styles.bigSoftGlow}></div>
                   {centerImg}
                </div>
              </div>
@@ -282,8 +279,8 @@ function BuildingInfoPanel({ onOpenTroops }) {
     const rightContent = (
       <>
          <h3 style={styles.sectionTitle}>Status</h3>
-         <div style={{...styles.reqBoxMax, padding: 16, background: 'rgba(255,255,255,0.02)', borderRadius: 16}}>
-           <span style={{color: '#f8fafc', fontSize: 16, fontWeight: 700}}>Functional</span>
+         <div style={{...styles.reqBoxMax, padding: 16, background: 'rgba(255, 255, 255, 0.1)', borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.15)', boxShadow: '0 4px 8px rgba(0,0,0,0.15)'}}>
+           <span style={{color: '#fff', fontSize: 16, fontWeight: 800, textShadow: '0 2px 4px rgba(0,0,0,0.3)'}}>Functional</span>
          </div>
       </>
     );
@@ -453,18 +450,18 @@ const styles = {
     transition: 'color 0.2s',
   },
   panel: {
-    background: 'radial-gradient(ellipse at center top, #16223F 0%, #0B1121 60%, #03050B 100%)',
-    borderRadius: 32,
-    border: '1px solid rgba(255, 255, 255, 0.05)',
-    width: 1000,
-    height: 600,
+    background: 'linear-gradient(180deg, #4aa6ef 0%, #1e70b9 100%)',
+    borderRadius: 28,
+    border: '4px solid #AAB7B8',
+    width: 840,
+    height: 480,
     maxWidth: '95vw',
     maxHeight: '90vh',
-    boxShadow: '0 40px 80px rgba(0,0,0,0.8), inset 0 2px 0 rgba(255,255,255,0.05)',
+    boxShadow: '0 24px 48px rgba(0,0,0,0.6), inset 0 8px 16px rgba(0,0,0,0.4)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: '40px 0',
+    padding: '30px 0',
     overflow: 'hidden',
     position: 'relative',
     cursor: 'default',
@@ -494,11 +491,11 @@ const styles = {
   },
   mainTitle: {
     margin: 0,
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: 900,
     color: '#ffffff',
     letterSpacing: -1,
-    textShadow: '0 4px 20px rgba(255,255,255,0.2)',
+    textShadow: '0 4px 4px rgba(0,0,0,0.5), 0 8px 16px rgba(0,0,0,0.3)',
   },
   contentLayout: {
     display: 'flex',
@@ -509,10 +506,10 @@ const styles = {
     flex: 1,
   },
   leftColumn: {
-    width: '280px',
+    width: '240px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 20,
+    gap: 16,
     marginTop: 20,
     position: 'relative',
     zIndex: 10,
@@ -520,8 +517,9 @@ const styles = {
   sectionTitle: {
     margin: 0,
     fontSize: 20,
-    fontWeight: 800,
-    color: '#e2e8f0',
+    fontWeight: 900,
+    color: '#ffffff',
+    textShadow: '0 2px 4px rgba(0,0,0,0.4)',
     marginBottom: 8,
   },
   statsContainer: {
@@ -530,19 +528,20 @@ const styles = {
     gap: 12,
   },
   statBox: {
-    background: 'rgba(255, 255, 255, 0.03)',
+    background: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 16,
     padding: '12px 16px',
-    border: '1px solid rgba(255, 255, 255, 0.03)',
-    boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.02), 0 4px 8px rgba(0,0,0,0.2)',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
   },
   statBoxLabel: {
     fontSize: 12,
     fontWeight: 700,
-    color: '#94a3b8',
+    color: '#e2e8f0',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 4,
+    textShadow: '0 1px 2px rgba(0,0,0,0.3)',
   },
   statBoxValues: {
     display: 'flex',
@@ -552,17 +551,19 @@ const styles = {
   statCurrent: {
     fontSize: 24,
     fontWeight: 800,
-    color: '#f8fafc',
+    color: '#ffffff',
+    textShadow: '0 2px 4px rgba(0,0,0,0.5)',
   },
   statArrow: {
     fontSize: 16,
-    color: '#64748b',
+    color: '#ffffff',
+    opacity: 0.7,
   },
   statUpgraded: {
     fontSize: 24,
     fontWeight: 900,
-    color: '#34d399',
-    textShadow: '0 0 16px rgba(52, 211, 153, 0.4)',
+    color: '#7ad23f',
+    textShadow: '0 2px 4px rgba(0,0,0,0.5)',
   },
 
   centerColumn: {
@@ -582,16 +583,16 @@ const styles = {
     height: '100%',
   },
   characterSphere: {
-    width: 240,
-    height: 240,
+    width: 200,
+    height: 200,
     position: 'relative',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sphereCore: {
-    width: 140,
-    height: 140,
+    width: 120,
+    height: 120,
     borderRadius: '50%',
     background: 'radial-gradient(circle at 30% 30%, #46b8e8 0%, #2a9ccb 40%, #15516b 100%)',
     boxShadow: 'inset 0 10px 30px rgba(255,255,255,0.2), 0 20px 40px rgba(0,0,0,0.5)',
@@ -615,8 +616,8 @@ const styles = {
   },
   characterImg: {
     position: 'absolute',
-    width: 350,
-    height: 350,
+    width: 280,
+    height: 280,
     objectFit: 'contain',
     zIndex: 5,
     pointerEvents: 'none',
@@ -653,10 +654,10 @@ const styles = {
   },
 
   rightColumn: {
-    width: '280px',
+    width: '240px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 20,
+    gap: 16,
     marginTop: 20,
     position: 'relative',
     zIndex: 10,
@@ -665,20 +666,20 @@ const styles = {
     display: 'flex',
     justifyContent: 'flex-start',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
   },
   reqBox: {
-    background: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.05)',
-    borderRadius: 24,
-    width: 110,
-    height: 110,
+    background: 'rgba(255, 255, 255, 0.1)',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    width: 90,
+    height: 90,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    boxShadow: '0 8px 16px rgba(0,0,0,0.2), inset 0 2px 4px rgba(255,255,255,0.02)',
+    gap: 4,
+    boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
     transition: 'transform 0.2s, background 0.2s',
   },
   reqBoxMax: {
@@ -687,14 +688,14 @@ const styles = {
     justifyContent: 'flex-start',
   },
   reqIconImg: {
-    width: 56,
-    height: 56,
+    width: 44,
+    height: 44,
     objectFit: 'contain',
     filter: 'drop-shadow(0 4px 4px rgba(0,0,0,0.5))',
     marginBottom: 4,
   },
   reqAmt: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 900,
     color: '#f8fafc',
     textShadow: '0 2px 2px rgba(0,0,0,0.5)',
@@ -704,15 +705,15 @@ const styles = {
     border: 'none',
     boxShadow: '0 8px 20px rgba(245, 127, 23, 0.3), inset 0 2px 0 rgba(255,255,255,0.4)',
     borderRadius: 20,
-    padding: '16px 24px',
+    padding: '14px 20px',
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 900,
     cursor: 'pointer',
     width: '100%',
     textAlign: 'center',
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1,
     textShadow: '0 2px 2px rgba(0,0,0,0.3)',
     transition: 'transform 0.1s',
   }
