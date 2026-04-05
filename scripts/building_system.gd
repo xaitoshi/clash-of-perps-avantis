@@ -3756,10 +3756,10 @@ func _buy_troop(troop_name: String) -> void:
 	var troop = model_res.instantiate()
 	troop.set_script(home_script)
 	troop.name = "HomeTroop_%d" % (randi() % 99999)
-	var s: float = 0.1
-	troop.scale = Vector3(s, s, s)
 	# Init troop type and level before adding to tree (_ready will use them)
 	troop.init_troop(troop_name, troop_levels.get(troop_name, 1))
+	var s: float = 0.1
+	troop.scale = Vector3(s, s, s)
 	get_tree().root.add_child(troop)
 	troop.add_to_group("home_troops")
 	# Spawn near the barracks/barn building that was selected
