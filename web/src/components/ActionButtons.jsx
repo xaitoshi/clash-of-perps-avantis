@@ -248,6 +248,22 @@ function ActionButtons({ onOpenBattleLog }) {
   }, [sendToGodot, cannonMode]);
 
   if (enemyMode.active) {
+    // Replay mode — only show return button, no attack controls
+    if (enemyMode.is_replay) {
+      return (
+        <div style={hud.wrapTopRight}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={hud.replayBadge}>REPLAY x2</div>
+            <button style={hud.homeBtn} onClick={handleReturnHome} title="Return Home"
+              onMouseOver={e => e.currentTarget.style.filter = 'brightness(1.2)'}
+              onMouseOut={e => e.currentTarget.style.filter = 'none'}
+            >
+              <span style={{ fontSize: 26, lineHeight: 1 }}>🏳️</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <AttackHUD
         onReturnHome={handleReturnHome}
@@ -329,6 +345,15 @@ const hud = {
     cursor: 'pointer', flexShrink: 0,
     transition: 'filter 0.15s',
     outline: 'none',
+  },
+  replayBadge: {
+    padding: '8px 16px',
+    background: 'linear-gradient(180deg, rgba(15,55,95,0.9), rgba(8,30,58,0.95))',
+    border: '2px solid rgba(40,130,195,0.55)',
+    borderRadius: 10,
+    color: '#7df4ff', fontSize: 14, fontWeight: 900,
+    letterSpacing: '1px',
+    textShadow: '0 0 8px rgba(60,220,255,0.5)',
   },
   sep: {
     width: 2, height: 68,

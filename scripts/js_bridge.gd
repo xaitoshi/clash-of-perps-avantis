@@ -178,6 +178,9 @@ func _on_react_call(args: Array) -> void:
 
 func _handle_react_action(action: String, data: Dictionary) -> void:
 	var bs: Node = _get_building_system()
+	# During replay, only allow return_home and watch_replay
+	if bs and bs._replay_active and action not in ["return_home", "get_state"]:
+		return
 	match action:
 		"get_state":
 			_send_full_state()

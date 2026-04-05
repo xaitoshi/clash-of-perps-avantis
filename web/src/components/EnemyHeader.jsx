@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { useUI } from '../hooks/useGodot';
 
 import goldIcon from '../assets/resources/gold_bar.png';
@@ -8,6 +8,44 @@ import trophyIcon from '../assets/resources/free-icon-cup-with-star-109765.png';
 
 const fmt = (n) => (n || 0).toLocaleString().replace(/,/g, ' ');
 
+function formatTime(sec) {
+  const m = Math.floor(Math.abs(sec) / 60);
+  const s = Math.floor(Math.abs(sec) % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function BattleTimer({ isReplay, replayDuration }) {
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(Date.now());
+
+  useEffect(() => {
+    startRef.current = Date.now();
+    setElapsed(0);
+    // Replay runs at x2 speed so tick faster
+    const interval = isReplay ? 250 : 500;
+    const id = setInterval(() => {
+      const raw = (Date.now() - startRef.current) / 1000;
+      // Replay is x2 speed so elapsed game-time = raw * 2
+      setElapsed(isReplay ? raw * 2 : raw);
+    }, interval);
+    return () => clearInterval(id);
+  }, [isReplay]);
+
+  const display = isReplay
+    ? formatTime(Math.max(0, (replayDuration || 60) - elapsed))
+    : formatTime(elapsed);
+
+  const isLow = isReplay && (replayDuration || 60) - elapsed < 10;
+
+  return (
+    <div style={timerStyles.wrap}>
+      <div style={{ ...timerStyles.box, borderColor: isLow ? '#E53935' : 'rgba(40,130,195,0.55)' }}>
+        <span style={{ ...timerStyles.text, color: isLow ? '#ff6b6b' : '#fff' }}>{display}</span>
+      </div>
+    </div>
+  );
+}
+
 function EnemyHeader() {
   const { enemyMode } = useUI();
 
@@ -15,6 +53,10 @@ function EnemyHeader() {
 
   return (
     <div style={styles.container}>
+      <BattleTimer
+        isReplay={!!enemyMode.is_replay}
+        replayDuration={enemyMode.replay_duration || 0}
+      />
       {/* Player Header - Styled like PlayerInfo */}
       <div style={styles.headerWrap}>
         <div style={styles.levelCircleContainer}>
@@ -228,6 +270,31 @@ const styles = {
     fontWeight: 900,
     color: '#fff',
     textShadow: textOutline,
+  },
+};
+
+const timerStyles = {
+  wrap: {
+    position: 'fixed',
+    top: 16,
+    right: 80,
+    zIndex: 100,
+    pointerEvents: 'none',
+  },
+  box: {
+    background: 'linear-gradient(180deg, rgba(15,55,95,0.9), rgba(8,30,58,0.95))',
+    border: '2.5px solid rgba(40,130,195,0.55)',
+    borderRadius: 12,
+    padding: '8px 18px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+  },
+  text: {
+    fontSize: 22,
+    fontWeight: 900,
+    color: '#fff',
+    fontFamily: 'monospace',
+    letterSpacing: '2px',
+    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
   },
 };
 

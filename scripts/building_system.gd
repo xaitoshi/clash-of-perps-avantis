@@ -2116,6 +2116,9 @@ func _create_placed_building(def: Dictionary) -> Node3D:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Block all input during replay — view only
+	if _replay_active:
+		return
 	# In enemy mode, only the main UI grid handles all input
 	if is_viewing_enemy and not create_ui:
 		return
@@ -4245,6 +4248,14 @@ func _start_replay(replay_data: Array, buildings_snapshot: Array, attacker_name:
 		bs._hide_all_collect_icons()
 		bs.is_viewing_enemy = true
 
+	# Calculate total replay duration from last action + buffer for combat
+	var replay_dur: float = 0.0
+	for a in replay_data:
+		var t: float = a.get("t", 0.0)
+		if t > replay_dur:
+			replay_dur = t
+	replay_dur += 30.0  # buffer for remaining combat after last action
+
 	var bridge = _bridge
 	if bridge:
 		bridge.send_to_react("enemy_mode", {
@@ -4252,6 +4263,7 @@ func _start_replay(replay_data: Array, buildings_snapshot: Array, attacker_name:
 			"name": "Replay: " + attacker_name,
 			"trophies": 0,
 			"is_replay": true,
+			"replay_duration": replay_dur,
 		})
 		bridge.send_to_react("cloud_transition", {"visible": true})
 
@@ -4302,7 +4314,10 @@ func _start_replay(replay_data: Array, buildings_snapshot: Array, attacker_name:
 	_cannon_energy = 10
 	_cannon_next_cost = 1
 
-	# Start replaying actions
+	# x2 speed for replay
+	Engine.time_scale = 2.0
+
+	# Start replaying actions (do NOT enter attack mode — player can't interact)
 	_replay_playback()
 
 
@@ -4319,8 +4334,7 @@ func _replay_playback() -> void:
 		return
 
 	var attack_system: Node = get_node_or_null("../AttackSystem")
-	if attack_system and attack_system.has_method("enter_attack_mode"):
-		attack_system.enter_attack_mode()
+	# Do NOT enter attack mode — replay is view-only, no player interaction
 
 	var prev_t: float = 0.0
 	for i in actions.size():
@@ -4362,6 +4376,8 @@ func _replay_playback() -> void:
 	# Small delay after battle ends for visual clarity
 	if _replay_active:
 		await get_tree().create_timer(2.0).timeout
+	# Restore normal speed
+	Engine.time_scale = 1.0
 	# Show result
 	if _replay_active and _bridge:
 		_bridge.send_to_react("battle_result", {"type": "replay_end", "reason": "Replay finished"})
@@ -4774,6 +4790,7 @@ func _return_home() -> void:
 	if not is_viewing_enemy:
 		return
 	_replay_active = false
+	Engine.time_scale = 1.0
 	_exit_ship_cannon_mode()
 	# Hide attack ship, show base ship when returning home
 	var _r2 = get_tree().root
