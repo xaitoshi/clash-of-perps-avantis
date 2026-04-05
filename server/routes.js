@@ -533,7 +533,7 @@ router.get('/state', auth, (req, res) => {
 
 // ==================== ADMIN ====================
 
-const ADMIN_KEY = process.env.ADMIN_KEY || 'change-me-in-production';
+const ADMIN_KEY = process.env.ADMIN_KEY;
 function adminAuth(req, res, next) {
   if (req.headers['x-admin-key'] !== ADMIN_KEY) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -541,10 +541,37 @@ function adminAuth(req, res, next) {
   next();
 }
 
-// List all players
+// List all players with full details (shields, wallet, last attack)
 router.get('/admin/players', adminAuth, (req, res) => {
-  const players = db.db.prepare('SELECT id, name, trophies, level, gold, wood, ore, created_at FROM players ORDER BY trophies DESC').all();
-  res.json(players);
+  const players = db.db.prepare(`
+    SELECT id, name, trophies, level, gold, wood, ore, wallet,
+           shield_until, last_attacked_by, last_attacked_at, created_at
+    FROM players ORDER BY trophies DESC
+  `).all();
+  res.json(players.map(p => ({
+    ...p,
+    shield_active: p.shield_until && new Date(p.shield_until + 'Z') > new Date(),
+    shield_remaining: p.shield_until ? Math.max(0, Math.round((new Date(p.shield_until + 'Z') - new Date()) / 60000)) : 0,
+    buildings_count: db.db.prepare('SELECT COUNT(*) as c FROM buildings WHERE player_id = ?').get(p.id).c,
+  })));
+});
+
+// All battle replays with full details
+router.get('/admin/replays', adminAuth, (req, res) => {
+  const rows = db.db.prepare(`
+    SELECT r.id, r.attacker_id, r.defender_id,
+           r.claimed_result, r.verified_result, r.verification_reason,
+           r.loot_gold, r.loot_wood, r.loot_ore,
+           r.sim_th_hp_pct, r.sim_buildings_destroyed, r.duration_sec,
+           r.created_at,
+           pa.name AS attacker_name, pd.name AS defender_name
+    FROM battle_replays r
+    LEFT JOIN players pa ON pa.id = r.attacker_id
+    LEFT JOIN players pd ON pd.id = r.defender_id
+    ORDER BY r.created_at DESC
+    LIMIT 200
+  `).all();
+  res.json(rows);
 });
 
 // Delete a player by name
