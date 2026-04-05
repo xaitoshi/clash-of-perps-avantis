@@ -4248,14 +4248,6 @@ func _start_replay(replay_data: Array, buildings_snapshot: Array, attacker_name:
 		bs._hide_all_collect_icons()
 		bs.is_viewing_enemy = true
 
-	# Calculate total replay duration from last action + buffer for combat
-	var replay_dur: float = 0.0
-	for a in replay_data:
-		var t: float = a.get("t", 0.0)
-		if t > replay_dur:
-			replay_dur = t
-	replay_dur += 30.0  # buffer for remaining combat after last action
-
 	var bridge = _bridge
 	if bridge:
 		bridge.send_to_react("enemy_mode", {
@@ -4263,7 +4255,6 @@ func _start_replay(replay_data: Array, buildings_snapshot: Array, attacker_name:
 			"name": "Replay: " + attacker_name,
 			"trophies": 0,
 			"is_replay": true,
-			"replay_duration": replay_dur,
 		})
 		bridge.send_to_react("cloud_transition", {"visible": true})
 

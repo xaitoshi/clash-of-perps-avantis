@@ -14,33 +14,24 @@ function formatTime(sec) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function BattleTimer({ isReplay, replayDuration }) {
+function BattleTimer({ isReplay }) {
   const [elapsed, setElapsed] = useState(0);
   const startRef = useRef(Date.now());
 
   useEffect(() => {
     startRef.current = Date.now();
     setElapsed(0);
-    // Replay runs at x2 speed so tick faster
-    const interval = isReplay ? 250 : 500;
     const id = setInterval(() => {
       const raw = (Date.now() - startRef.current) / 1000;
-      // Replay is x2 speed so elapsed game-time = raw * 2
       setElapsed(isReplay ? raw * 2 : raw);
-    }, interval);
+    }, 250);
     return () => clearInterval(id);
   }, [isReplay]);
 
-  const display = isReplay
-    ? formatTime(Math.max(0, (replayDuration || 60) - elapsed))
-    : formatTime(elapsed);
-
-  const isLow = isReplay && (replayDuration || 60) - elapsed < 10;
-
   return (
     <div style={timerStyles.wrap}>
-      <div style={{ ...timerStyles.box, borderColor: isLow ? '#E53935' : 'rgba(40,130,195,0.55)' }}>
-        <span style={{ ...timerStyles.text, color: isLow ? '#ff6b6b' : '#fff' }}>{display}</span>
+      <div style={timerStyles.box}>
+        <span style={timerStyles.text}>{formatTime(elapsed)}</span>
       </div>
     </div>
   );
@@ -53,10 +44,7 @@ function EnemyHeader() {
 
   return (
     <div style={styles.container}>
-      <BattleTimer
-        isReplay={!!enemyMode.is_replay}
-        replayDuration={enemyMode.replay_duration || 0}
-      />
+      <BattleTimer isReplay={!!enemyMode.is_replay} />
       {/* Player Header - Styled like PlayerInfo */}
       <div style={styles.headerWrap}>
         <div style={styles.levelCircleContainer}>
