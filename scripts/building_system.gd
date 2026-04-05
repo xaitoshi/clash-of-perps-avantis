@@ -4236,6 +4236,8 @@ func _switch_to_enemy_island() -> void:
 
 ## Start replay playback — loads buildings snapshot and replays recorded actions.
 func _start_replay(replay_data: Array, buildings_snapshot: Array, attacker_name: String) -> void:
+	# Unpause tree — panel overlay pauses it, but replay needs timers
+	get_tree().paused = false
 	_replay_active = true
 	_replay_actions = replay_data
 	_replay_buildings_snapshot = buildings_snapshot

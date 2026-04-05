@@ -14,6 +14,7 @@ function BattleResultOverlay({ result, onClose }) {
 
   return (
     <div style={styles.backdrop}>
+      <style>{ANIM_CSS}</style>
       <div style={styles.content}>
 
         {/* Title Group */}
@@ -32,9 +33,9 @@ function BattleResultOverlay({ result, onClose }) {
           <div style={styles.panel}>
             <div style={styles.panelTitle}>You received</div>
             <div style={styles.resourceRow}>
-               <LootItem icon={goldIcon} value={result.loot.gold} />
-               <LootItem icon={woodIcon} value={result.loot.wood} />
-               <LootItem icon={stoneIcon} value={result.loot.ore} />
+               <LootItem icon={goldIcon} value={result.loot.gold} delay={0.4} />
+               <LootItem icon={woodIcon} value={result.loot.wood} delay={0.7} />
+               <LootItem icon={stoneIcon} value={result.loot.ore} delay={1.0} />
             </div>
           </div>
         )}
@@ -58,15 +59,26 @@ function BattleResultOverlay({ result, onClose }) {
   );
 }
 
-function LootItem({ icon, value }) {
+function LootItem({ icon, value, delay }) {
   if (!value) return null;
   return (
-    <div style={styles.lootItem}>
+    <div className="loot-pop" style={{...styles.lootItem, animationDelay: `${delay}s`}}>
       <img src={icon} alt="" style={styles.lootIcon} />
       <span style={styles.lootValue}>{fmt(value)}</span>
     </div>
   );
 }
+
+const ANIM_CSS = `
+@keyframes popIn {
+  0% { transform: scale(0.5) translateY(20px); opacity: 0; }
+  60% { transform: scale(1.15) translateY(-5px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.loot-pop {
+  animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+`;
 
 const textOutline = '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 3px 6px rgba(0,0,0,0.8)';
 

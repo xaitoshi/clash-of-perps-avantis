@@ -26,12 +26,15 @@ function BattleLogPanel({ onClose }) {
 
   const handleWatchReplay = useCallback((battle) => {
     if (!battle.replay_data || !battle.buildings_snapshot) return;
-    sendToGodot('watch_replay', {
-      replay_data: battle.replay_data,
-      buildings_snapshot: battle.buildings_snapshot,
-      attacker_name: battle.opponent_name,
-    });
+    // Close panel first (unpauses tree), then send replay after a tick
     onClose();
+    setTimeout(() => {
+      sendToGodot('watch_replay', {
+        replay_data: battle.replay_data,
+        buildings_snapshot: battle.buildings_snapshot,
+        attacker_name: battle.opponent_name,
+      });
+    }, 100);
   }, [sendToGodot, onClose]);
 
   useEffect(() => {
