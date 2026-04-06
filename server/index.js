@@ -315,7 +315,8 @@ function renderPlayers() {
   document.getElementById('playerStats').innerHTML =
     '<div class="stat"><div class="v">' + players.length + '</div><div class="l">Players</div></div>' +
     '<div class="stat"><div class="v">' + shielded + '</div><div class="l">Shielded</div></div>' +
-    '<div class="stat"><div class="v">' + players.reduce((s,p) => s + p.buildings_count, 0) + '</div><div class="l">Buildings</div></div>';
+    '<div class="stat"><div class="v">' + players.reduce((s,p) => s + p.buildings_count, 0) + '</div><div class="l">Buildings</div></div>' +
+    '<div class="stat" style="cursor:pointer;border-color:#f59e0b" onclick="resetAllTrophies()"><div class="v" style="font-size:14px">RESET ALL</div><div class="l">Trophies</div></div>';
 
   document.getElementById('playersBody').innerHTML = players.map(p =>
     '<tr>' +
@@ -328,7 +329,7 @@ function renderPlayers() {
     '<td>' + p.buildings_count + '</td>' +
     '<td>' + (p.shield_active ? '<span class="badge badge-shield">' + p.shield_remaining + 'm left</span>' : '<span class="badge badge-off">none</span>') + '</td>' +
     '<td class="mono">' + (p.created_at||'').split(' ')[0] + '</td>' +
-    '<td><button class="btn" onclick="resetPlayer(\\'' + esc(p.name) + '\\')">Reset</button> <button class="btn btn-danger" onclick="deletePlayer(\\'' + esc(p.name) + '\\')">Delete</button></td>' +
+    '<td><button class="btn" onclick="resetTrophies(\\'' + esc(p.name) + '\\')">0 Troph</button> <button class="btn" onclick="resetPlayer(\\'' + esc(p.name) + '\\')">Reset</button> <button class="btn btn-danger" onclick="deletePlayer(\\'' + esc(p.name) + '\\')">Delete</button></td>' +
     '</tr>'
   ).join('');
 }
@@ -362,6 +363,18 @@ function renderReplays() {
     '<td class="mono">' + (r.created_at||'').replace('T',' ').split('.')[0] + '</td>' +
     '</tr>'
   ).join('');
+}
+
+async function resetTrophies(name) {
+  if (!confirm('Reset trophies for ' + name + ' to 0?')) return;
+  await fetch('/api/admin/players/' + encodeURIComponent(name) + '/reset-trophies', { method: 'POST', headers: { 'x-admin-key': KEY } });
+  loadAll();
+}
+
+async function resetAllTrophies() {
+  if (!confirm('Reset ALL players trophies to 0? This is for new season/tournament.')) return;
+  await fetch('/api/admin/reset-all-trophies', { method: 'POST', headers: { 'x-admin-key': KEY } });
+  loadAll();
 }
 
 async function resetPlayer(name) {

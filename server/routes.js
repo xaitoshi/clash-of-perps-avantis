@@ -314,6 +314,18 @@ router.get('/battle-log', auth, (req, res) => {
   }));
 });
 
+// ==================== LEADERBOARD ====================
+
+router.get('/leaderboard', (req, res) => {
+  const rows = db.db.prepare(`
+    SELECT name, trophies, level FROM players
+    WHERE trophies > 0
+    ORDER BY trophies DESC
+    LIMIT 50
+  `).all();
+  res.json(rows);
+});
+
 // ==================== TROPHIES ====================
 
 // Get trophies
@@ -601,6 +613,20 @@ router.post('/admin/players/:name/reset', adminAuth, (req, res) => {
   db.db.prepare('UPDATE players SET gold = 10000, wood = 10000, ore = 10000, trophies = 0 WHERE id = ?').run(player.id);
   db.db.prepare('UPDATE troop_levels SET level = 1 WHERE player_id = ?').run(player.id);
   res.json({ reset: req.params.name });
+});
+
+// Reset trophies for one player
+router.post('/admin/players/:name/reset-trophies', adminAuth, (req, res) => {
+  const player = db.db.prepare('SELECT id FROM players WHERE name = ?').get(req.params.name);
+  if (!player) return res.status(404).json({ error: 'Player not found' });
+  db.db.prepare('UPDATE players SET trophies = 0 WHERE id = ?').run(player.id);
+  res.json({ reset_trophies: req.params.name });
+});
+
+// Reset trophies for ALL players
+router.post('/admin/reset-all-trophies', adminAuth, (req, res) => {
+  const result = db.db.prepare('UPDATE players SET trophies = 0').run();
+  res.json({ reset: result.changes });
 });
 
 // Wipe entire database
