@@ -28,6 +28,18 @@
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
       }
+      // Early Farcaster SDK init — must call ready() ASAP to dismiss splash
+      // and signal to Warpcast that the app is alive
+      try {
+        if (window !== window.parent) {
+          window.__fcEarly = import('https://esm.sh/@farcaster/miniapp-sdk@0.3.0').then(function(m) {
+            m.sdk.actions.ready();
+            window.__fcSdk = m.sdk;
+            window.__fcUser = m.sdk.context && m.sdk.context.user;
+            return m.sdk;
+          }).catch(function(){});
+        }
+      } catch(e) {}
     </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { usePlayer, useBuilding } from '../hooks/useGodot';
-import { useIsMobile } from '../hooks/useIsMobile';
+import { useLayout } from '../hooks/useIsMobile';
 import { colors } from '../styles/theme';
 import trophyIcon from '../assets/resources/free-icon-cup-with-star-109765.png';
 
@@ -9,7 +9,7 @@ const formatNumber = (n) => (n || 0).toLocaleString().replace(/,/g, ' ');
 function PlayerInfo({ onOpenProfile, onOpenLeaderboard }) {
   const playerState = usePlayer();
   const { buildingDefs } = useBuilding();
-  const mobile = useIsMobile();
+  const { isMobile: mobile, isLandscape } = useLayout();
   if (!playerState) return null;
 
   const townHallLevel = buildingDefs?.th_level || 1;
@@ -32,7 +32,7 @@ function PlayerInfo({ onOpenProfile, onOpenLeaderboard }) {
       </div>
 
       <div style={styles.infoStack}>
-        <span style={{ ...styles.name, ...(mobile ? { fontSize: 16 } : {}) }}>{playerState.player_name}</span>
+        <span style={{ ...styles.name, ...(mobile ? { fontSize: 18 } : {}) }}>{playerState.player_name}</span>
 
         <div style={styles.trophyContainer} onClick={(e) => { e.stopPropagation(); onOpenLeaderboard?.(); }}>
           <div style={styles.trophyBox}>

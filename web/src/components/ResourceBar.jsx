@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
 import { useResources, useSend } from '../hooks/useGodot';
-import { useIsMobile } from '../hooks/useIsMobile';
+import { useLayout } from '../hooks/useIsMobile';
 
 import goldIcon from '../assets/resources/gold_bar.png';
 import woodIcon from '../assets/resources/wood_bar.png';
@@ -23,14 +23,14 @@ function ResourceBar() {
   const data = useResources();
   const { sendToGodot } = useSend();
   const caps = data.caps || { gold: 5000, wood: 5000, ore: 5000 };
-  const mobile = useIsMobile();
+  const { isMobile: mobile, isLandscape } = useLayout();
 
   const handleClick = useCallback((key) => {
     sendToGodot('add_resources', { resource: key });
   }, [sendToGodot]);
 
   return (
-    <div style={{ ...styles.bar, ...(mobile ? styles.barMobile : {}) }}>
+    <div style={{ ...styles.bar, ...(mobile ? (isLandscape ? styles.barLandscape : styles.barMobile) : {}) }}>
       {ITEMS.map(({ key, icon, indicator, offset }) => {
         const current = data[key] || 0;
         const max = caps[key] || 5000;
@@ -47,11 +47,12 @@ function ResourceBar() {
               style={{
                 ...styles.icon,
                 ...(mobile ? styles.iconMobile : {}),
-                left: mobile ? (offset?.left ?? -10) * 0.65 : (offset?.left ?? -10),
+                ...(isLandscape ? { width: 40, height: 40 } : {}),
+                left: mobile ? (offset?.left ?? -10) * 0.55 : (offset?.left ?? -10),
                 top: offset?.top ?? '50%'
               }}
             />
-            <div style={{ ...styles.pill, ...(mobile ? styles.pillMobile : {}) }}>
+            <div style={{ ...styles.pill, ...(mobile ? styles.pillMobile : {}), ...(isLandscape ? { minWidth: 110, height: 26, padding: '0 10px 0 34px' } : {}) }}>
               <div style={{
                 ...styles.indicator,
                 background: barColor,
@@ -158,13 +159,20 @@ const styles = {
     cursor: 'pointer',
     zIndex: 3,
   },
-  // Mobile overrides
+  // Mobile portrait
   barMobile: {
     top: 8,
     right: 8,
     gap: 6,
     flexDirection: 'column',
     alignItems: 'flex-end',
+  },
+  // Mobile landscape — horizontal row, shifted right to avoid overlapping PlayerInfo
+  barLandscape: {
+    top: 6,
+    right: 10,
+    gap: 8,
+    flexDirection: 'row',
   },
   pillMobile: {
     minWidth: 110,

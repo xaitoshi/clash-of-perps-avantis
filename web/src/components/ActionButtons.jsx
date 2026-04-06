@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { useSend, useUI, useResources, useBuilding } from '../hooks/useGodot';
-import { useIsMobile } from '../hooks/useIsMobile';
+import { useLayout } from '../hooks/useIsMobile';
 import buildIcon from '../assets/resources/Gemini_Generated_Image_dl9plxdl9plxdl9p-removebg-preview.png';
 import attackIcon from '../assets/resources/file_000000006858720a8f860ee8da33335a.png';
 import chartIcon from '../assets/resources/chart.png';
@@ -67,7 +67,7 @@ const CannonBallIcon = ({ size = 48 }) => (
 
 // ── Attack HUD (shown during enemy mode) ──────────────────────────────────
 function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSelectTroop, cannonEnergy }) {
-  const mobile = useIsMobile();
+  const { isMobile: mobile, isLandscape } = useLayout();
   const [perf, setPerf] = useState({ troop_counts: {}, deployed_types: {} });
   const perfRef = useRef(perf);
 
@@ -115,10 +115,10 @@ function AttackHUD({ onReturnHome, onCannon, cannonMode, selectedTroopIdx, onSel
             ? 'grayscale(1) brightness(0.45)'
             : deployed ? 'grayscale(0.7) brightness(0.75)' : 'none';
 
-          const cardW = mobile ? 56 : 74;
-          const cardH = mobile ? 68 : 88;
-          const imgW = mobile ? 48 : 64;
-          const imgH = mobile ? 46 : 62;
+          const cardW = mobile ? 60 : 74;
+          const cardH = mobile ? 74 : 88;
+          const imgW = mobile ? 52 : 64;
+          const imgH = mobile ? 50 : 62;
 
           return (
             <button
@@ -251,7 +251,7 @@ function ActionButtons({ onOpenBattleLog }) {
   const { enemyMode, cannonMode, selectedTroopIdx, cannonEnergy } = useUI();
   const resources = useResources();
   const { buildingDefs } = useBuilding();
-  const mobile = useIsMobile();
+  const { isMobile: mobile, isLandscape } = useLayout();
 
   // Count how many buildings the player can actually build right now
   const affordableCount = useMemo(() => {
@@ -307,8 +307,8 @@ function ActionButtons({ onOpenBattleLog }) {
     );
   }
 
-  const btnSize = mobile ? 90 : 140;
-  const btnSmall = mobile ? 72 : 110;
+  const btnSize = mobile ? 110 : 140;
+  const btnSmall = mobile ? 88 : 110;
 
   return (
     <>
@@ -318,19 +318,19 @@ function ActionButtons({ onOpenBattleLog }) {
             <ShieldIcon size={mobile ? 40 : 60} />
           </CustomBtn>
           <CustomBtn onClick={handleFindEnemy} width={btnSize} height={btnSize}>
-            <img src={attackIcon} alt="attack" style={{ ...styles.attackIconImg, ...(mobile ? { width: 80, height: 80 } : {}) }} />
+            <img src={attackIcon} alt="attack" style={{ ...styles.attackIconImg, ...(mobile ? { width: 95, height: 95 } : {}) }} />
             <span style={styles.btnLabel}>ATTACK</span>
           </CustomBtn>
         </div>
         <CustomBtn onClick={handleOpenShop} width={btnSmall} height={btnSmall}>
           {affordableCount > 0 && <div style={styles.notificationBadgeSmall}>{affordableCount}</div>}
-          <img src={buildIcon} alt="build" style={{ ...styles.buildIconImgSmall, ...(mobile ? { width: 65, height: 65 } : {}) }} />
+          <img src={buildIcon} alt="build" style={{ ...styles.buildIconImgSmall, ...(mobile ? { width: 75, height: 75 } : {}) }} />
         </CustomBtn>
       </div>
       <div style={{ ...styles.wrapRight, ...(mobile ? { bottom: 8, right: 8 } : {}) }}>
         <CustomBtn onClick={handleOpenTrade} width={btnSize} height={btnSize}>
           {(window._openPositionsCount || 0) > 0 && <div style={styles.notificationBadge}>!</div>}
-          <img src={chartIcon} alt="trade" style={{ ...styles.chartIconImg, ...(mobile ? { width: 75, height: 75 } : {}) }} />
+          <img src={chartIcon} alt="trade" style={{ ...styles.chartIconImg, ...(mobile ? { width: 90, height: 90 } : {}) }} />
           <span style={styles.btnLabel}>TRADE</span>
         </CustomBtn>
       </div>
