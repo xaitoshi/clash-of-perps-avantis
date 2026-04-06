@@ -132,8 +132,10 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    add_header Cross-Origin-Opener-Policy "same-origin" always;
-    add_header Cross-Origin-Embedder-Policy "require-corp" always;
+    # Use credentialless COEP + allow-popups COOP for Farcaster iframe compatibility
+    # Godot falls back to single-threaded mode without SharedArrayBuffer in iframes
+    add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
+    add_header Cross-Origin-Embedder-Policy "credentialless" always;
 
     # API proxy → backend port 4000 (gzip off — Godot web can't decompress)
     location /api/ {
@@ -179,22 +181,22 @@ server {
     # HTML entry — never cache so new deploys are picked up immediately
     location = /index.html {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
-        add_header Cross-Origin-Opener-Policy "same-origin" always;
-        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
+        add_header Cross-Origin-Embedder-Policy "credentialless" always;
     }
 
     # Service worker — never cache (browser must always check for updates)
     location = /sw.js {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
-        add_header Cross-Origin-Opener-Policy "same-origin" always;
-        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
+        add_header Cross-Origin-Embedder-Policy "credentialless" always;
     }
 
     # Godot assets — long cache with ETag revalidation, SW caches after first load
     location /godot/ {
         try_files $uri =404;
-        add_header Cross-Origin-Opener-Policy "same-origin" always;
-        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
+        add_header Cross-Origin-Embedder-Policy "credentialless" always;
         add_header Cache-Control "public, max-age=86400, must-revalidate";
         etag on;
         types { application/wasm wasm; application/javascript js; application/octet-stream pck; }
@@ -206,8 +208,8 @@ server {
     # Hashed JS/CSS assets — immutable cache (filename changes on rebuild)
     location /assets/ {
         add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header Cross-Origin-Opener-Policy "same-origin" always;
-        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;
+        add_header Cross-Origin-Embedder-Policy "credentialless" always;
     }
 
     gzip on;

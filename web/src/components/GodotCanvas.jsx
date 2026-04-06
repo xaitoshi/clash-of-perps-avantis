@@ -62,6 +62,19 @@ function GodotCanvas({ onEngineReady }) {
   const loadedRef = useRef(false);
   const [progress, setProgress] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [stuck, setStuck] = useState(false);
+  const lastProgressRef = useRef({ value: 0, time: Date.now() });
+
+  // Detect if loading is stuck (same progress for 30s)
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { value, time } = lastProgressRef.current;
+      if (!isLoaded && progress === value && Date.now() - time > 30000 && progress > 0 && progress < 100) {
+        setStuck(true);
+      }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [progress, isLoaded]);
 
   useEffect(() => {
     if (loadedRef.current) return;
@@ -90,6 +103,7 @@ function GodotCanvas({ onEngineReady }) {
       const handleProgress = (current, total) => {
         const pct = total > 0
           ? Math.round((current / total) * DOWNLOAD_MAX)
+
           : Math.min(DOWNLOAD_MAX - 2, Math.round((current / ESTIMATED_TOTAL) * DOWNLOAD_MAX));
         setProgress(pct);
       };
