@@ -318,9 +318,11 @@ router.get('/battle-log', auth, (req, res) => {
 
 router.get('/leaderboard', (req, res) => {
   const rows = db.db.prepare(`
-    SELECT name, trophies, level FROM players
-    WHERE trophies > 0
-    ORDER BY trophies DESC
+    SELECT p.name, p.trophies,
+      COALESCE((SELECT MAX(b.level) FROM buildings b WHERE b.player_id = p.id AND b.type = 'town_hall'), 1) AS level
+    FROM players p
+    WHERE p.trophies > 0
+    ORDER BY p.trophies DESC
     LIMIT 50
   `).all();
   res.json(rows);
