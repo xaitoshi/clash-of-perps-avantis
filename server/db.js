@@ -100,14 +100,13 @@ const stmts = {
   getPlayerByWallet: db.prepare(`SELECT * FROM players WHERE wallet = ?`),
   getPlayerById: db.prepare(`SELECT * FROM players WHERE id = ?`),
 
-  // Find enemy (closest trophies, not self)
-  findEnemy: db.prepare(`
+  // Find enemy candidates (not self, no shield)
+  findEnemyCandidates: db.prepare(`
     SELECT id, name, trophies, level FROM players
     WHERE id != ?
-      AND trophies >= 50
       AND (shield_until IS NULL OR shield_until < datetime('now'))
-    ORDER BY ABS(trophies - ?) ASC
-    LIMIT 1
+    ORDER BY RANDOM()
+    LIMIT 20
   `),
 
   // Resources
@@ -253,6 +252,10 @@ const TROOP_DEFS = {
 
 // ---------- Trophy Points per Building (type -> level -> trophies) ----------
 
+// PvP trophy rewards — trophies only change from battles
+const TROPHY_WIN = 30;
+const TROPHY_LOSS = 15;  // defender loses this on defeat
+
 const TROPHY_TABLE = {
   town_hall: [50, 120, 250],
   mine:      [10, 25, 50],
@@ -390,13 +393,11 @@ function placeBuilding(playerId, type, gridX, gridZ, gridIndex = 0) {
 
   const hp = def.hp_levels[0];
   const info = stmts.placeBuilding.run(playerId, type, gridX, gridZ, gridIndex, hp, hp);
-  const trophyResult = recalculateTrophies(playerId);
   return {
     id: info.lastInsertRowid,
     type, level: 1, grid_x: gridX, grid_z: gridZ, grid_index: gridIndex,
     hp, max_hp: hp,
     resources: getResources(playerId),
-    trophies: trophyResult.trophies,
   };
 }
 
@@ -455,7 +456,6 @@ function upgradeBuilding(playerId, buildingId) {
   const newHp = def.hp_levels[nextLevel - 1];
   stmts.upgradeBuilding.run(nextLevel, newHp, newHp, buildingId, playerId);
 
-  const trophyResult = recalculateTrophies(playerId);
   return {
     id: buildingId, type: building.type, level: nextLevel,
     hp: newHp, max_hp: newHp, cost,
@@ -468,8 +468,7 @@ function removeBuilding(playerId, buildingId) {
   const building = stmts.getBuildingById.get(buildingId, playerId);
   if (!building) return { error: 'Building not found' };
   stmts.removeBuilding.run(buildingId, playerId);
-  const trophyResult = recalculateTrophies(playerId);
-  return { removed: buildingId, type: building.type, trophies: trophyResult.trophies };
+  return { removed: buildingId, type: building.type };
 }
 
 function getPlayerBuildings(playerId) {
@@ -497,11 +496,9 @@ function upgradeTroop(playerId, troopType) {
   const newLevel = currentLevel + 1;
   stmts.upsertTroopLevel.run(playerId, troopType, newLevel);
 
-  const trophyResult = recalculateTrophies(playerId);
   return {
     troop_type: troopType, level: newLevel, cost,
     resources: getResources(playerId),
-    trophies: trophyResult.trophies,
   };
 }
 
@@ -570,20 +567,60 @@ function getProductionStatus(playerId) {
   return result;
 }
 
+// Calculate base strength score: TH level * 100 + building progress %
+function getBaseStrength(playerId) {
+  const buildings = stmts.getBuildings.all(playerId);
+  let thLevel = 1;
+  for (const b of buildings) {
+    if (b.type === 'town_hall') { thLevel = b.level; break; }
+  }
+  // Count building slots filled and leveled (same logic as client progress bar)
+  let total = 0, done = 0;
+  for (const type in TH_MAX_COUNT) {
+    if (type === 'town_hall') continue;
+    const limits = TH_MAX_COUNT[type];
+    const maxAtTh = limits[Math.min(thLevel - 1, limits.length - 1)] || 0;
+    if (maxAtTh <= 0) continue;
+    for (let s = 0; s < maxAtTh; s++) {
+      for (let l = 1; l <= thLevel; l++) total++;
+    }
+    const placed = buildings.filter(b => b.type === type).map(b => b.level).sort((a, b) => b - a);
+    for (let s = 0; s < maxAtTh; s++) {
+      const blvl = s < placed.length ? placed[s] : 0;
+      for (let l = 1; l <= thLevel; l++) {
+        if (blvl >= l) done++;
+      }
+    }
+  }
+  const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+  return thLevel * 100 + progress;
+}
+
 function findEnemy(playerId) {
   const player = stmts.getPlayerById.get(playerId);
   if (!player) return { error: 'Player not found' };
-  const enemy = stmts.findEnemy.get(playerId, player.trophies);
-  if (!enemy) return { error: 'No enemies found' };
-  // Repair enemy buildings before attack (buildings auto-rebuild like in CoC)
-  repairAllBuildings(enemy.id);
-  const buildings = stmts.getBuildings.all(enemy.id);
-  const resources = getResources(enemy.id);
+  const myStrength = getBaseStrength(playerId);
+  const candidates = stmts.findEnemyCandidates.all(playerId);
+  if (candidates.length === 0) return { error: 'No enemies found' };
+
+  // Pick closest base strength
+  let best = null, bestDiff = Infinity;
+  for (const c of candidates) {
+    const str = getBaseStrength(c.id);
+    const diff = Math.abs(str - myStrength);
+    if (diff < bestDiff) { bestDiff = diff; best = c; }
+  }
+  if (!best) return { error: 'No enemies found' };
+
+  // Repair enemy buildings before attack
+  repairAllBuildings(best.id);
+  const buildings = stmts.getBuildings.all(best.id);
+  const resources = getResources(best.id);
   return {
-    id: enemy.id,
-    name: enemy.name,
-    trophies: enemy.trophies,
-    level: enemy.level,
+    id: best.id,
+    name: best.name,
+    trophies: best.trophies,
+    level: best.level,
     buildings,
     resources,
   };
@@ -658,6 +695,16 @@ const LOOT_PERCENT = 0.30;
 const SHIELD_HOURS = 12; // 12-hour shield after being raided
 const ATTACK_COOLDOWN_HOURS = 2; // can't attack same player for 2 hours
 
+function battleDefeat(attackerId, defenderId) {
+  const attacker = stmts.getPlayerById.get(attackerId);
+  const defender = stmts.getPlayerById.get(defenderId);
+  const newAttackerTrophies = Math.max(0, (attacker?.trophies || 0) - TROPHY_LOSS);
+  const newDefenderTrophies = (defender?.trophies || 0) + TROPHY_WIN;
+  stmts.updateTrophies.run(newAttackerTrophies, attackerId);
+  stmts.updateTrophies.run(newDefenderTrophies, defenderId);
+  return { attackerTrophies: newAttackerTrophies, defenderTrophies: newDefenderTrophies };
+}
+
 function battleVictory(attackerId, defenderId) {
   if (!attackerId || !defenderId) return { error: 'Missing player IDs' };
   if (attackerId === defenderId) return { error: 'Cannot attack yourself' };
@@ -690,10 +737,18 @@ function battleVictory(attackerId, defenderId) {
   const shieldUntil = new Date(Date.now() + SHIELD_HOURS * 3600000).toISOString().replace('T', ' ').slice(0, 19);
   stmts.setShield.run(shieldUntil, attackerId, defenderId);
 
+  // PvP trophies — attacker gains, defender loses
+  const attacker = stmts.getPlayerById.get(attackerId);
+  const newAttackerTrophies = (attacker?.trophies || 0) + TROPHY_WIN;
+  const newDefenderTrophies = Math.max(0, (defender.trophies || 0) - TROPHY_LOSS);
+  stmts.updateTrophies.run(newAttackerTrophies, attackerId);
+  stmts.updateTrophies.run(newDefenderTrophies, defenderId);
+
   return {
     success: true,
     loot: { gold: lootGold, wood: lootWood, ore: lootOre },
     attacker_resources: getResources(attackerId),
+    trophies: newAttackerTrophies,
   };
 }
 
@@ -734,6 +789,7 @@ module.exports = {
   getFullPlayerState,
   buyShip,
   battleVictory,
+  battleDefeat,
   getResourceCaps,
   storeReplay,
   TROPHY_TABLE,

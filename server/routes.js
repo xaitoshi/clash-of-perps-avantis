@@ -245,9 +245,10 @@ router.post('/attack/result', auth, (req, res) => {
     return res.json(battleResult);
   }
 
-  // Defeat — no loot, still store replay
+  // Defeat — attacker loses trophies, defender gains
+  const defeatResult = db.battleDefeat(req.player.id, defender_id);
   db.storeReplay(req.player.id, defender_id, actions, defenderBuildings, claimedResult, 'accepted', 'Defeat', null, verification);
-  res.json({ success: true, loot: { gold: 0, wood: 0, ore: 0 } });
+  res.json({ success: true, loot: { gold: 0, wood: 0, ore: 0 }, trophies: defeatResult.attackerTrophies });
 });
 
 // ==================== TROOPS ====================
