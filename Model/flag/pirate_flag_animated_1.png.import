@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://bnfku74f0oj3g"
 path.s3tc="res://.godot/imported/pirate_flag_animated_1.png-262ed6d21e1c250d27f1e7aa50dfbb3f.s3tc.ctex"
+path.etc2="res://.godot/imported/pirate_flag_animated_1.png-262ed6d21e1c250d27f1e7aa50dfbb3f.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://Model/flag/pirate_flag_animated_1.png"
-dest_files=["res://.godot/imported/pirate_flag_animated_1.png-262ed6d21e1c250d27f1e7aa50dfbb3f.s3tc.ctex"]
+dest_files=["res://.godot/imported/pirate_flag_animated_1.png-262ed6d21e1c250d27f1e7aa50dfbb3f.s3tc.ctex", "res://.godot/imported/pirate_flag_animated_1.png-262ed6d21e1c250d27f1e7aa50dfbb3f.etc2.ctex"]
 
 [params]
 

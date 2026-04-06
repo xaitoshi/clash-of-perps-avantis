@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://cqwl6vyk0ts01"
 path.s3tc="res://.godot/imported/Isl_texture_pbr_20250901.png-67f488965b1151d3beabb0ba3cebd117.s3tc.ctex"
+path.etc2="res://.godot/imported/Isl_texture_pbr_20250901.png-67f488965b1151d3beabb0ba3cebd117.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://Model/Island/Isl_texture_pbr_20250901.png"
-dest_files=["res://.godot/imported/Isl_texture_pbr_20250901.png-67f488965b1151d3beabb0ba3cebd117.s3tc.ctex"]
+dest_files=["res://.godot/imported/Isl_texture_pbr_20250901.png-67f488965b1151d3beabb0ba3cebd117.s3tc.ctex", "res://.godot/imported/Isl_texture_pbr_20250901.png-67f488965b1151d3beabb0ba3cebd117.etc2.ctex"]
 
 [params]
 

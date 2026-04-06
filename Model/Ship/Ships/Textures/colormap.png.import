@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://c1065y1xmd8eq"
 path.s3tc="res://.godot/imported/colormap.png-3e2a226a5441aac838e55a4f802a1856.s3tc.ctex"
+path.etc2="res://.godot/imported/colormap.png-3e2a226a5441aac838e55a4f802a1856.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://Model/Ship/Ships/Textures/colormap.png"
-dest_files=["res://.godot/imported/colormap.png-3e2a226a5441aac838e55a4f802a1856.s3tc.ctex"]
+dest_files=["res://.godot/imported/colormap.png-3e2a226a5441aac838e55a4f802a1856.s3tc.ctex", "res://.godot/imported/colormap.png-3e2a226a5441aac838e55a4f802a1856.etc2.ctex"]
 
 [params]
 
