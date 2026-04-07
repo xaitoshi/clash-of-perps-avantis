@@ -3,6 +3,70 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction, TransactionInstruction, SystemProgram } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { ed25519 } from '@noble/curves/ed25519';
+import { isFarcasterFrame } from './useFarcaster';
+
+// ---------- Farcaster direct signing (bypasses wallet-standard SIP-99 wrapping) ----------
+let _fcProvider = null;
+async function getFcProvider() {
+  if (_fcProvider) return _fcProvider;
+  try {
+    const { sdk } = await import('@farcaster/miniapp-sdk');
+    _fcProvider = await sdk.wallet.getSolanaProvider();
+  } catch {}
+  return _fcProvider;
+}
+
+async function fcSignRaw(msgBytes, pubKeyBytes) {
+  const provider = await getFcProvider();
+  if (!provider) return null;
+  const msgStr = new TextDecoder().decode(msgBytes);
+
+  // Call provider.signMessage — this goes through Warpcast native
+  let sigB64;
+  try {
+    const res = await provider.signMessage(msgStr);
+    sigB64 = res.signature;
+  } catch (e) {
+    console.log('[Pacifica] FC signMessage failed:', e.message);
+    return null;
+  }
+
+  const sig = Uint8Array.from(atob(sigB64), c => c.charCodeAt(0));
+  if (sig.length !== 64) { console.log('[Pacifica] bad sig length:', sig.length); return null; }
+
+  // Check raw first
+  if (ed25519.verify(sig, msgBytes, pubKeyBytes)) {
+    console.log('[Pacifica] FC raw verify OK!');
+    return sig;
+  }
+
+  // Warpcast wraps with SIP-99 — try all known variants to identify format
+  const prefix = new Uint8Array([0xff, ...new TextEncoder().encode('solana offchain\n')]);
+  const len2 = new Uint8Array(2);
+  len2[0] = msgBytes.length & 0xff; len2[1] = (msgBytes.length >> 8) & 0xff;
+  const len4 = new Uint8Array(4);
+  new DataView(len4.buffer).setUint32(0, msgBytes.length, true);
+
+  const variants = [
+    { name: 'v0_f0_2b', data: new Uint8Array([...prefix, 0x00, 0x00, ...len2, ...msgBytes]) },
+    { name: 'v0_f0_4b', data: new Uint8Array([...prefix, 0x00, 0x00, ...len4, ...msgBytes]) },
+    { name: 'v0_f1_2b', data: new Uint8Array([...prefix, 0x00, 0x01, ...len2, ...msgBytes]) },
+    { name: 'v0_f1_4b', data: new Uint8Array([...prefix, 0x00, 0x01, ...len4, ...msgBytes]) },
+    { name: 'v1_f0_2b', data: new Uint8Array([...prefix, 0x01, 0x00, ...len2, ...msgBytes]) },
+    { name: 'nover_2b', data: new Uint8Array([...prefix, ...len2, ...msgBytes]) },
+  ];
+
+  for (const v of variants) {
+    if (ed25519.verify(sig, v.data, pubKeyBytes)) {
+      console.log('[Pacifica] FC SIP-99 match:', v.name, '| wrapped len:', v.data.length);
+      // We know the format but can't use it — Pacifica expects raw
+      return null;
+    }
+  }
+
+  console.log('[Pacifica] FC signature matches NONE of the known formats');
+  return null;
+}
 
 // ---------- Pacifica Config ----------
 const API = 'https://api.pacifica.fi/api/v1';
@@ -148,23 +212,29 @@ export function usePacifica() {
     const message = buildMessage(type, payload);
     const msgBytes = new TextEncoder().encode(message);
     let sigBytes;
-    try {
-      sigBytes = await signMessage(msgBytes);
-    } catch (e) {
-      if (e.message?.includes('UserKeyring') || e.message?.includes('rejected')) {
-        throw new Error('Please unlock your wallet and try again');
-      }
-      throw e;
+
+    // In Farcaster frame: try direct SDK provider signing (bypasses SIP-99 wrapping)
+    if (isFarcasterFrame()) {
+      sigBytes = await fcSignRaw(msgBytes, publicKey.toBytes());
     }
 
-    // Debug: verify signature locally before sending to Pacifica
+    // Fallback: standard wallet-adapter signMessage
+    if (!sigBytes) {
+      try {
+        sigBytes = await signMessage(msgBytes);
+      } catch (e) {
+        if (e.message?.includes('UserKeyring') || e.message?.includes('rejected')) {
+          throw new Error('Please unlock your wallet and try again');
+        }
+        throw e;
+      }
+    }
+
+    // Verify locally before sending
     try {
       const valid = ed25519.verify(sigBytes, msgBytes, publicKey.toBytes());
-      console.log('[Pacifica] local sig verify:', valid, '| msg:', message, '| sig len:', sigBytes.length, '| pk:', publicKey.toBase58());
-      if (!valid) {
-        console.warn('[Pacifica] Signature does NOT verify locally — wallet may wrap message before signing');
-      }
-    } catch (e) { console.warn('[Pacifica] verify error:', e); }
+      console.log('[Pacifica] sig verify:', valid);
+    } catch {}
 
     const signature = bs58.encode(sigBytes);
 
