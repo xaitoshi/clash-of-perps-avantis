@@ -26,7 +26,9 @@ function FarcasterGate({ children }) {
     }
   }, [loading]);
 
-  const isMobile = /mobile|android|iphone/i.test(navigator.userAgent);
+  // Detect Android WebView (wv in UA) — doesn't support full WASM
+  // iOS WKWebView uses full Safari engine and works fine
+  const isAndroidWebView = /android/i.test(navigator.userAgent) && /\bwv\b/i.test(navigator.userAgent);
 
   if (!ready) {
     return (
@@ -39,8 +41,8 @@ function FarcasterGate({ children }) {
     );
   }
 
-  // Mobile Farcaster WebView doesn't support full WASM — open in real browser
-  if (isInFrame && isMobile) {
+  // Android WebView (Farcaster, Phantom, etc.) doesn't support full WASM
+  if (isAndroidWebView) {
     return (
       <div style={styles.splash}>
         <img src={loadingImage} alt="" style={styles.splashImg} />
