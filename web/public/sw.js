@@ -4,7 +4,6 @@ const CACHE_NAME = 'clash-godot-__BUILD_HASH__';
 const GODOT_ASSETS = [
   '/godot/Work.pck',
   '/godot/Work.wasm',
-  '/godot/Work.side.wasm',
   '/godot/Work.js',
 ];
 
@@ -16,8 +15,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((names) =>
       Promise.all(
+        // Delete ALL old caches (force fresh start)
         names
-          .filter((name) => name.startsWith('clash-godot-') && name !== CACHE_NAME)
+          .filter((name) => name !== CACHE_NAME)
           .map((name) => caches.delete(name))
       )
     ).then(() => self.clients.claim())
