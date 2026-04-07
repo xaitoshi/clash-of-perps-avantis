@@ -170,7 +170,12 @@ export function usePacifica() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    return res.json();
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(text || `API error ${res.status}`);
+    }
   }, [publicKey, signMessage]);
 
   // Onboarding activation — must be defined before signedRequestWithActivation
