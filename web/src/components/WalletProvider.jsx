@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, createElement } from 'react';
 import { ConnectionProvider, WalletProvider as SolWalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 
@@ -29,7 +29,6 @@ function useBestRpc() {
           });
           clearTimeout(timeout);
           if (res.ok && !cancelled) {
-            console.log('RPC selected:', url);
             setRpc(url);
             return;
           }
@@ -42,17 +41,42 @@ function useBestRpc() {
   return rpc;
 }
 
+function isInFarcasterFrame() {
+  try { return window !== window.parent; } catch { return true; }
+}
+
+// Registers Farcaster embedded wallet via Wallet Standard (inside Warpcast)
+function FarcasterWalletWrapper({ children }) {
+  const [FcProvider, setFcProvider] = useState(null);
+
+  useEffect(() => {
+    if (!isInFarcasterFrame()) return;
+    import('@farcaster/mini-app-solana').then(mod => {
+      setFcProvider(() => mod.FarcasterSolanaProvider);
+    }).catch(() => {});
+  }, []);
+
+  // FarcasterSolanaProvider registers the wallet adapter via Wallet Standard
+  // It must wrap children but NOT create its own ConnectionProvider
+  if (FcProvider) {
+    return createElement(FcProvider, null, children);
+  }
+  return children;
+}
+
 export default function WalletProvider({ children }) {
   const wallets = useMemo(() => [], []);
   const rpc = useBestRpc();
 
   return (
-    <ConnectionProvider endpoint={rpc}>
-      <SolWalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          {children}
-        </WalletModalProvider>
-      </SolWalletProvider>
-    </ConnectionProvider>
+    <FarcasterWalletWrapper>
+      <ConnectionProvider endpoint={rpc}>
+        <SolWalletProvider wallets={wallets} autoConnect>
+          <WalletModalProvider>
+            {children}
+          </WalletModalProvider>
+        </SolWalletProvider>
+      </ConnectionProvider>
+    </FarcasterWalletWrapper>
   );
 }
