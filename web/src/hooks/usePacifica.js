@@ -19,52 +19,21 @@ async function getFcProvider() {
 async function fcSignRaw(msgBytes, pubKeyBytes) {
   const provider = await getFcProvider();
   if (!provider) return null;
-  const msgStr = new TextDecoder().decode(msgBytes);
 
-  // Call provider.signMessage — this goes through Warpcast native
-  let sigB64;
+  // Try base64-encoded message — Warpcast may base64-decode before signing
+  // (signTransaction also uses base64 strings, signMessage might expect the same)
+  const msgB64 = btoa(String.fromCharCode(...msgBytes));
+
   try {
-    const res = await provider.signMessage(msgStr);
-    sigB64 = res.signature;
-  } catch (e) {
-    console.log('[Pacifica] FC signMessage failed:', e.message);
-    return null;
-  }
-
-  const sig = Uint8Array.from(atob(sigB64), c => c.charCodeAt(0));
-  if (sig.length !== 64) { console.log('[Pacifica] bad sig length:', sig.length); return null; }
-
-  // Check raw first
-  if (ed25519.verify(sig, msgBytes, pubKeyBytes)) {
-    console.log('[Pacifica] FC raw verify OK!');
-    return sig;
-  }
-
-  // Warpcast wraps with SIP-99 — try all known variants to identify format
-  const prefix = new Uint8Array([0xff, ...new TextEncoder().encode('solana offchain\n')]);
-  const len2 = new Uint8Array(2);
-  len2[0] = msgBytes.length & 0xff; len2[1] = (msgBytes.length >> 8) & 0xff;
-  const len4 = new Uint8Array(4);
-  new DataView(len4.buffer).setUint32(0, msgBytes.length, true);
-
-  const variants = [
-    { name: 'v0_f0_2b', data: new Uint8Array([...prefix, 0x00, 0x00, ...len2, ...msgBytes]) },
-    { name: 'v0_f0_4b', data: new Uint8Array([...prefix, 0x00, 0x00, ...len4, ...msgBytes]) },
-    { name: 'v0_f1_2b', data: new Uint8Array([...prefix, 0x00, 0x01, ...len2, ...msgBytes]) },
-    { name: 'v0_f1_4b', data: new Uint8Array([...prefix, 0x00, 0x01, ...len4, ...msgBytes]) },
-    { name: 'v1_f0_2b', data: new Uint8Array([...prefix, 0x01, 0x00, ...len2, ...msgBytes]) },
-    { name: 'nover_2b', data: new Uint8Array([...prefix, ...len2, ...msgBytes]) },
-  ];
-
-  for (const v of variants) {
-    if (ed25519.verify(sig, v.data, pubKeyBytes)) {
-      console.log('[Pacifica] FC SIP-99 match:', v.name, '| wrapped len:', v.data.length);
-      // We know the format but can't use it — Pacifica expects raw
-      return null;
+    const res = await provider.signMessage(msgB64);
+    const sig = Uint8Array.from(atob(res.signature), c => c.charCodeAt(0));
+    if (sig.length === 64 && ed25519.verify(sig, msgBytes, pubKeyBytes)) {
+      console.log('[Pacifica] FC base64 signMessage → raw verify OK!');
+      return sig;
     }
-  }
+    console.log('[Pacifica] FC base64 attempt: verify failed');
+  } catch (e) { console.log('[Pacifica] FC base64 signMessage error:', e.message); }
 
-  console.log('[Pacifica] FC signature matches NONE of the known formats');
   return null;
 }
 
