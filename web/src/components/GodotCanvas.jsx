@@ -63,6 +63,7 @@ function GodotCanvas({ onEngineReady }) {
   const [progress, setProgress] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
   const [stuck, setStuck] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
   const lastProgressRef = useRef({ value: 0, time: Date.now() });
 
   // Detect if loading is stuck (same progress for 30s)
@@ -79,6 +80,11 @@ function GodotCanvas({ onEngineReady }) {
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
+
+    // Catch unhandled errors for mobile debug
+    const errHandler = (e) => setErrorMsg(prev => prev || String(e.message || e.reason || e));
+    window.addEventListener('error', errHandler);
+    window.addEventListener('unhandledrejection', (e) => errHandler({ message: e.reason }));
 
     const script = document.createElement('script');
     script.src = `${GODOT_FILES}/Work.js`;
@@ -129,7 +135,7 @@ function GodotCanvas({ onEngineReady }) {
         if (onEngineReady) onEngineReady(engine);
       }).catch(err => {
         console.error('Godot start error:', err);
-        setIsLoaded(true); // fallback — never leave user on black screen
+        setErrorMsg(String(err?.message || err));
       });
     };
     document.body.appendChild(script);
@@ -140,6 +146,17 @@ function GodotCanvas({ onEngineReady }) {
       {!isLoaded && (
         <div style={overlayStyle}>
           <img src={loadingImage} alt="Loading..." style={imgStyle} />
+
+          {errorMsg && (
+            <div style={{ position: 'absolute', top: 20, left: 20, right: 20, zIndex: 10, background: 'rgba(200,0,0,0.9)', color: '#fff', padding: 16, borderRadius: 10, fontSize: 13, fontFamily: 'monospace', wordBreak: 'break-all', maxHeight: '40vh', overflow: 'auto' }}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Error loading game:</div>
+              {errorMsg}
+              <div style={{ marginTop: 12, fontSize: 11, opacity: 0.7 }}>
+                Progress: {progress}% | UA: {navigator.userAgent.slice(0, 80)}
+              </div>
+              <button onClick={() => window.location.reload()} style={{ marginTop: 10, padding: '8px 20px', background: '#fff', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Reload</button>
+            </div>
+          )}
           
           <div style={progressWrapperStyle}>
             <div style={barContainerStyle}>
