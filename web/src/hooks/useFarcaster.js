@@ -1,79 +1,62 @@
 import { useState, useEffect, useCallback } from 'react';
 
-let sdkReady = false;
+let sdkInstance = null;
+let initPromise = null;
 
-// Detect if we're running inside a Farcaster client (Warpcast)
 function isFarcasterFrame() {
   try {
-    return window !== window.parent || window.location.search.includes('fc_');
+    return window !== window.parent;
   } catch {
-    return true; // cross-origin iframe = likely Farcaster
+    return true;
   }
+}
+
+// Start SDK init immediately on module load (not waiting for React)
+if (isFarcasterFrame()) {
+  initPromise = import('@farcaster/miniapp-sdk').then(mod => {
+    sdkInstance = mod.sdk;
+    // Call ready() ASAP — this dismisses Farcaster splash
+    mod.sdk.actions.ready();
+    return mod.sdk;
+  }).catch(() => null);
 }
 
 export function useFarcaster() {
   const [isInFrame, setIsInFrame] = useState(false);
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isFarcasterFrame());
 
   useEffect(() => {
-    if (!isFarcasterFrame()) {
+    if (!initPromise) {
       setLoading(false);
       return;
     }
 
     let cancelled = false;
 
-    async function init() {
-      try {
-        // Use early-init SDK from index.html if available, otherwise import
-        let sdk = window.__fcSdk;
-        if (!sdk && window.__fcEarly) {
-          sdk = await window.__fcEarly;
-        }
-        if (!sdk) {
-          const mod = await import('@farcaster/miniapp-sdk');
-          sdk = mod.sdk;
-          if (!sdkReady) {
-            await sdk.actions.ready();
-            sdkReady = true;
-          }
-        }
-
-        if (cancelled) return;
-        setIsInFrame(true);
-
-        // Get user context
-        const fcUser = window.__fcUser || sdk.context?.user;
-        if (fcUser) {
-          setUser({
-            fid: fcUser.fid,
-            username: fcUser.username,
-            displayName: fcUser.displayName,
-            pfpUrl: fcUser.pfpUrl,
-          });
-        }
-      } catch (e) {
-        console.warn('Farcaster SDK init failed:', e);
-      } finally {
-        if (!cancelled) setLoading(false);
+    initPromise.then(sdk => {
+      if (cancelled || !sdk) { setLoading(false); return; }
+      setIsInFrame(true);
+      if (sdk.context?.user) {
+        setUser({
+          fid: sdk.context.user.fid,
+          username: sdk.context.user.username,
+          displayName: sdk.context.user.displayName,
+          pfpUrl: sdk.context.user.pfpUrl,
+        });
       }
-    }
+      setLoading(false);
+    }).catch(() => { if (!cancelled) setLoading(false); });
 
-    init();
     return () => { cancelled = true; };
   }, []);
 
-  // Share a cast (post) to Farcaster
   const shareCast = useCallback(async (text) => {
-    if (!isInFrame) return;
+    if (!sdkInstance || !isInFrame) return;
     try {
-      const sdk = window.__fcSdk;
-      if (sdk) {
-        await sdk.actions.openUrl(
-          `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent('https://clashofperps.fun')}`
-        );
-      }
+      await sdkInstance.actions.openUrl(
+        `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent('https://clashofperps.fun')}`
+      );
     } catch {}
   }, [isInFrame]);
 
