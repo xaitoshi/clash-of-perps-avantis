@@ -16,23 +16,59 @@ async function getFcProvider() {
   return _fcProvider;
 }
 
+function toHex(bytes) { return [...bytes].map(b => b.toString(16).padStart(2, '0')).join(''); }
+
 async function fcSignRaw(msgBytes, pubKeyBytes) {
   const provider = await getFcProvider();
   if (!provider) return null;
 
-  // Try base64-encoded message — Warpcast may base64-decode before signing
-  // (signTransaction also uses base64 strings, signMessage might expect the same)
+  const msgStr = new TextDecoder().decode(msgBytes);
   const msgB64 = btoa(String.fromCharCode(...msgBytes));
 
+  // Log what we're signing
+  console.log('[FC] msg bytes hex:', toHex(msgBytes));
+  console.log('[FC] msg string:', msgStr);
+  console.log('[FC] msg base64:', msgB64);
+  console.log('[FC] pubkey:', toHex(pubKeyBytes));
+
+  // Try 1: base64 message
   try {
     const res = await provider.signMessage(msgB64);
     const sig = Uint8Array.from(atob(res.signature), c => c.charCodeAt(0));
+    console.log('[FC] base64 → sig hex:', toHex(sig), '| len:', sig.length);
     if (sig.length === 64 && ed25519.verify(sig, msgBytes, pubKeyBytes)) {
-      console.log('[Pacifica] FC base64 signMessage → raw verify OK!');
+      console.log('[FC] ✅ base64 → raw verify OK!');
       return sig;
     }
-    console.log('[Pacifica] FC base64 attempt: verify failed');
-  } catch (e) { console.log('[Pacifica] FC base64 signMessage error:', e.message); }
+    console.log('[FC] ❌ base64 → raw verify FAIL');
+  } catch (e) { console.log('[FC] base64 error:', e.message); }
+
+  // Try 2: utf8 message (same as wallet-standard does)
+  try {
+    const res = await provider.signMessage(msgStr);
+    const sig = Uint8Array.from(atob(res.signature), c => c.charCodeAt(0));
+    console.log('[FC] utf8 → sig hex:', toHex(sig), '| len:', sig.length);
+    if (sig.length === 64 && ed25519.verify(sig, msgBytes, pubKeyBytes)) {
+      console.log('[FC] ✅ utf8 → raw verify OK!');
+      return sig;
+    }
+    console.log('[FC] ❌ utf8 → raw verify FAIL');
+
+    // Log what the signature DOES verify against (brute check common transforms)
+    const checks = [
+      ['utf8(msgStr)', new TextEncoder().encode(msgStr)],
+      ['utf8(msgB64)', new TextEncoder().encode(msgB64)],
+      ['sha256?', null], // can't check without async
+    ];
+    for (const [name, data] of checks) {
+      if (!data) continue;
+      try {
+        if (ed25519.verify(sig, data, pubKeyBytes)) {
+          console.log('[FC] ✅ sig matches:', name);
+        }
+      } catch {}
+    }
+  } catch (e) { console.log('[FC] utf8 error:', e.message); }
 
   return null;
 }
