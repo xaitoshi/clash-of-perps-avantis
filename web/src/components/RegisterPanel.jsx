@@ -7,7 +7,7 @@ import { colors, cartoonPanel, cartoonBtn } from '../styles/theme';
 
 function RegisterPanel() {
   const { sendToGodot } = useSend();
-  const { publicKey, connected } = useWallet();
+  const { publicKey, connected, select, wallets, connect } = useWallet();
   const { setVisible: openWalletModal } = useWalletModal();
   const { isInFrame, user: fcUser } = useFarcaster();
   const [name, setName] = useState('');
@@ -49,7 +49,15 @@ function RegisterPanel() {
             <p style={styles.desc}>Connect your Solana wallet to start playing</p>
             <button
               style={{...cartoonBtn('#9945FF', '#7B36CC'), width: '100%', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10}}
-              onClick={() => openWalletModal(true)}
+              onClick={() => {
+                if (isInFrame) {
+                  const fc = wallets.find(w => w.adapter.name === 'Farcaster');
+                  if (fc) { select(fc.adapter.name); setTimeout(() => connect().catch(() => {}), 100); }
+                  else openWalletModal(true);
+                } else {
+                  openWalletModal(true);
+                }
+              }}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M16 14h.01"/><path d="M2 10h20"/></svg>
               CONNECT WALLET

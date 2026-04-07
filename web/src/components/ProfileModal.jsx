@@ -1,16 +1,18 @@
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { usePlayer, useResources } from '../hooks/useGodot';
 import { usePacifica } from '../hooks/usePacifica';
+import { isFarcasterFrame } from '../hooks/useFarcaster';
 import { cartoonBtn } from '../styles/theme';
 import trophyIcon from '../assets/resources/free-icon-cup-with-star-109765.png';
 
 function ProfileModal({ onClose }) {
   const player = usePlayer();
   const resources = useResources();
-  const { publicKey, connected, disconnect } = useWallet();
+  const { publicKey, connected, disconnect, select, wallets, connect } = useWallet();
   const { setVisible: openWalletModal } = useWalletModal();
+  const inFrame = useMemo(() => isFarcasterFrame(), []);
   const { account } = usePacifica();
   const [tradingStats, setTradingStats] = useState(null);
 
@@ -58,12 +60,21 @@ function ProfileModal({ onClose }) {
                   {publicKey.toBase58().slice(0, 6)}...{publicKey.toBase58().slice(-4)}
                 </span>
               </div>
-              <button style={S.disconnectBtn} onClick={disconnect}>Disconnect</button>
+              {!inFrame && <button style={S.disconnectBtn} onClick={disconnect}>Disconnect</button>}
             </div>
           ) : (
             <button
               style={{...cartoonBtn('#9945FF', '#7B36CC'), width: '100%', textAlign: 'center', padding: '14px'}}
-              onClick={() => openWalletModal(true)}
+              onClick={() => {
+                if (inFrame) {
+                  // Re-select Farcaster wallet and connect directly
+                  const fc = wallets.find(w => w.adapter.name === 'Farcaster');
+                  if (fc) { select(fc.adapter.name); setTimeout(() => connect().catch(() => {}), 100); }
+                  else openWalletModal(true);
+                } else {
+                  openWalletModal(true);
+                }
+              }}
             >CONNECT WALLET</button>
           )}
 

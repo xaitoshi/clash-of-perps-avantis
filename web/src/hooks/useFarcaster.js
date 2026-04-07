@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 let sdkInstance = null;
 let initPromise = null;
 
-function isFarcasterFrame() {
+export function isFarcasterFrame() {
   try {
     return window !== window.parent;
   } catch {

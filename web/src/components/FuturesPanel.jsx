@@ -392,8 +392,9 @@ const BottomPanel = memo(function BottomPanel({
 
 function FuturesPanel() {
   const { setFuturesOpen } = useSend();
-  const { connected } = useWallet();
+  const { connected, select, wallets, connect } = useWallet();
   const { setVisible: openWalletModal } = useWalletModal();
+  const inFrame = useMemo(() => { try { return window !== window.parent; } catch { return true; } }, []);
   const {
     walletAddr, account, positions, orders, prices, markets, walletUsdc, leverageSettings, marginModes, dataReady,
     loading, error, clearError, goldEarned, clearGoldEarned,
@@ -587,7 +588,15 @@ function FuturesPanel() {
             <div style={{color: '#5C3A21', fontSize: 18, fontWeight: 900, textAlign: 'center'}}>Connect Wallet to Trade</div>
             <button
               style={{...cartoonBtn('#9945FF', '#7B36CC'), padding: '14px 32px', display: 'flex', alignItems: 'center', gap: 10}}
-              onClick={() => openWalletModal(true)}
+              onClick={() => {
+                if (inFrame) {
+                  const fc = wallets.find(w => w.adapter.name === 'Farcaster');
+                  if (fc) { select(fc.adapter.name); setTimeout(() => connect().catch(() => {}), 100); }
+                  else openWalletModal(true);
+                } else {
+                  openWalletModal(true);
+                }
+              }}
             >
               <span>CONNECT WALLET</span>
             </button>

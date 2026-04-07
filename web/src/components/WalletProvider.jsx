@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { ConnectionProvider, WalletProvider as SolWalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { FarcasterSolanaProvider } from '@farcaster/mini-app-solana';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -42,30 +41,72 @@ function useBestRpc() {
   return rpc;
 }
 
-function isFarcasterFrame() {
-  try { return window !== window.parent; } catch { return true; }
+import { isFarcasterFrame } from '../hooks/useFarcaster';
+
+/**
+ * Wait for Farcaster Solana wallet to register via wallet-standard.
+ * The @farcaster/mini-app-solana package registers asynchronously —
+ * we must delay WalletProvider mount until that completes, otherwise
+ * autoConnect fires before the wallet exists.
+ */
+function useFarcasterWalletReady() {
+  const inFrame = useMemo(() => isFarcasterFrame(), []);
+  const [ready, setReady] = useState(!inFrame); // instant if not in frame
+
+  useEffect(() => {
+    if (!inFrame) return;
+
+    let done = false;
+
+    // Listen for wallet-standard registration event
+    const handler = () => {
+      if (!done) {
+        done = true;
+        setReady(true);
+      }
+    };
+    window.addEventListener('wallet-standard:register-wallet', handler);
+
+    // Also import the package to trigger registration
+    import('@farcaster/mini-app-solana').then(() => {
+      // Give wallet-standard event a moment to fire
+      setTimeout(() => {
+        if (!done) { done = true; setReady(true); }
+      }, 500);
+    }).catch(() => {
+      if (!done) { done = true; setReady(true); }
+    });
+
+    // Safety timeout — don't block forever
+    const timer = setTimeout(() => {
+      if (!done) { done = true; setReady(true); }
+    }, 3000);
+
+    return () => {
+      done = true;
+      clearTimeout(timer);
+      window.removeEventListener('wallet-standard:register-wallet', handler);
+    };
+  }, [inFrame]);
+
+  return { ready, inFrame };
 }
 
 export default function WalletProvider({ children }) {
   const wallets = useMemo(() => [], []);
   const rpc = useBestRpc();
-  const inFrame = useMemo(() => isFarcasterFrame(), []);
+  const { ready, inFrame } = useFarcasterWalletReady();
 
-  // Inside Farcaster: use their provider (handles wallet registration + autoConnect)
-  if (inFrame) {
-    return (
-      <FarcasterSolanaProvider endpoint={rpc}>
-        <WalletModalProvider>
-          {children}
-        </WalletModalProvider>
-      </FarcasterSolanaProvider>
-    );
-  }
+  // Don't mount wallet adapter until Farcaster wallet is registered
+  if (!ready) return null;
 
-  // Regular browser: standard wallet adapter
   return (
     <ConnectionProvider endpoint={rpc}>
-      <SolWalletProvider wallets={wallets} autoConnect>
+      <SolWalletProvider
+        wallets={wallets}
+        autoConnect={true}
+        localStorageKey={inFrame ? 'fcWalletName' : 'walletName'}
+      >
         <WalletModalProvider>
           {children}
         </WalletModalProvider>
