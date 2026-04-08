@@ -2780,9 +2780,8 @@ func remove_building(b: Dictionary) -> void:
 				).set_delay(frame_dur if fi > 0 else 0.0)
 			tw.parallel().tween_property(mat, "albedo_color:a", 0.0, BaseTroop.FIRE_BOMB_DURATION * 0.3).set_delay(BaseTroop.FIRE_BOMB_DURATION * 0.7)
 			tw.chain().tween_callback(explosion.queue_free)
-		# Spawn ruins on the grid at same local position
-		_spawn_ruins(b.node.position)
-		b.node.queue_free()
+		# Swap the 3D model with BrokenModel — keep the outline
+		_replace_with_ruins(b.node)
 	placed_buildings.remove_at(idx)
 	_deselect_building()
 
@@ -2991,21 +2990,28 @@ static var _ruins_res: Resource = null
 
 ## Spawns ruins on the grid at the given local position (child of BuildingSystem).
 ## Ruins are non-selectable — they have a "is_ruins" meta tag.
-func _spawn_ruins(local_pos: Vector3) -> void:
+## Swaps the 3D model inside a building node with BrokenModel.
+## The base outline (MeshInstance3D with ShaderMaterial) stays untouched.
+func _replace_with_ruins(node: Node3D) -> void:
 	if _ruins_res == null:
 		_ruins_res = load(RUINS_MODEL)
 	if _ruins_res == null:
 		return
-	var ruins: Node3D = _ruins_res.instantiate()
+	# Free all children EXCEPT the base outline (MeshInstance3D with ShaderMaterial)
+	for child in node.get_children():
+		if child is MeshInstance3D and child.material_override is ShaderMaterial:
+			continue
+		child.queue_free()
+	# Add BrokenModel in place of the old model
+	var ruins_model: Node3D = _ruins_res.instantiate()
 	var s: float = RUINS_SCALE
-	ruins.scale = Vector3(s, s, s)
-	ruins.set_meta("is_ruins", true)
-	add_child(ruins)
-	ruins.position = Vector3(local_pos.x, RUINS_Y_OFFSET, local_pos.z)
+	ruins_model.scale = Vector3(s, s, s)
+	node.add_child(ruins_model)
+	node.set_meta("is_ruins", true)
 	# Pop-in animation
-	ruins.scale = Vector3.ZERO
+	ruins_model.scale = Vector3.ZERO
 	var tw: Tween = create_tween()
-	tw.tween_property(ruins, "scale", Vector3(s, s, s), 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(ruins_model, "scale", Vector3(s, s, s), 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 ## Spawns a brief OmniLight3D inside the building to brighten it on hit.
