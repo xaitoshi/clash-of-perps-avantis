@@ -159,6 +159,9 @@ func reinforce() -> Dictionary:
 func report_troop_death(troop_name: String) -> Dictionary:
 	return await _http_post("/troop-died", {"troop_name": troop_name})
 
+func get_ships() -> Dictionary:
+	return await _http_get("/ships")
+
 func link_wallet(wallet: String) -> void:
 	if token == "" or wallet == "":
 		return

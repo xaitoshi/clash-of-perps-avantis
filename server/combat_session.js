@@ -495,14 +495,29 @@ function verifyReplay({ defenderBuildings, actions, claimedResult, gridConfig, s
   const townHallHpPct = th ? Math.max(0, th.hp) / th.maxHp : 0;
   const buildingsDestroyed = buildings.filter(b => b.hp <= 0).length;
 
+  // Debug info for diagnosis
+  const _debug = {
+    _troopsSpawned: nextTroopId,
+    _troopsAlive: troops.filter(t => t.hp > 0).length,
+    _guardsAlive: guards.filter(g => g.hp > 0).length,
+    _totalProjectilesFired: projectiles.length,
+    _pendingSpawnsLeft: pendingSpawns.length,
+    _simTimeSec: Math.round(time * 10) / 10,
+    _buildingHPs: buildings.map(b => ({ type: b.type, id: b.id, hp: b.hp, maxHp: b.maxHp })),
+    _troopEndState: troops.map(t => ({ type: t.type, hp: t.hp, x: Math.round(t.x*100)/100, z: Math.round(t.z*100)/100 })),
+  };
+  console.log('[SIM] Troops spawned:', nextTroopId, '| Alive:', troops.filter(t=>t.hp>0).length, '| Guards alive:', guards.filter(g=>g.hp>0).length);
+  console.log('[SIM] Building HPs:', buildings.map(b => `${b.type}:${b.hp}/${b.maxHp}`).join(', '));
+  console.log('[SIM] Sim time:', Math.round(time*10)/10, 's | TH HP:', th ? `${th.hp}/${th.maxHp}` : 'N/A');
+
   if (claimedResult === 'victory') {
     if (townHallDestroyed || townHallHpPct <= HP_TOLERANCE) {
-      return { valid: true, reason: 'Victory verified', townHallDestroyed: true, buildingsDestroyed, townHallHpPct };
+      return { valid: true, reason: 'Victory verified', townHallDestroyed: true, buildingsDestroyed, townHallHpPct, ..._debug };
     }
     return {
       valid: false,
       reason: `TH at ${Math.round(townHallHpPct * 100)}% HP in sim (need ≤${Math.round(HP_TOLERANCE * 100)}%)`,
-      townHallDestroyed: false, buildingsDestroyed, townHallHpPct,
+      townHallDestroyed: false, buildingsDestroyed, townHallHpPct, ..._debug,
     };
   }
 

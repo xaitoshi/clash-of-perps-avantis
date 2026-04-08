@@ -291,10 +291,27 @@ router.post('/attack/result', auth, (req, res) => {
   });
 
   console.log(`[BATTLE] ${claimedResult} by ${req.player.id} vs ${defender_id}: ${verification.reason} (TH ${Math.round((verification.townHallHpPct || 0) * 100)}%)`);
+  console.log(`[BATTLE] Ships: ${gameActions.filter(a => a.type === 'place_ship').length}, Troops spawned: ${verification._troopsSpawned || '?'}, Buildings destroyed: ${verification.buildingsDestroyed}`);
+  console.log(`[BATTLE] Actions:`, JSON.stringify(gameActions.filter(a => a.type === 'place_ship').map(a => ({t: a.t, troops: a.troops, troopType: a.troopType, x: a.x?.toFixed(2), z: a.z?.toFixed(2)}))));
+  console.log(`[BATTLE] Grid:`, JSON.stringify(gridConfig));
+  console.log(`[BATTLE] TroopLevels:`, JSON.stringify(serverTroopLevels));
+  console.log(`[BATTLE] Defender buildings:`, defenderBuildings.length, defenderBuildings.map(b => `${b.type}:lv${b.level}:hp${b.hp}`).join(', '));
 
   if (!verification.valid) {
     db.storeReplay(req.player.id, defender_id, actions, defenderBuildings, claimedResult, 'rejected', verification.reason, null, verification);
-    return res.status(403).json({ error: 'Replay verification failed', reason: verification.reason });
+    return res.status(403).json({
+      error: 'Replay verification failed',
+      reason: verification.reason,
+      debug: {
+        troopsSpawned: verification._troopsSpawned,
+        troopsAlive: verification._troopsAlive,
+        guardsAlive: verification._guardsAlive,
+        simTimeSec: verification._simTimeSec,
+        buildingsDestroyed: verification.buildingsDestroyed,
+        buildingHPs: verification._buildingHPs,
+        troopEndState: verification._troopEndState,
+      },
+    });
   }
 
   // Victory verified — grant loot
@@ -476,6 +493,18 @@ router.post('/buildings/:id/swap-troop', auth, (req, res) => {
   } catch (e) {
     res.status(e.status || 500).json({ error: e.error || 'Server error' });
   }
+});
+
+// Get current ship troops for all ports (used before attack to sync)
+router.get('/ships', auth, (req, res) => {
+  const ports = db.db.prepare('SELECT id, level, ship_troops, ship_troops_template, has_ship FROM buildings WHERE player_id = ? AND type = ?').all(req.player.id, 'port');
+  const ships = ports.filter(p => p.has_ship).map(p => ({
+    id: p.id,
+    level: p.level,
+    ship_troops: JSON.parse(p.ship_troops || '[]'),
+    ship_troops_template: JSON.parse(p.ship_troops_template || '[]'),
+  }));
+  res.json({ ships });
 });
 
 // Report a single troop death during battle — removes one from ship_troops immediately

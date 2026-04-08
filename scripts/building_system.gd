@@ -3857,6 +3857,21 @@ func _auto_fill_ships() -> void:
 
 
 func _build_fleet() -> Array:
+	# Sync ship troops from server before building fleet
+	var net: Node = _net
+	if net and net.has_token():
+		var result = await net.get_ships()
+		if not is_instance_valid(self): return []
+		if result is Dictionary and result.has("ships"):
+			for ship_data in result.ships:
+				var sid: int = ship_data.get("id", -1)
+				var server_troops: Array = ship_data.get("ship_troops", [])
+				for bs_node in _building_systems:
+					for b in bs_node.placed_buildings:
+						if b.get("server_id") == sid and b.get("id") == "port":
+							var pnode = b.get("node")
+							if is_instance_valid(pnode):
+								pnode.set_meta("ship_troops", server_troops)
 	_auto_fill_ships()
 	var fleet: Array = []
 	for bs_node in _building_systems:
