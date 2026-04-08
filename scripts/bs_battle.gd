@@ -534,9 +534,13 @@ func _on_town_hall_destroyed() -> void:
 				b.node.queue_free()
 		bsys.placed_buildings.clear()
 		bsys.grid.fill(false)
-	# Count casualties: compare deployed fleet vs surviving troops
-	var deployed_troops: Dictionary = {}  # {name: count}
-	for ship in _saved_fleet:
+	# Count casualties: only troops from DEPLOYED ships (marked _placed in attack_system._fleet)
+	var deployed_troops: Dictionary = {}
+	var attack_sys: Node = bs.get_node_or_null("../AttackSystem")
+	var fleet_ref: Array = attack_sys._fleet if attack_sys else _saved_fleet
+	for ship in fleet_ref:
+		if not ship.get("_placed", false):
+			continue
 		for t_name in ship.get("troops", []):
 			deployed_troops[t_name] = deployed_troops.get(t_name, 0) + 1
 	var surviving_troops: Dictionary = {}

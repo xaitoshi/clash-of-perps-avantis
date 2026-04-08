@@ -460,7 +460,10 @@ func _spawn_single_ship(target: Vector3, ship_idx: int = -1) -> bool:
 	var s_dir: Vector3 = sail_dir
 	var _deploy_idx: int = ship_idx
 	tween.finished.connect(func():
-		ship.rotation = Vector3.ZERO
+		if not is_instance_valid(pivot):
+			return
+		if is_instance_valid(ship):
+			ship.rotation = Vector3.ZERO
 		if is_instance_valid(marker):
 			marker.queue_free()
 		_ship_markers.erase(marker)

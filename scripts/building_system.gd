@@ -1956,6 +1956,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_viewing_enemy:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		# Check ship click FIRST (before buildings) — ship is near port and can overlap
+		if not is_viewing_enemy:
+			var ship_port = _find_ship_at_click(event.position)
+			if ship_port.size() > 0:
+				_show_ship_panel(ship_port)
+				get_viewport().set_input_as_handled()
+				return
 		var local_hit = _get_mouse_local()
 		if local_hit != Vector3.INF:
 			var gp = _local_to_grid(local_hit)
@@ -1964,24 +1971,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				for bs in _building_systems:
 					if bs != self:
 						bs._deselect_building()
-				# Second click on already-selected building → start move
 				if selected_building.size() > 0 and found.get("node") == selected_building.get("node") and not is_viewing_enemy:
 					_start_move(selected_building)
 				else:
 					_select_building(found)
 				get_viewport().set_input_as_handled()
 			else:
-				# No building hit — check if clicked on a port ship (home island only)
-				var did_ship: bool = false
-				if not is_viewing_enemy:
-					var ship_port = _find_ship_at_click(event.position)
-					if ship_port.size() > 0:
-						_show_ship_panel(ship_port)
-						get_viewport().set_input_as_handled()
-						did_ship = true
-				if not did_ship:
-					_deselect_building()
-					_hide_ship_panel()
+				_deselect_building()
+				_hide_ship_panel()
 		else:
 			_deselect_building()
 			_hide_ship_panel()
@@ -3920,7 +3917,7 @@ func _build_fleet() -> Array:
 			var ship_level: int = pnode.get_meta("ship_level", 1)
 			var ship_troops: Array = pnode.get_meta("ship_troops", [])
 			if not ship_troops.is_empty():
-			fleet.append({"level": ship_level, "troops": ship_troops.duplicate()})
+				fleet.append({"level": ship_level, "troops": ship_troops.duplicate()})
 	return fleet
 
 
