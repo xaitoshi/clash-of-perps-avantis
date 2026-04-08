@@ -223,7 +223,7 @@ const BUILDING_DEFS = {
     max_count: 6,
   },
   tombstone: {
-    size: [4, 5], max_level: 3,
+    size: [3, 3], max_level: 3,
     hp_levels: [1000, 1500, 2000],
     cost: { gold: 150, wood: 0, ore: 280 },
     max_count: 4,

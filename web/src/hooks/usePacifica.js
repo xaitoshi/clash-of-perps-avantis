@@ -22,8 +22,9 @@ async function fcSignMessage(msgBytes) {
   const provider = await getFcProvider();
   if (!provider) return null;
   try {
-    const msgB64 = btoa(String.fromCharCode(...msgBytes));
+    const msgB64 = btoa(Array.from(msgBytes, b => String.fromCharCode(b)).join(''));
     const res = await provider.signMessage(msgB64);
+    if (!res?.signature) return null;
     return Uint8Array.from(atob(res.signature), c => c.charCodeAt(0));
   } catch { return null; }
 }
