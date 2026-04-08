@@ -3014,6 +3014,7 @@ func _flash_building_hit(b: Dictionary) -> void:
 	if not is_instance_valid(node):
 		return
 	b["_flashing"] = true
+	# Light flash
 	var light: OmniLight3D = OmniLight3D.new()
 	light.light_color = Color(1.0, 1.0, 1.0)
 	light.light_energy = 0.25
@@ -3022,8 +3023,28 @@ func _flash_building_hit(b: Dictionary) -> void:
 	light.shadow_enabled = false
 	node.add_child(light)
 	light.position = Vector3(0, 0.15, 0)
+	# Knockback — push building away from nearest attacker
+	var push_dir: Vector3 = Vector3.ZERO
+	var bpos: Vector3 = node.global_position
+	var nearest_d: float = INF
+	for troop in BaseTroop._get_troops_cached():
+		if not is_instance_valid(troop):
+			continue
+		var diff: Vector3 = bpos - troop.global_position
+		diff.y = 0
+		var d: float = diff.length()
+		if d > 0.001 and d < nearest_d:
+			nearest_d = d
+			push_dir = diff.normalized()
+	if push_dir == Vector3.ZERO:
+		push_dir = Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized()
+	var original_pos: Vector3 = node.position
+	var nudge: float = 0.015
+	var knocked_pos: Vector3 = original_pos + Vector3(push_dir.x * nudge, 0, push_dir.z * nudge)
 	var tw: Tween = create_tween()
-	tw.tween_property(light, "light_energy", 0.0, 0.05)
+	tw.tween_property(node, "position", knocked_pos, 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(node, "position", original_pos, 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.parallel().tween_property(light, "light_energy", 0.0, 0.05)
 	tw.tween_callback(func():
 		if is_instance_valid(light):
 			light.queue_free()
