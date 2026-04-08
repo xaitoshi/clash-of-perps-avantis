@@ -2780,8 +2780,8 @@ func remove_building(b: Dictionary) -> void:
 				).set_delay(frame_dur if fi > 0 else 0.0)
 			tw.parallel().tween_property(mat, "albedo_color:a", 0.0, BaseTroop.FIRE_BOMB_DURATION * 0.3).set_delay(BaseTroop.FIRE_BOMB_DURATION * 0.7)
 			tw.chain().tween_callback(explosion.queue_free)
-		# Spawn ruins on the grid at same local position with building outline
-		_spawn_ruins(b.node.position, b.get("id", ""), b.get("level", 1))
+		# Spawn ruins on the grid at same local position
+		_spawn_ruins(b.node.position)
 		b.node.queue_free()
 	placed_buildings.remove_at(idx)
 	_deselect_building()
@@ -2986,7 +2986,7 @@ func _update_building_hp_bars() -> void:
 ## Preloaded ruins model — appears where a destroyed building stood.
 const RUINS_MODEL: String = "res://Model/BrokenModel/BrokenModel.glb"
 const RUINS_SCALE: float = 0.15
-const RUINS_Y_OFFSET: float = 0.0  ## Same Y as buildings (local to BuildingSystem)
+const RUINS_Y_OFFSET: float = 0.05  ## Adjust if ruins float or sink
 static var _ruins_res: Resource = null
 
 ## Spawns ruins on the grid at the given local position (child of BuildingSystem).
@@ -2996,37 +2996,16 @@ func _spawn_ruins(local_pos: Vector3) -> void:
 		_ruins_res = load(RUINS_MODEL)
 	if _ruins_res == null:
 		return
-	# Wrap model in a container so we can offset Y without affecting grid position
-	var ruins: Node3D = Node3D.new()
-	ruins.set_meta("is_ruins", true)
-	var model: Node3D = _ruins_res.instantiate()
+	var ruins: Node3D = _ruins_res.instantiate()
 	var s: float = RUINS_SCALE
-	model.scale = Vector3(s, s, s)
-	model.position.y = 0.1  # push model mesh above the grid plane
-	ruins.add_child(model)
-	# Circular shadow beneath the ruins — slightly larger than the model
-	var shadow: MeshInstance3D = MeshInstance3D.new()
-	var disc: CylinderMesh = CylinderMesh.new()
-	disc.top_radius = s * 1.5
-	disc.bottom_radius = s * 1.5
-	disc.height = 0.001
-	disc.radial_segments = 32
-	shadow.mesh = disc
-	shadow.position = Vector3(0, -0.03, 0)
-	var shadow_mat: StandardMaterial3D = StandardMaterial3D.new()
-	shadow_mat.albedo_color = Color(0.0, 0.0, 0.0, 0.3)
-	shadow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	shadow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	shadow_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	shadow.material_override = shadow_mat
-	add_child(shadow)
-	shadow.position = Vector3(local_pos.x, local_pos.y + 0.005, local_pos.z)
+	ruins.scale = Vector3(s, s, s)
+	ruins.set_meta("is_ruins", true)
 	add_child(ruins)
-	ruins.position = Vector3(local_pos.x, local_pos.y, local_pos.z)
-	# Pop-in animation on the container
+	ruins.position = Vector3(local_pos.x, RUINS_Y_OFFSET, local_pos.z)
+	# Pop-in animation
 	ruins.scale = Vector3.ZERO
 	var tw: Tween = create_tween()
-	tw.tween_property(ruins, "scale", Vector3.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(ruins, "scale", Vector3(s, s, s), 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 ## Spawns a brief OmniLight3D inside the building to brighten it on hit.
@@ -3035,7 +3014,6 @@ func _flash_building_hit(b: Dictionary) -> void:
 	if not is_instance_valid(node):
 		return
 	b["_flashing"] = true
-	# Light flash
 	var light: OmniLight3D = OmniLight3D.new()
 	light.light_color = Color(1.0, 1.0, 1.0)
 	light.light_energy = 0.25
@@ -3044,28 +3022,8 @@ func _flash_building_hit(b: Dictionary) -> void:
 	light.shadow_enabled = false
 	node.add_child(light)
 	light.position = Vector3(0, 0.15, 0)
-	# Knockback — push building away from nearest attacker
-	var push_dir: Vector3 = Vector3.ZERO
-	var bpos: Vector3 = node.global_position
-	var nearest_d: float = INF
-	for troop in BaseTroop._get_troops_cached():
-		if not is_instance_valid(troop):
-			continue
-		var diff: Vector3 = bpos - troop.global_position
-		diff.y = 0
-		var d: float = diff.length()
-		if d > 0.001 and d < nearest_d:
-			nearest_d = d
-			push_dir = diff.normalized()
-	if push_dir == Vector3.ZERO:
-		push_dir = Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized()
-	var original_pos: Vector3 = node.position
-	var nudge: float = 0.015
-	var knocked_pos: Vector3 = original_pos + Vector3(push_dir.x * nudge, 0, push_dir.z * nudge)
 	var tw: Tween = create_tween()
-	tw.tween_property(node, "position", knocked_pos, 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(node, "position", original_pos, 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tw.parallel().tween_property(light, "light_energy", 0.0, 0.05)
+	tw.tween_property(light, "light_energy", 0.0, 0.05)
 	tw.tween_callback(func():
 		if is_instance_valid(light):
 			light.queue_free()
@@ -3871,11 +3829,7 @@ func _get_random_grid_world_pos() -> Vector3:
 func _on_attack_pressed() -> void:
 	var attack_system = get_node_or_null("../AttackSystem")
 	if attack_system and attack_system.has_method("enter_attack_mode"):
-		var fleet: Array = await _build_fleet()
-		if fleet.is_empty():
-			_show_error("No troops! Reinforce your ships first.")
-			return
-		attack_system.enter_attack_mode(fleet)
+		attack_system.enter_attack_mode(await _build_fleet())
 
 
 ## Builds the fleet array from all port ships for the attack system.
@@ -3900,11 +3854,6 @@ func _auto_fill_ships() -> void:
 				continue
 			var ship_level: int = pnode.get_meta("ship_level", 1)
 			var ship_troops: Array = pnode.get_meta("ship_troops", []).duplicate()
-			var ship_template: Array = pnode.get_meta("ship_troops_template", [])
-			# Only auto-fill if player never configured this ship (template empty)
-			# If template exists but troops are empty = troops died, don't auto-fill
-			if not ship_template.is_empty():
-				continue
 			while ship_troops.size() < ship_level:
 				ship_troops.append(available[idx % available.size()])
 				idx += 1
@@ -3921,14 +3870,12 @@ func _build_fleet() -> Array:
 			for ship_data in result.ships:
 				var sid: int = ship_data.get("id", -1)
 				var server_troops: Array = ship_data.get("ship_troops", [])
-				var server_template: Array = ship_data.get("ship_troops_template", [])
 				for bs_node in _building_systems:
 					for b in bs_node.placed_buildings:
 						if b.get("server_id") == sid and b.get("id") == "port":
 							var pnode = b.get("node")
 							if is_instance_valid(pnode):
 								pnode.set_meta("ship_troops", server_troops)
-								pnode.set_meta("ship_troops_template", server_template)
 	_auto_fill_ships()
 	var fleet: Array = []
 	for bs_node in _building_systems:
@@ -3940,7 +3887,6 @@ func _build_fleet() -> Array:
 				continue
 			var ship_level: int = pnode.get_meta("ship_level", 1)
 			var ship_troops: Array = pnode.get_meta("ship_troops", [])
-			if not ship_troops.is_empty():
 			fleet.append({"level": ship_level, "troops": ship_troops.duplicate()})
 	return fleet
 
