@@ -126,13 +126,25 @@ function GodotCanvas({ onEngineReady }) {
 
       const engine = new GODOT({ onProgress: handleProgress });
 
+      // Force canvas to fill parent on mobile
+      const resizeCanvas = () => {
+        const c = canvasRef.current;
+        if (!c) return;
+        c.width = window.innerWidth * (window.devicePixelRatio || 1);
+        c.height = window.innerHeight * (window.devicePixelRatio || 1);
+      };
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
       engine.startGame({
         canvas: canvasRef.current,
         executable: `${GODOT_FILES}/Work`,
         args: [],
+        canvasResizePolicy: 0, // None — we control sizing
         onProgress: handleProgress,
       }).then(() => {
         setProgress(prev => Math.max(prev, DOWNLOAD_MAX));
+        resizeCanvas();
         if (onEngineReady) onEngineReady(engine);
       }).catch(err => {
         console.error('Godot start error:', err);

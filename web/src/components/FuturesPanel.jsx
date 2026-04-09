@@ -812,8 +812,8 @@ function FuturesPanel() {
 
   const hasActiveFilters = btmFilters.symbol !== 'All' || btmFilters.side !== 'All';
 
-  // ==================== NOT CONNECTED ====================
-  if (!connected) {
+  // ==================== NOT CONNECTED (skip in Farcaster — wallet auto-connects) ====================
+  if (!connected && !inFrame) {
     return (
       <>
         <style>{animCSS}</style>

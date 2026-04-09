@@ -38,6 +38,18 @@ function RegisterPanel() {
     sendToGodot('register', { name: name.trim(), wallet: publicKey.toBase58() });
   };
 
+  // In Farcaster frame with user — auto-registering, show loading
+  if (isInFrame && fcUser) {
+    return (
+      <div style={styles.overlay}>
+        <div style={styles.panel}>
+          <div style={styles.icon}>⚔️</div>
+          <h2 style={styles.title}>Joining as {fcUser.username || fcUser.displayName}...</h2>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={styles.overlay}>
       <div style={styles.panel}>

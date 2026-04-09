@@ -52,7 +52,7 @@ function ProfileModal({ onClose }) {
 
         <div style={S.body}>
           {/* Wallet */}
-          {connected ? (
+          {(connected && publicKey) ? (
             <div style={S.connectedBox}>
               <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
                 <div style={S.dot} />
@@ -62,19 +62,17 @@ function ProfileModal({ onClose }) {
               </div>
               {!inFrame && <button style={S.disconnectBtn} onClick={disconnect}>Disconnect</button>}
             </div>
+          ) : inFrame ? (
+            <div style={S.connectedBox}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                <div style={S.dot} />
+                <span style={{fontSize: 13, fontWeight: 800, fontFamily: 'monospace', color: '#5C3A21'}}>Farcaster Wallet</span>
+              </div>
+            </div>
           ) : (
             <button
               style={{...cartoonBtn('#9945FF', '#7B36CC'), width: '100%', textAlign: 'center', padding: '14px'}}
-              onClick={() => {
-                if (inFrame) {
-                  // Re-select Farcaster wallet and connect directly
-                  const fc = wallets.find(w => w.adapter.name === 'Farcaster');
-                  if (fc) { select(fc.adapter.name); setTimeout(() => connect().catch(() => {}), 100); }
-                  else openWalletModal(true);
-                } else {
-                  openWalletModal(true);
-                }
-              }}
+              onClick={() => openWalletModal(true)}
             >CONNECT WALLET</button>
           )}
 
@@ -98,7 +96,7 @@ function ProfileModal({ onClose }) {
           ))}
 
           {/* Trading stats */}
-          {connected && (
+          {(connected || inFrame) && (
             <>
               <div style={S.sectionTitle}>Trading</div>
               {[

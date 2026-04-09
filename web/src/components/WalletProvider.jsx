@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { ConnectionProvider, WalletProvider as SolWalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import { isFarcasterFrame } from '../hooks/useFarcaster';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -41,8 +42,6 @@ function useBestRpc() {
   return rpc;
 }
 
-import { isFarcasterFrame } from '../hooks/useFarcaster';
-
 /**
  * Wait for Farcaster Solana wallet to register via wallet-standard.
  * The @farcaster/mini-app-solana package registers asynchronously —
@@ -51,25 +50,19 @@ import { isFarcasterFrame } from '../hooks/useFarcaster';
  */
 function useFarcasterWalletReady() {
   const inFrame = useMemo(() => isFarcasterFrame(), []);
-  const [ready, setReady] = useState(!inFrame); // instant if not in frame
+  const [ready, setReady] = useState(!inFrame);
 
   useEffect(() => {
     if (!inFrame) return;
 
     let done = false;
 
-    // Listen for wallet-standard registration event
     const handler = () => {
-      if (!done) {
-        done = true;
-        setReady(true);
-      }
+      if (!done) { done = true; setReady(true); }
     };
     window.addEventListener('wallet-standard:register-wallet', handler);
 
-    // Also import the package to trigger registration
     import('@farcaster/mini-app-solana').then(() => {
-      // Give wallet-standard event a moment to fire
       setTimeout(() => {
         if (!done) { done = true; setReady(true); }
       }, 500);
@@ -77,7 +70,6 @@ function useFarcasterWalletReady() {
       if (!done) { done = true; setReady(true); }
     });
 
-    // Safety timeout — don't block forever
     const timer = setTimeout(() => {
       if (!done) { done = true; setReady(true); }
     }, 3000);
@@ -97,7 +89,6 @@ export default function WalletProvider({ children }) {
   const rpc = useBestRpc();
   const { ready, inFrame } = useFarcasterWalletReady();
 
-  // Don't mount wallet adapter until Farcaster wallet is registered
   if (!ready) return null;
 
   return (
