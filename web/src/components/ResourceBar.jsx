@@ -141,8 +141,7 @@ const styles = {
     fontSize: 18,
     fontWeight: 900,
     color: '#fff',
-    WebkitTextStroke: '1px #111',
-    textShadow: '0 2px 1px rgba(0,0,0,1)',
+    textShadow: '-1px -1px 0 #111, 1px -1px 0 #111, -1px 1px 0 #111, 1px 1px 0 #111, 0 2px 1px rgba(0,0,0,1)',
     letterSpacing: '0.5px',
   },
   maxValue: {

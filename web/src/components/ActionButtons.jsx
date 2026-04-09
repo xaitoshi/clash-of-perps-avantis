@@ -641,7 +641,7 @@ const hud = {
   },
   countText: {
     color: '#7df4ff', fontSize: 12, fontWeight: 900,
-    WebkitTextStroke: '0.5px #003050', lineHeight: 1.2,
+    textShadow: '-0.5px -0.5px 0 #003050, 0.5px -0.5px 0 #003050, -0.5px 0.5px 0 #003050, 0.5px 0.5px 0 #003050', lineHeight: 1.2,
   },
   selArrow: {
     position: 'absolute', bottom: 19, left: 4,
@@ -680,7 +680,7 @@ const hud = {
   },
   cannonLabel: {
     color: '#7df4ff', fontSize: 10, fontWeight: 900,
-    WebkitTextStroke: '0.5px #003050',
+    textShadow: '-0.5px -0.5px 0 #003050, 0.5px -0.5px 0 #003050, -0.5px 0.5px 0 #003050, 0.5px 0.5px 0 #003050',
     textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1,
   },
   cannonCostBadge: {
@@ -753,7 +753,7 @@ const styles = {
   btnLabel: {
     position: 'absolute', bottom: 28, left: 0, right: 0,
     color: '#fff', fontSize: 14, fontWeight: 900,
-    WebkitTextStroke: '1px #000', textShadow: '0 2px 4px rgba(0,0,0,0.8)',
+    textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 4px rgba(0,0,0,0.8)',
     textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center', zIndex: 10,
   },
   notificationBadge: {
