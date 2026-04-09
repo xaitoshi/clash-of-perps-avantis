@@ -46,20 +46,26 @@ router.post('/players/register', (req, res) => {
   if (!name || typeof name !== 'string' || name.trim().length < 2) {
     return res.status(400).json({ error: 'Name must be at least 2 characters' });
   }
-  try {
-    const result = db.registerPlayer(name.trim());
-    // Save wallet address if provided
-    if (wallet) {
-      db.db.prepare('UPDATE players SET wallet = ? WHERE id = ?').run(wallet, result.id);
+  // Try the requested name; if taken, append 1, 2, 3… until unique
+  let finalName = name.trim();
+  let result;
+  for (let suffix = 0; suffix <= 99; suffix++) {
+    const tryName = suffix === 0 ? finalName : finalName + suffix;
+    try {
+      result = db.registerPlayer(tryName);
+      finalName = tryName;
+      break;
+    } catch (e) {
+      if (e.message.includes('UNIQUE') && suffix < 99) continue;
+      throw e;
     }
-    const state = db.getFullPlayerState(result.id);
-    res.json({ ...state, token: result.token });
-  } catch (e) {
-    if (e.message.includes('UNIQUE')) {
-      return res.status(409).json({ error: 'Name already taken' });
-    }
-    throw e;
   }
+  // Save wallet address if provided
+  if (wallet) {
+    db.db.prepare('UPDATE players SET wallet = ? WHERE id = ?').run(wallet, result.id);
+  }
+  const state = db.getFullPlayerState(result.id);
+  res.json({ ...state, token: result.token });
 });
 
 // Login (get state by token)
