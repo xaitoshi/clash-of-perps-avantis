@@ -2,21 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 
 let sdkInstance = null;
 let initPromise = null;
-let detectedInMiniApp = false;
-
-// Always try to init SDK — use official isInMiniApp() detection
-initPromise = import('@farcaster/miniapp-sdk').then((mod) => {
-  const hasOfficialDetect = typeof mod.isInMiniApp === 'function';
-  const inApp = hasOfficialDetect ? mod.isInMiniApp() : isFarcasterFrame();
-  _log('info', `SDK loaded. isInMiniApp=${inApp} (official=${hasOfficialDetect})`);
-  if (!inApp) return null;
-  detectedInMiniApp = true;
-  sdkInstance = mod.sdk;
-  return mod.sdk;
-}).catch((err) => { _log('error', `SDK import failed: ${err}`); return null; });
 
 export function isFarcasterFrame() {
-  if (detectedInMiniApp) return true;
   try { return window !== window.parent; } catch { return true; }
 }
 
@@ -28,59 +15,47 @@ function _log(level, message) {
   }).catch(() => {});
 }
 
+// Always init SDK and call ready() — don't gate on detection
+// Per Farcaster docs: "If you don't call ready(), users will see an infinite loading screen"
+initPromise = import('@farcaster/miniapp-sdk').then(async (mod) => {
+  sdkInstance = mod.sdk;
+  _log('info', 'SDK imported, calling ready()');
+  await mod.sdk.actions.ready({ disableNativeGestures: true });
+  _log('info', 'ready() done');
+  return mod.sdk;
+}).catch((err) => {
+  _log('error', `SDK init/ready failed: ${err}`);
+  return null;
+});
+
 export function useFarcaster() {
   const [isInFrame, setIsInFrame] = useState(false);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!initPromise) {
-      setLoading(false);
-      return;
-    }
-
     let cancelled = false;
+
     initPromise.then(async (sdk) => {
-      if (cancelled || !sdk) {
-        _log('info', `SDK init resolved: sdk=${!!sdk}, cancelled=${cancelled}`);
-        setLoading(false);
-        return;
-      }
-      setIsInFrame(true);
-      _log('info', 'In mini app, fetching context...');
+      if (cancelled || !sdk) { setLoading(false); return; }
 
-      // Timeout: if context takes too long, call ready() anyway
-      const timeout = setTimeout(async () => {
-        if (!cancelled) {
-          _log('warn', 'Context timeout (3s), calling ready() anyway');
-          try { await sdk.actions.ready({ disableNativeGestures: true }); } catch (e) { _log('error', `ready() timeout failed: ${e}`); }
-          setLoading(false);
-        }
-      }, 3000);
-
+      // Check if we're actually in a mini app context
       try {
         const ctx = await sdk.context;
-        _log('info', `Context received: user=${ctx?.user?.fid || 'none'}, client=${ctx?.client?.platformType || 'unknown'}`);
         if (ctx?.user && !cancelled) {
+          setIsInFrame(true);
           setUser({
             fid: Number(ctx.user.fid) || 0,
             username: String(ctx.user.username || ''),
             displayName: String(ctx.user.displayName || ''),
             pfpUrl: String(ctx.user.pfpUrl || ''),
           });
+          _log('info', `Context: fid=${ctx.user.fid}, platform=${ctx?.client?.platformType || '?'}`);
         }
-      } catch (e) { _log('error', `Context error: ${e}`); }
+      } catch {}
 
-      clearTimeout(timeout);
-      if (!cancelled) {
-        _log('info', 'Calling ready()...');
-        try {
-          await sdk.actions.ready({ disableNativeGestures: true });
-          _log('info', 'ready() succeeded');
-        } catch (e) { _log('error', `ready() failed: ${e}`); }
-        setLoading(false);
-      }
-    }).catch((e) => { _log('error', `Init promise error: ${e}`); if (!cancelled) setLoading(false); });
+      if (!cancelled) setLoading(false);
+    }).catch(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
   }, []);
