@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { ConnectionProvider, WalletProvider as SolWalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { isFarcasterFrame } from '../hooks/useFarcaster';
+import { farcasterDetectPromise } from '../hooks/useFarcaster';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -43,43 +43,54 @@ function useBestRpc() {
 }
 
 /**
- * Wait for Farcaster Solana wallet to register via wallet-standard.
- * The @farcaster/mini-app-solana package registers asynchronously —
- * we must delay WalletProvider mount until that completes, otherwise
- * autoConnect fires before the wallet exists.
+ * Wait for Farcaster detection + wallet registration before mounting wallet adapter.
+ * On mobile Warpcast (WebView), iframe check fails — we need async SDK detection.
  */
 function useFarcasterWalletReady() {
-  const inFrame = useMemo(() => isFarcasterFrame(), []);
-  const [ready, setReady] = useState(!inFrame);
+  const [inFrame, setInFrame] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!inFrame) return;
-
     let done = false;
 
-    const handler = () => {
-      if (!done) { done = true; setReady(true); }
-    };
-    window.addEventListener('wallet-standard:register-wallet', handler);
+    // Wait for SDK to determine if we're in a mini app
+    farcasterDetectPromise.then((isMiniApp) => {
+      if (done) return;
+      setInFrame(isMiniApp);
 
-    import('@farcaster/mini-app-solana').then(() => {
+      if (!isMiniApp) {
+        done = true;
+        setReady(true);
+        return;
+      }
+
+      // In Farcaster — wait for wallet-standard registration
+      const handler = () => {
+        if (!done) { done = true; setReady(true); }
+      };
+      window.addEventListener('wallet-standard:register-wallet', handler);
+
+      import('@farcaster/mini-app-solana').then(() => {
+        setTimeout(() => {
+          if (!done) { done = true; setReady(true); }
+        }, 500);
+      }).catch(() => {
+        if (!done) { done = true; setReady(true); }
+      });
+
+      // Safety timeout
       setTimeout(() => {
         if (!done) { done = true; setReady(true); }
-      }, 500);
-    }).catch(() => {
-      if (!done) { done = true; setReady(true); }
+      }, 3000);
     });
 
+    // Global safety timeout
     const timer = setTimeout(() => {
       if (!done) { done = true; setReady(true); }
-    }, 3000);
+    }, 5000);
 
-    return () => {
-      done = true;
-      clearTimeout(timer);
-      window.removeEventListener('wallet-standard:register-wallet', handler);
-    };
-  }, [inFrame]);
+    return () => { done = true; clearTimeout(timer); };
+  }, []);
 
   return { ready, inFrame };
 }

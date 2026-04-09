@@ -3,7 +3,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { usePlayer, useResources } from '../hooks/useGodot';
 import { usePacifica } from '../hooks/usePacifica';
-import { isFarcasterFrame } from '../hooks/useFarcaster';
+import { useFarcaster } from '../hooks/useFarcaster';
 import { cartoonBtn } from '../styles/theme';
 import trophyIcon from '../assets/resources/free-icon-cup-with-star-109765.png';
 
@@ -12,7 +12,7 @@ function ProfileModal({ onClose }) {
   const resources = useResources();
   const { publicKey, connected, disconnect, select, wallets, connect } = useWallet();
   const { setVisible: openWalletModal } = useWalletModal();
-  const inFrame = useMemo(() => isFarcasterFrame(), []);
+  const { isInFrame: inFrame } = useFarcaster();
   const { account } = usePacifica();
   const [tradingStats, setTradingStats] = useState(null);
 
