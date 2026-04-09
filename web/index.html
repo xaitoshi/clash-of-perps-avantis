@@ -26,6 +26,19 @@
         navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(function(){});
       }
     </script>
+    <script>
+      // Debug: log Farcaster SDK state to server (runs before React)
+      function _clog(msg) {
+        fetch('/api/client-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ level: 'debug', message: msg, ua: navigator.userAgent }),
+        }).catch(function(){});
+      }
+      var _inIframe = false;
+      try { _inIframe = window !== window.parent; } catch(e) { _inIframe = true; }
+      _clog('page-load: iframe=' + _inIframe + ' url=' + location.href);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
