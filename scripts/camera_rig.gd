@@ -13,9 +13,11 @@ extends Node3D
 ## How fast the camera zooms with scroll wheel
 @export var zoom_speed: float = 1.0
 ## Minimum distance from pivot (closest zoom)
-@export var min_zoom: float = 1.5
+@export var min_zoom: float = 0.5
 ## Maximum distance from pivot (farthest zoom)
 @export var max_zoom: float = 5
+## Pinch zoom speed multiplier (touch)
+@export var pinch_zoom_speed: float = 0.015
 ## Smooth interpolation factor (higher = snappier)
 @export var smoothing: float = 6.0
 
@@ -36,6 +38,10 @@ var _target_position: Vector3 = Vector3.ZERO
 
 var _is_panning: bool = false
 var zoom_blocked: bool = false
+
+# ── Touch state ──────────────────────────────────────────────────
+var _touch_points: Dictionary = {}  # touch_index -> Vector2 position
+var _last_pinch_distance: float = 0.0
 
 var _shake_trauma: float = 0.0
 const SHAKE_MAX_OFFSET: float = 0.035
@@ -94,6 +100,39 @@ func _unhandled_input(event: InputEvent) -> void:
 		_target_position -= forward * delta.y * pan_speed * zoom_factor
 
 		_target_position.y = 0.0
+
+	# ── Touch events (mobile) ────────────────────────────────────
+	if event is InputEventScreenTouch:
+		var st := event as InputEventScreenTouch
+		if st.pressed:
+			_touch_points[st.index] = st.position
+		else:
+			_touch_points.erase(st.index)
+			if _touch_points.size() < 2:
+				_last_pinch_distance = 0.0
+
+	if event is InputEventScreenDrag:
+		var sd := event as InputEventScreenDrag
+		_touch_points[sd.index] = sd.position
+
+		if _touch_points.size() == 1:
+			# Single finger → pan
+			var right := Vector3(1.0, 0.0, 0.0)
+			var forward := Vector3(0.0, 0.0, 1.0)
+			var zoom_factor := _current_zoom * 0.2
+			_target_position -= right * sd.relative.x * pan_speed * zoom_factor
+			_target_position -= forward * sd.relative.y * pan_speed * zoom_factor
+			_target_position.y = 0.0
+		elif _touch_points.size() >= 2 and not zoom_blocked:
+			# Two fingers → pinch zoom
+			var points := _touch_points.values()
+			var p0: Vector2 = points[0]
+			var p1: Vector2 = points[1]
+			var dist: float = p0.distance_to(p1)
+			if _last_pinch_distance > 0.0:
+				var diff: float = _last_pinch_distance - dist
+				_target_zoom = clampf(_target_zoom + diff * pinch_zoom_speed, min_zoom, max_zoom)
+			_last_pinch_distance = dist
 
 
 func _process(delta_raw: float) -> void:

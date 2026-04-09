@@ -918,6 +918,22 @@ router.get('/admin/replays', adminAuth, (req, res) => {
   res.json(rows);
 });
 
+// Get full details of one replay including actions and verification data
+router.get('/admin/replays/:id', adminAuth, (req, res) => {
+  const row = db.db.prepare(`
+    SELECT r.*, pa.name AS attacker_name, pd.name AS defender_name
+    FROM battle_replays r
+    LEFT JOIN players pa ON pa.id = r.attacker_id
+    LEFT JOIN players pd ON pd.id = r.defender_id
+    WHERE r.id = ?
+  `).get(parseInt(req.params.id, 10));
+  if (!row) return res.status(404).json({ error: 'Replay not found' });
+  try { row.replay_data = row.replay_data ? JSON.parse(row.replay_data) : null; } catch {}
+  try { row.buildings_snapshot = row.buildings_snapshot ? JSON.parse(row.buildings_snapshot) : null; } catch {}
+  try { row.verification_data = row.verification_data ? JSON.parse(row.verification_data) : null; } catch {}
+  res.json(row);
+});
+
 // Delete a player by name
 router.delete('/admin/players/:name', adminAuth, (req, res) => {
   try {

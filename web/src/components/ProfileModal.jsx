@@ -184,7 +184,7 @@ const S = {
     position: 'relative',
     overflow: 'hidden',
   },
-  levelNum: { color: '#fff', fontSize: 22, fontWeight: 900, WebkitTextStroke: '1.5px #0a0a0a', textShadow: '0 2px 2px rgba(0,0,0,0.8)' },
+  levelNum: { color: '#fff', fontSize: 22, fontWeight: 900, textShadow: '-1.5px -1.5px 0 #0a0a0a, 1.5px -1.5px 0 #0a0a0a, -1.5px 1.5px 0 #0a0a0a, 1.5px 1.5px 0 #0a0a0a, 0 2px 2px rgba(0,0,0,0.8)' },
   closeBtn: {
     width: 30, height: 30, borderRadius: '50%', background: '#E53935', border: '3px solid #fff',
     color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
