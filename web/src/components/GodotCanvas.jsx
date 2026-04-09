@@ -140,7 +140,7 @@ function GodotCanvas({ onEngineReady }) {
         canvas: canvasRef.current,
         executable: `${GODOT_FILES}/Work`,
         args: [],
-        canvasResizePolicy: 0, // None — we control sizing
+        canvasResizePolicy: 0,
         onProgress: handleProgress,
       }).then(() => {
         setProgress(prev => Math.max(prev, DOWNLOAD_MAX));
