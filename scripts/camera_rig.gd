@@ -8,8 +8,8 @@ extends Node3D
 # ── Camera Settings ──────────────────────────────────────────────
 ## How fast the camera pans when dragging (scaled by zoom level)
 @export var pan_speed: float = 0.010
-## Touch pan speed (faster than mouse — fingers move further)
-@export var touch_pan_speed: float = 0.025
+## Touch pan speed (slower — fingers naturally produce larger relative deltas)
+@export var touch_pan_speed: float = 0.006
 ## How fast the camera moves with WASD keys
 @export var key_pan_speed: float = 3.0
 ## How fast the camera zooms with scroll wheel
@@ -102,7 +102,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# ── Mouse Motion → Pan ───────────────────────────────────────
 	# Block mouse pan completely while placing/moving — also blocks emulated-from-touch.
-	if event is InputEventMouseMotion and _is_panning and not bs_busy:
+	# Also block when touch is active — touch handler does its own pan.
+	if event is InputEventMouseMotion and _is_panning and not bs_busy and _touch_points.is_empty():
 		var motion := event as InputEventMouseMotion
 		var delta := motion.relative
 
@@ -136,7 +137,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		var sd := event as InputEventScreenDrag
 		_touch_points[sd.index] = sd.position
 
-		# Pinch-to-zoom always works (even during placement so player can zoom out)
+		# Pinch-to-zoom — always works, even during placement so player can zoom out.
+		# Zooms toward the pinch midpoint (not screen center) so it feels natural.
 		if _touch_points.size() >= 2 and not zoom_blocked:
 			_is_dragging_touch = true
 			var points := _touch_points.values()
@@ -145,9 +147,53 @@ func _unhandled_input(event: InputEvent) -> void:
 			var dist: float = p0.distance_to(p1)
 			if _last_pinch_distance > 0.0:
 				var diff: float = _last_pinch_distance - dist
+				var old_zoom: float = _target_zoom
 				_target_zoom = clampf(_target_zoom + diff * pinch_zoom_speed, min_zoom, max_zoom)
+				# Zoom toward pinch midpoint by shifting target position
+				var actual_zoom_change: float = _target_zoom - old_zoom
+				if absf(actual_zoom_change) > 0.001:
+					var midpoint: Vector2 = (p0 + p1) * 0.5
+					var world_at_mid := _screen_to_world_xz(midpoint)
+					if world_at_mid != Vector3.INF:
+						# Move target so the world point under the midpoint stays put
+						# Negative because zooming OUT (positive change) should move LESS toward point
+						var pull_factor: float = -actual_zoom_change / max(_target_zoom, 0.1) * 0.5
+						_target_position += (world_at_mid - global_position) * pull_factor
+						_target_position.y = 0.0
 			_last_pinch_distance = dist
 			get_viewport().set_input_as_handled()
+			return
+
+		# Single finger drag → pan (only when NOT placing/moving and NOT pinching)
+		if _touch_points.size() == 1 and not bs_busy:
+			# Tap threshold — short taps shouldn't start panning
+			if not _is_dragging_touch:
+				var start_pos: Vector2 = _touch_start.get(sd.index, sd.position)
+				if start_pos.distance_to(sd.position) > tap_threshold:
+					_is_dragging_touch = true
+			if _is_dragging_touch:
+				var right := Vector3(1.0, 0.0, 0.0)
+				var forward := Vector3(0.0, 0.0, 1.0)
+				var zoom_factor := _current_zoom * 0.2
+				_target_position -= right * sd.relative.x * touch_pan_speed * zoom_factor
+				_target_position -= forward * sd.relative.y * touch_pan_speed * zoom_factor
+				_target_position.y = 0.0
+				get_viewport().set_input_as_handled()
+
+
+## Project a screen-space point onto the XZ ground plane (y=0).
+## Returns Vector3.INF if the ray doesn't hit the plane.
+func _screen_to_world_xz(screen_pos: Vector2) -> Vector3:
+	if not _camera:
+		return Vector3.INF
+	var origin: Vector3 = _camera.project_ray_origin(screen_pos)
+	var dir: Vector3 = _camera.project_ray_normal(screen_pos)
+	if absf(dir.y) < 0.0001:
+		return Vector3.INF
+	var t: float = -origin.y / dir.y
+	if t < 0.0:
+		return Vector3.INF
+	return origin + dir * t
 
 
 ## Returns true if building system is currently placing or moving a building.
