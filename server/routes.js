@@ -492,7 +492,7 @@ router.post('/buildings/:id/load-troop', auth, (req, res) => {
     if (building.type !== 'port' || !building.has_ship) throw { status: 400, error: 'No ship at this port' };
 
     const shipTroops = JSON.parse(building.ship_troops || '[]');
-    const capacity = building.level;
+    const capacity = building.level * 3;  // Lv1=3, Lv2=6, Lv3=9
     if (shipTroops.length >= capacity) throw { status: 400, error: 'Ship is full' };
 
     const player = db.db.prepare('SELECT gold FROM players WHERE id = ?').get(req.player.id);
@@ -544,7 +544,7 @@ router.post('/buildings/:id/swap-troop', auth, (req, res) => {
     db.db.prepare('UPDATE buildings SET ship_troops = ? WHERE id = ?').run(troopsJson, buildingId);
 
     const updated = db.db.prepare('SELECT gold, wood, ore FROM players WHERE id = ?').get(req.player.id);
-    return { ship_troops: shipTroops, ship_level: building.level, ship_capacity: building.level, resources: updated };
+    return { ship_troops: shipTroops, ship_level: building.level, ship_capacity: building.level * 3, resources: updated };
   });
 
   try {
