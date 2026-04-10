@@ -47,52 +47,44 @@ function useBestRpc() {
  * On mobile Warpcast (WebView), iframe check fails — we need async SDK detection.
  */
 function useFarcasterWalletReady() {
-  const [inFrame, setInFrame] = useState(false);
-  const [ready, setReady] = useState(false);
+  // Single state object to avoid double-render from two separate setStates in promise callbacks
+  const [status, setStatus] = useState({ inFrame: false, ready: false });
 
   useEffect(() => {
     let done = false;
+    const finish = (inFrame) => {
+      if (done) return;
+      done = true;
+      setStatus({ inFrame, ready: true });
+    };
 
-    // Wait for SDK to determine if we're in a mini app
     farcasterDetectPromise.then((isMiniApp) => {
       if (done) return;
-      setInFrame(isMiniApp);
 
       if (!isMiniApp) {
-        done = true;
-        setReady(true);
+        finish(false);
         return;
       }
 
-      // In Farcaster — wait for wallet-standard registration
-      const handler = () => {
-        if (!done) { done = true; setReady(true); }
-      };
+      // Show "waiting for wallet" state — single render
+      setStatus({ inFrame: true, ready: false });
+
+      const handler = () => finish(true);
       window.addEventListener('wallet-standard:register-wallet', handler);
 
       import('@farcaster/mini-app-solana').then(() => {
-        setTimeout(() => {
-          if (!done) { done = true; setReady(true); }
-        }, 500);
-      }).catch(() => {
-        if (!done) { done = true; setReady(true); }
-      });
+        setTimeout(() => finish(true), 500);
+      }).catch(() => finish(true));
 
-      // Safety timeout
-      setTimeout(() => {
-        if (!done) { done = true; setReady(true); }
-      }, 3000);
+      setTimeout(() => finish(true), 3000);
     });
 
-    // Global safety timeout
-    const timer = setTimeout(() => {
-      if (!done) { done = true; setReady(true); }
-    }, 5000);
+    const timer = setTimeout(() => finish(false), 5000);
 
     return () => { done = true; clearTimeout(timer); };
   }, []);
 
-  return { ready, inFrame };
+  return status;
 }
 
 export default function WalletProvider({ children }) {
