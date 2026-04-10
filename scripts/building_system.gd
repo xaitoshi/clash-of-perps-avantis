@@ -3014,6 +3014,20 @@ func _replace_with_ruins(node: Node3D) -> void:
 		_ruins_res = load(RUINS_MODEL)
 	if _ruins_res == null:
 		return
+	# Stop defense scripts (turret/archer tower) so they don't keep firing
+	node.set_process(false)
+	node.set_physics_process(false)
+	# Clean up active bullets/projectiles from turrets and archer towers
+	if "_active_bullets" in node:
+		for bullet_data in node._active_bullets:
+			if is_instance_valid(bullet_data.get("node")):
+				bullet_data.node.queue_free()
+		node._active_bullets.clear()
+	if "_active_arrows" in node:
+		for arrow_data in node._active_arrows:
+			if is_instance_valid(arrow_data.get("node")):
+				arrow_data.node.queue_free()
+		node._active_arrows.clear()
 	# Free all children EXCEPT the base outline (MeshInstance3D with ShaderMaterial)
 	for child in node.get_children():
 		if child is MeshInstance3D and child.material_override is ShaderMaterial:

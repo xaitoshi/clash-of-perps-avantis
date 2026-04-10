@@ -58,6 +58,8 @@ try { db.exec(`ALTER TABLE players ADD COLUMN shield_until TEXT`); } catch {}
 // Attack cooldown: prevent re-attacking same player
 try { db.exec(`ALTER TABLE players ADD COLUMN last_attacked_by TEXT`); } catch {}
 try { db.exec(`ALTER TABLE players ADD COLUMN last_attacked_at TEXT`); } catch {}
+// Tutorial progress: bitmask of completed tutorial phases
+try { db.exec(`ALTER TABLE players ADD COLUMN tutorial_flags INTEGER NOT NULL DEFAULT 0`); } catch {}
 
 // Battle replays — stores full replay data for verification and future replay viewer
 try {

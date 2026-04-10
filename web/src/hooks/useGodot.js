@@ -31,6 +31,8 @@ export function GodotProvider({ children }) {
   const [resourceCaps, setResourceCaps] = useState({ gold: 5000, wood: 5000, ore: 5000 });
   const resourceCapsRef = useRef({ gold: 5000, wood: 5000, ore: 5000 });
   const errorTimerRef = useRef(null);
+  const [tutorialFlags, setTutorialFlags] = useState(0xFF); // default all done, server overrides
+  const [tutorialPhase, setTutorialPhase] = useState(null); // 'base'|'army'|'attack'|'trade'|null
 
   useEffect(() => {
     window.onGodotMessage = (msg) => {
@@ -42,6 +44,13 @@ export function GodotProvider({ children }) {
         case 'state':
           setPlayerState(prev => ({ ...(prev || {}), ...data }));
           if (data.token) window._playerToken = data.token;
+          if (data.tutorial_flags !== undefined) {
+            setTutorialFlags(data.tutorial_flags);
+            // Auto-trigger first uncompleted tutorial phase
+            if (!(data.tutorial_flags & 1)) setTutorialPhase('base');
+            else if (!(data.tutorial_flags & 2)) setTutorialPhase('army');
+            else if (!(data.tutorial_flags & 8)) setTutorialPhase('trade');
+          }
           break;
         case 'resources':
           setResources(data);
@@ -79,7 +88,11 @@ export function GodotProvider({ children }) {
           break;
         case 'enemy_mode':
           setEnemyMode(data);
-          if (data.active) { setCannonEnergy({ energy: 10, nextCost: 1 }); setBattleResult(null); }
+          if (data.active) {
+            setCannonEnergy({ energy: 10, nextCost: 1 }); setBattleResult(null);
+            // Trigger attack tutorial on first attack
+            setTutorialFlags(prev => { if (!(prev & 4)) setTutorialPhase('attack'); return prev; });
+          }
           if (!data.active) { setSelectedBuilding(null); setCannonMode(false); setSelectedTroopIdx(0); }
           break;
         case 'troop_idx_changed':
@@ -171,8 +184,8 @@ export function GodotProvider({ children }) {
     buildingDefs, troopLevels, selectedBuilding,
   }), [buildingDefs, troopLevels, selectedBuilding]);
   const uiCtx = useMemo(() => ({
-    ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible, futuresOpen, cannonMode, selectedTroopIdx, battleResult, setBattleResult, cannonEnergy, fleetInfo, pendingCasualties, setPendingCasualties, battleTimer
-  }), [ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible, futuresOpen, cannonMode, selectedTroopIdx, battleResult, cannonEnergy, fleetInfo, pendingCasualties, battleTimer]);
+    ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible, futuresOpen, cannonMode, selectedTroopIdx, battleResult, setBattleResult, cannonEnergy, fleetInfo, pendingCasualties, setPendingCasualties, battleTimer, tutorialFlags, tutorialPhase, setTutorialFlags, setTutorialPhase
+  }), [ready, shopOpen, enemyMode, error, showRegister, collectibles, cloudVisible, futuresOpen, cannonMode, selectedTroopIdx, battleResult, cannonEnergy, fleetInfo, pendingCasualties, battleTimer, tutorialFlags, tutorialPhase]);
 
   // Nested providers using createElement (no JSX needed in .js file)
   return createElement(SendContext.Provider, { value: sendCtx },

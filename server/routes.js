@@ -676,6 +676,26 @@ router.post('/buildings/:id/unload-troops', auth, (req, res) => {
   res.json({ success: true, ship_troops: [] });
 });
 
+// ==================== TUTORIAL ====================
+
+// Tutorial flags (bitmask): each bit = one completed phase
+// Bit 0 (1):  base tutorial (welcome, TH, buildings)
+// Bit 1 (2):  army tutorial (port, ship, troops)
+// Bit 2 (4):  attack tutorial (first battle guide)
+// Bit 3 (8):  trading tutorial
+
+router.post('/tutorial/complete', auth, (req, res) => {
+  const { flag } = req.body;
+  if (!Number.isInteger(flag) || flag < 1 || flag > 15) return res.status(400).json({ error: 'Invalid flag' });
+  const player = db.db.prepare('SELECT tutorial_flags FROM players WHERE id = ?').get(req.player.id);
+  const current = player?.tutorial_flags || 0;
+  const updated = current | flag;
+  if (updated !== current) {
+    db.db.prepare('UPDATE players SET tutorial_flags = ? WHERE id = ?').run(updated, req.player.id);
+  }
+  res.json({ tutorial_flags: updated });
+});
+
 // ==================== LEADERBOARD ====================
 
 router.get('/leaderboard', (req, res) => {

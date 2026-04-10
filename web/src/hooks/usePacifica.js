@@ -314,7 +314,19 @@ export function usePacifica() {
       const amountRaw = Math.floor(parseFloat(amountUsdc) * 1e6);
       if (amountRaw < 10e6) throw new Error('Minimum 10 USDC');
 
+      // Check SOL balance for gas fees
+      let solBal = 0;
+      try { solBal = await connection.getBalance(publicKey); } catch {}
+      if (solBal < 5000000) throw new Error('Not enough SOL for gas fees (need ~0.005 SOL)');
+
+      // Check USDC balance
       const depositorAta = getATA(publicKey, USDC_MINT);
+      let usdcBal = 0;
+      try {
+        const tokenBal = await connection.getTokenAccountBalance(depositorAta);
+        usdcBal = Math.floor(parseFloat(tokenBal.value.uiAmount || 0) * 1e6);
+      } catch {}
+      if (usdcBal < amountRaw) throw new Error(`Not enough USDC (have ${(usdcBal / 1e6).toFixed(2)}, need ${amountUsdc})`);
       const [eventAuth] = PublicKey.findProgramAddressSync([Buffer.from('__event_authority')], PACIFICA_PROGRAM);
 
       // Discriminator for "deposit"

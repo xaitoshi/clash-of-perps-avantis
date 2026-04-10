@@ -445,7 +445,7 @@ function FuturesPanel() {
   const [sizePct, setSizePct] = useState(0);
   const [depositAmt, setDepositAmt] = useState('');
   const [withdrawAmt, setWithdrawAmt] = useState('');
-  const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(window.innerWidth < 600);
   const [bottomTab, setBottomTab] = useState('positions');
   const [expandedPos, setExpandedPos] = useState(null);
   const [closePct, setClosePct] = useState(100);
@@ -819,7 +819,8 @@ function FuturesPanel() {
         <style>{animCSS}</style>
         <div ref={panelRef} className={fullscreen ? "futures-fullscreen" : ""} style={{
           ...(fullscreen ? S.containerFull : S.container),
-          transform: fullscreen ? undefined : `translate(${posRef.current.x}px, ${posRef.current.y}px)`,
+          ...((!fullscreen && isMobile) ? { right: 8, left: 8, top: 8, bottom: 80, width: 'auto', borderRadius: 16, border: '4px solid #d4c8b0' } : {}),
+          transform: (fullscreen || isMobile) ? undefined : `translate(${posRef.current.x}px, ${posRef.current.y}px)`,
           transition: isDragging ? 'none' : 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
         }}>
           <div style={S.header} onPointerDown={handlePointerDown}>
@@ -1378,7 +1379,7 @@ const S = {
     boxShadow: '0 0 0 rgba(0,0,0,0)', fontFamily: '"Inter","Segoe UI",sans-serif',
   },
   container: {
-    position: 'fixed', top: 20, right: 20, bottom: 150, width: 400,
+    position: 'fixed', top: 20, right: 20, bottom: 150, width: 400, maxWidth: 'calc(100vw - 16px)',
     background: '#e8dfc8', border: '6px solid #d4c8b0', borderRadius: 24,
     display: 'flex', flexDirection: 'column', pointerEvents: 'auto', overflow: 'hidden', zIndex: 100,
     boxShadow: '0 10px 30px rgba(0,0,0,0.4)', fontFamily: '"Inter","Segoe UI",sans-serif',

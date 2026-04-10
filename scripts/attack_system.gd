@@ -468,6 +468,9 @@ func _spawn_single_ship(target: Vector3, ship_idx: int = -1) -> bool:
 			marker.queue_free()
 		_ship_markers.erase(marker)
 		_deploy_troops_from_ship(arrived_pos, s_dir, _deploy_idx)
+		# Remove from "ships" group so check_defeat doesn't think ships are still sailing
+		if is_instance_valid(pivot):
+			pivot.remove_from_group("ships")
 	)
 	print("Ship %d/%d sailing to: %s" % [_ships_placed + 1, max_ships, stop_pos])
 	return true

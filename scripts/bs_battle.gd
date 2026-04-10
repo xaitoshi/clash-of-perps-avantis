@@ -478,8 +478,12 @@ func _return_home() -> void:
 		bsys._destroy_all_buildings()
 	var net: Node = bs._net
 	if net and net.has_token():
-		await net.login()
-		bs._update_player_name_label()
+		var login_result: Dictionary = await net.login()
+		if not is_instance_valid(bs): return
+		# Apply full server state (resources, buildings, troop_levels) so
+		# loot earned during the attack is reflected in Godot immediately.
+		if login_result.has("id"):
+			bs._on_server_auth_ok(login_result)
 	if bs.build_button:
 		bs.build_button.visible = true
 	if bs.find_button:
@@ -509,33 +513,15 @@ func _return_home() -> void:
 		bs._ship_base_node.visible = true
 
 
-## Handles town hall destruction: destroys all remaining enemy buildings with
-## explosion effects, sets all living troops to VICTORY state, submits the
-## battle result to the server, and sends the result to the React HUD.
+## Handles town hall destruction: sets troops to VICTORY, then destroys
+## remaining buildings one-by-one with staggered explosions. Victory screen
+## shows only after the last building is gone.
+const CHAIN_DESTROY_DELAY: float = 1.5  ## seconds between each building explosion
+
 func _on_town_hall_destroyed() -> void:
-	for bsys in bs._building_systems:
-		var to_destroy: Array = bsys.placed_buildings.duplicate()
-		for b in to_destroy:
-			if b.id == "tombstone":
-				bsys._remove_tombstone_skeletons(b)
-			# Port → sink its ship before destroying the port
-			if b.id == "port":
-				var pnode: Node3D = b.get("node", null)
-				if is_instance_valid(pnode) and pnode.has_meta("ship_node"):
-					var ship: Node3D = pnode.get_meta("ship_node")
-					if is_instance_valid(ship):
-						bs._sink_ship(ship)
-			if b.has("hp_bar") and is_instance_valid(b.hp_bar):
-				b.hp_bar.queue_free()
-			var icon: Control = b.get("_collect_icon")
-			if is_instance_valid(icon):
-				icon.queue_free()
-			if is_instance_valid(b.node):
-				bs._cannon._spawn_ship_explosion(b.node.global_position)
-				b.node.queue_free()
-		bsys.placed_buildings.clear()
-		bsys.grid.fill(false)
-	# Count casualties: only troops from DEPLOYED ships (marked _placed in attack_system._fleet)
+	_battle_timer_active = false
+
+	# 1. Set all troops to VICTORY immediately (they stop fighting)
 	var deployed_troops: Dictionary = {}
 	var attack_sys: Node = bs.get_node_or_null("../AttackSystem")
 	var fleet_ref: Array = attack_sys._fleet if attack_sys else _saved_fleet
@@ -548,10 +534,67 @@ func _on_town_hall_destroyed() -> void:
 	for troop in bs.get_tree().get_nodes_in_group("troops"):
 		if is_instance_valid(troop) and "state" in troop:
 			troop.state = troop.State.VICTORY
-			# Get troop type name from script path
 			var t_key: String = _troop_script_to_name(troop)
 			if t_key != "":
 				surviving_troops[t_key] = surviving_troops.get(t_key, 0) + 1
+
+	# 2. Collect all remaining buildings (excluding TH which is already destroyed)
+	var remaining: Array = []
+	for bsys in bs._building_systems:
+		for b in bsys.placed_buildings:
+			if b.get("id", "") == "town_hall":
+				continue
+			if not is_instance_valid(b.get("node")):
+				continue
+			remaining.append({"b": b, "bsys": bsys})
+	# Shuffle for random destruction order
+	remaining.shuffle()
+
+	# 3. Destroy buildings one by one with delay
+	for entry in remaining:
+		if not is_instance_valid(bs):
+			return
+		await bs.get_tree().create_timer(CHAIN_DESTROY_DELAY).timeout
+		if not is_instance_valid(bs):
+			return
+		var b: Dictionary = entry.b
+		var bsys: Node = entry.bsys
+		if not is_instance_valid(b.get("node")):
+			continue
+		# Tombstone → remove skeletons
+		if b.id == "tombstone":
+			bsys._remove_tombstone_skeletons(b)
+		# Port → sink ship
+		if b.id == "port":
+			var pnode: Node3D = b.get("node", null)
+			if is_instance_valid(pnode) and pnode.has_meta("ship_node"):
+				var ship: Node3D = pnode.get_meta("ship_node")
+				if is_instance_valid(ship):
+					bs._sink_ship(ship)
+		# HP bar cleanup
+		if b.has("hp_bar") and is_instance_valid(b.hp_bar):
+			b.hp_bar.queue_free()
+		var icon: Control = b.get("_collect_icon")
+		if is_instance_valid(icon):
+			icon.queue_free()
+		# Explosion + ruins (same logic as remove_building)
+		if is_instance_valid(b.node):
+			var bnode_ref: Node3D = b.node
+			# Stop defense scripts
+			bnode_ref.set_process(false)
+			bnode_ref.set_physics_process(false)
+			bs._cannon._spawn_ship_explosion(bnode_ref.global_position)
+			if b.get("id", "") == "port":
+				bnode_ref.queue_free()
+			else:
+				bsys._replace_with_ruins(bnode_ref)
+
+	# 4. Clear all building arrays
+	for bsys in bs._building_systems:
+		bsys.placed_buildings.clear()
+		bsys.grid.fill(false)
+
+	# 5. Count casualties and submit result
 	var casualties: Dictionary = {}
 	for t_name in deployed_troops:
 		var lost: int = deployed_troops[t_name] - surviving_troops.get(t_name, 0)
@@ -570,7 +613,6 @@ func _on_town_hall_destroyed() -> void:
 					"error": result.get("error", "") + " " + result.get("reason", ""),
 				})
 			return
-		# Apply authoritative post-casualty ship state from server
 		if result.has("ships"):
 			bs._apply_ships_from_server(result.get("ships", []))
 		var loot: Dictionary = result.get("loot", {})

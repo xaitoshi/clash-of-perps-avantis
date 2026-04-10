@@ -24,9 +24,10 @@ const ATTACK_TROOPS = [
 ];
 
 // ── Shared styled button (normal mode) ────────────────────────────────────
-const CustomBtn = ({ children, onClick, width = 140, height = 140, style = {}, mobileScale = 0.7 }) => (
+const CustomBtn = ({ children, onClick, width = 140, height = 140, style = {}, mobileScale = 0.7, ...rest }) => (
   <button
     onClick={onClick}
+    {...rest}
     style={{
       width, height, position: 'relative', background: 'none', border: 'none',
       padding: 0, cursor: 'pointer', transition: 'transform 0.1s ease-out, filter 0.1s', outline: 'none',
@@ -373,12 +374,12 @@ function ActionButtons({ onOpenBattleLog }) {
           <CustomBtn onClick={onOpenBattleLog} width={btnSmall} height={btnSmall}>
             <ShieldIcon size={mobile ? 40 : 60} />
           </CustomBtn>
-          <CustomBtn onClick={handleFindEnemy} width={btnSize} height={btnSize}>
+          <CustomBtn onClick={handleFindEnemy} width={btnSize} height={btnSize} data-tutorial="attack-btn">
             <img src={attackIcon} alt="attack" style={{ ...styles.attackIconImg, ...(mobile ? { width: 95, height: 95 } : {}) }} />
             <span style={styles.btnLabel}>ATTACK</span>
           </CustomBtn>
         </div>
-        <CustomBtn onClick={handleOpenShop} width={btnSmall} height={btnSmall}>
+        <CustomBtn onClick={handleOpenShop} width={btnSmall} height={btnSmall} data-tutorial="build-btn">
           {affordableCount > 0 && <div style={styles.notificationBadgeSmall}>{affordableCount}</div>}
           <img src={buildIcon} alt="build" style={{ ...styles.buildIconImgSmall, ...(mobile ? { width: 75, height: 75 } : {}) }} />
         </CustomBtn>
@@ -412,7 +413,7 @@ function ActionButtons({ onOpenBattleLog }) {
             <span style={{...styles.btnLabel, bottom: mobile ? 16 : 22, fontSize: mobile ? 9 : 11}}>REINFORCE</span>
           </CustomBtn>
         )}
-        <CustomBtn onClick={handleOpenTrade} width={btnSize} height={btnSize}>
+        <CustomBtn onClick={handleOpenTrade} width={btnSize} height={btnSize} data-tutorial="trade-btn">
           {(window._openPositionsCount || 0) > 0 && <div style={styles.notificationBadge}>!</div>}
           <img src={chartIcon} alt="trade" style={{ ...styles.chartIconImg, ...(mobile ? { width: 90, height: 90 } : {}) }} />
           <span style={styles.btnLabel}>TRADE</span>
