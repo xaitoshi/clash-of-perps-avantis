@@ -99,8 +99,8 @@ router.get('/resources', auth, (req, res) => {
   res.json(db.getResources(req.player.id));
 });
 
-// Add resources
-router.post('/resources/add', auth, (req, res) => {
+// Add resources (admin only — players earn resources through gameplay)
+router.post('/resources/add', adminAuth, (req, res) => {
   const { gold = 0, wood = 0, ore = 0 } = req.body;
   if (typeof gold !== 'number' || typeof wood !== 'number' || typeof ore !== 'number') {
     return res.status(400).json({ error: 'gold, wood, ore must be numbers' });
@@ -112,8 +112,8 @@ router.post('/resources/add', auth, (req, res) => {
   res.json(result);
 });
 
-// Subtract resources
-router.post('/resources/subtract', auth, (req, res) => {
+// Subtract resources (admin only)
+router.post('/resources/subtract', adminAuth, (req, res) => {
   const { gold = 0, wood = 0, ore = 0 } = req.body;
   if (typeof gold !== 'number' || typeof wood !== 'number' || typeof ore !== 'number') {
     return res.status(400).json({ error: 'gold, wood, ore must be numbers' });
@@ -126,8 +126,8 @@ router.post('/resources/subtract', auth, (req, res) => {
   res.json(result);
 });
 
-// Set resources directly
-router.post('/resources/set', auth, (req, res) => {
+// Set resources directly (admin only)
+router.post('/resources/set', adminAuth, (req, res) => {
   const { gold, wood, ore } = req.body;
   const current = db.getResources(req.player.id);
   const newGold = typeof gold === 'number' ? Math.max(0, gold) : current.gold;
@@ -939,7 +939,7 @@ router.get('/state', auth, (req, res) => {
 
 const ADMIN_KEY = process.env.ADMIN_KEY;
 function adminAuth(req, res, next) {
-  if (req.headers['x-admin-key'] !== ADMIN_KEY) {
+  if (!ADMIN_KEY || req.headers['x-admin-key'] !== ADMIN_KEY) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   next();
@@ -1034,6 +1034,33 @@ router.post('/admin/players/:name/reset-trophies', adminAuth, (req, res) => {
 router.post('/admin/reset-all-trophies', adminAuth, (req, res) => {
   const result = db.db.prepare('UPDATE players SET trophies = 0').run();
   res.json({ reset: result.changes });
+});
+
+// Add resources to ALL players
+router.post('/admin/add-resources-all', adminAuth, (req, res) => {
+  const { gold = 0, wood = 0, ore = 0 } = req.body;
+  if (typeof gold !== 'number' || typeof wood !== 'number' || typeof ore !== 'number') {
+    return res.status(400).json({ error: 'gold, wood, ore must be numbers' });
+  }
+  const players = db.db.prepare('SELECT id FROM players').all();
+  let updated = 0;
+  for (const p of players) {
+    db.addResources(p.id, gold, wood, ore);
+    updated++;
+  }
+  res.json({ success: true, players_updated: updated, added: { gold, wood, ore } });
+});
+
+// Add resources to a specific player by name
+router.post('/admin/players/:name/add-resources', adminAuth, (req, res) => {
+  const player = db.db.prepare('SELECT id FROM players WHERE name = ?').get(req.params.name);
+  if (!player) return res.status(404).json({ error: 'Player not found' });
+  const { gold = 0, wood = 0, ore = 0 } = req.body;
+  if (typeof gold !== 'number' || typeof wood !== 'number' || typeof ore !== 'number') {
+    return res.status(400).json({ error: 'gold, wood, ore must be numbers' });
+  }
+  db.addResources(player.id, gold, wood, ore);
+  res.json({ success: true, resources: db.getResources(player.id) });
 });
 
 // Wipe entire database

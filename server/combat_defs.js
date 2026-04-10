@@ -63,7 +63,7 @@ const TROOPS_PER_SHIP = 9;                      // 3x original (was 3)
 const MAX_TROOPS = MAX_SHIPS * TROOPS_PER_SHIP;  // 45
 const SAIL_DELAY_SEC = 3;
 const TIME_LIMIT_SEC = 180;
-const LOOT_PERCENT = 0.30;
+const LOOT_PERCENT = 0.15;
 
 // Cannon energy system
 const CANNON_INITIAL_ENERGY = 10;

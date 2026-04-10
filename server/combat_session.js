@@ -299,20 +299,13 @@ function verifyReplay({ defenderBuildings, actions, claimedResult, gridConfig, s
         t.atkTimer += TICK_DT;
 
         if (t.melee) {
-          // Melee: cycle resets at atkSpeed, hit fires at 40% of cycle
+          // Melee: damage dealt when attack timer completes full cycle
+          // (matches client base_troop.gd _do_attack — no hitDelay phase)
           if (t.atkTimer >= t.atkSpeed) {
             t.atkTimer -= t.atkSpeed;
-            t.hitPending = true;
-            t.hitTimer = 0;
-          }
-          if (t.hitPending) {
-            t.hitTimer += TICK_DT;
-            if (t.hitTimer >= t.atkSpeed * t.hitDelay) {
-              t.hitPending = false;
-              const wasAlive = target.hp > 0;
-              target.hp -= t.damage;
-              if (wasAlive && target.hp <= 0 && target.type) cannonEnergy += CANNON_ENERGY_PER_DESTROY;
-            }
+            const wasAlive = target.hp > 0;
+            target.hp -= t.damage;
+            if (wasAlive && target.hp <= 0 && target.type) cannonEnergy += CANNON_ENERGY_PER_DESTROY;
           }
         } else {
           // Ranged: spawn homing projectile

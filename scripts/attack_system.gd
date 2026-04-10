@@ -468,9 +468,11 @@ func _spawn_single_ship(target: Vector3, ship_idx: int = -1) -> bool:
 			marker.queue_free()
 		_ship_markers.erase(marker)
 		_deploy_troops_from_ship(arrived_pos, s_dir, _deploy_idx)
-		# Remove from "ships" group so check_defeat doesn't think ships are still sailing
+		# Move from "ships" (sailing) to "deployed_ships" (arrived) so check_defeat
+		# knows sailing is done, but return_home can still free them.
 		if is_instance_valid(pivot):
 			pivot.remove_from_group("ships")
+			pivot.add_to_group("deployed_ships")
 	)
 	print("Ship %d/%d sailing to: %s" % [_ships_placed + 1, max_ships, stop_pos])
 	return true
@@ -529,7 +531,12 @@ func _deploy_troops_from_ship(ship_pos: Vector3, sail_dir: Vector3, ship_idx: in
 			troop.visible = true
 			if lvl > 1 and troop.has_method("upgrade_to"):
 				troop.upgrade_to(lvl)
-			if troop.has_method("activate"):
+			# If victory already declared (TH destroyed), new troops celebrate immediately
+			var battle_ref = bs_ref._battle if bs_ref and "_battle" in bs_ref else null
+			if battle_ref and "_victory_declared" in battle_ref and battle_ref._victory_declared:
+				if troop.has_method("_play_victory"):
+					troop._play_victory()
+			elif troop.has_method("activate"):
 				troop.activate()
 		)
 

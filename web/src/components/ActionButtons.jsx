@@ -420,7 +420,7 @@ function ActionButtons({ onOpenBattleLog }) {
                   setPendingCasualties(null);
                 }
               })
-              .catch(() => setShowReinforce(true))
+              .catch(() => { /* don't show modal on network error */ })
               .finally(() => setLoadingCasualties(false));
           }} width={btnSmall} height={btnSmall}>
             <div style={styles.notificationBadgeSmall}>!</div>
@@ -448,7 +448,7 @@ function ActionButtons({ onOpenBattleLog }) {
             sendToGodot('reinforce');
             setShowReinforce(false);
             setServerCasualties(null);
-            setPendingCasualties(null);
+            // Don't clear pendingCasualties here — wait for server 'reinforced' event
           }}
           onClose={() => { setShowReinforce(false); setServerCasualties(null); }}
         />

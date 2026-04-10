@@ -5,8 +5,8 @@ extends Node3D
 
 @export var move_speed: float = 0.5
 @export var attack_range: float = 0.15
-@export var separation_radius: float = 0.18
-@export var separation_force: float = 0.5
+@export var separation_radius: float = 0.0
+@export var separation_force: float = 0.0
 
 var level: int = 1
 var hp: int = 100
@@ -544,12 +544,16 @@ func _play_victory() -> void:
 
 ## Applies `dmg` points of damage to this troop. If HP reaches zero the troop
 ## removes itself from the "troops" group and frees itself from the scene tree.
+var _is_dead: bool = false
+
 func take_damage(dmg: int) -> void:
+	if _is_dead:
+		return
 	hp -= dmg
 	if hp <= 0:
+		_is_dead = true
 		if is_in_group("troops"):
 			remove_from_group("troops")
-		# Notify server immediately that this troop died
 		_report_death()
 		queue_free()
 

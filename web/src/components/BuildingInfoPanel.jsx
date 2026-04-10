@@ -99,7 +99,7 @@ function BuildingInfoPanel({ onOpenTroops }) {
   // Reset optimistic troops when server data arrives. Compare full content
   // (not just length) so swaps also trigger a reset — otherwise a failed swap
   // leaves optimistic state visible forever.
-  const serverTroopsKey = building?.ship_troops ? building.ship_troops.join('|') : '';
+  const serverTroopsKey = (building?.id || '') + ':' + (building?.ship_troops ? building.ship_troops.join('|') : '');
   useEffect(() => {
     setLocalTroops(null);
   }, [serverTroopsKey]);

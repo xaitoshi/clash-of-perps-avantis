@@ -3028,17 +3028,36 @@ func _replace_with_ruins(node: Node3D) -> void:
 	# Stop defense scripts (turret/archer tower) so they don't keep firing
 	node.set_process(false)
 	node.set_physics_process(false)
-	# Clean up active bullets/projectiles from turrets and archer towers
+	# Clean up active bullets/projectiles/flashes from turrets and archer towers
 	if "_active_bullets" in node:
 		for bullet_data in node._active_bullets:
 			if is_instance_valid(bullet_data.get("node")):
 				bullet_data.node.queue_free()
+			if is_instance_valid(bullet_data.get("trail")):
+				bullet_data.trail.queue_free()
+			if is_instance_valid(bullet_data.get("flash")):
+				bullet_data.flash.queue_free()
 		node._active_bullets.clear()
+	# Also clean entire bullet pool (includes inactive bullets with visible flashes)
+	if "_bullet_pool" in node:
+		for b in node._bullet_pool:
+			if is_instance_valid(b.get("node")):
+				b.node.queue_free()
+			if is_instance_valid(b.get("trail")):
+				b.trail.queue_free()
+			if is_instance_valid(b.get("flash")):
+				b.flash.queue_free()
+		node._bullet_pool.clear()
 	if "_active_arrows" in node:
 		for arrow_data in node._active_arrows:
 			if is_instance_valid(arrow_data.get("node")):
 				arrow_data.node.queue_free()
 		node._active_arrows.clear()
+	if "_pool" in node:
+		for p in node._pool:
+			if is_instance_valid(p):
+				p.queue_free()
+		node._pool.clear()
 	# Free all children EXCEPT the base outline (MeshInstance3D with ShaderMaterial)
 	for child in node.get_children():
 		if child is MeshInstance3D and child.material_override is ShaderMaterial:

@@ -288,5 +288,5 @@ func _get_total_ship_capacity() -> int:
 			if b.get("id") == "port":
 				var pnode = b.get("node", null)
 				if is_instance_valid(pnode) and pnode.has_meta("has_ship"):
-					total += pnode.get_meta("ship_level", 1)
+					total += pnode.get_meta("ship_level", 1) * 3
 	return total

@@ -698,11 +698,11 @@ function buyShip(playerId, buildingId) {
   return { success: true, resources: getResources(playerId) };
 }
 
-const LOOT_PERCENT = 0.30;
+const LOOT_PERCENT = 0.15;
 
 
-const SHIELD_HOURS = 12; // 12-hour shield after being raided
-const ATTACK_COOLDOWN_HOURS = 2; // can't attack same player for 2 hours
+const SHIELD_HOURS = 6; // 6-hour shield after being raided
+const ATTACK_COOLDOWN_HOURS = 1; // can't attack same player for 1 hour
 
 function battleDefeat(attackerId, defenderId) {
   const attacker = stmts.getPlayerById.get(attackerId);

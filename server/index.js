@@ -316,7 +316,8 @@ function renderPlayers() {
     '<div class="stat"><div class="v">' + players.length + '</div><div class="l">Players</div></div>' +
     '<div class="stat"><div class="v">' + shielded + '</div><div class="l">Shielded</div></div>' +
     '<div class="stat"><div class="v">' + players.reduce((s,p) => s + p.buildings_count, 0) + '</div><div class="l">Buildings</div></div>' +
-    '<div class="stat" style="cursor:pointer;border-color:#f59e0b" onclick="resetAllTrophies()"><div class="v" style="font-size:14px">RESET ALL</div><div class="l">Trophies</div></div>';
+    '<div class="stat" style="cursor:pointer;border-color:#f59e0b" onclick="resetAllTrophies()"><div class="v" style="font-size:14px">RESET ALL</div><div class="l">Trophies</div></div>' +
+    '<div class="stat" style="cursor:pointer;border-color:#34d399" onclick="addResAll()"><div class="v" style="font-size:14px;color:#34d399">+ RES ALL</div><div class="l">Add Resources</div></div>';
 
   document.getElementById('playersBody').innerHTML = players.map(p =>
     '<tr>' +
@@ -329,7 +330,7 @@ function renderPlayers() {
     '<td>' + p.buildings_count + '</td>' +
     '<td>' + (p.shield_active ? '<span class="badge badge-shield">' + p.shield_remaining + 'm left</span>' : '<span class="badge badge-off">none</span>') + '</td>' +
     '<td class="mono">' + (p.created_at||'').split(' ')[0] + '</td>' +
-    '<td><button class="btn" onclick="resetTrophies(\\'' + esc(p.name) + '\\')">0 Troph</button> <button class="btn" onclick="resetPlayer(\\'' + esc(p.name) + '\\')">Reset</button> <button class="btn btn-danger" onclick="deletePlayer(\\'' + esc(p.name) + '\\')">Delete</button></td>' +
+    '<td><button class="btn" onclick="addResPlayer(\\'' + esc(p.name) + '\\')">+Res</button> <button class="btn" onclick="resetTrophies(\\'' + esc(p.name) + '\\')">0 Troph</button> <button class="btn" onclick="resetPlayer(\\'' + esc(p.name) + '\\')">Reset</button> <button class="btn btn-danger" onclick="deletePlayer(\\'' + esc(p.name) + '\\')">Delete</button></td>' +
     '</tr>'
   ).join('');
 }
@@ -374,6 +375,38 @@ async function resetTrophies(name) {
 async function resetAllTrophies() {
   if (!confirm('Reset ALL players trophies to 0? This is for new season/tournament.')) return;
   await fetch('/api/admin/reset-all-trophies', { method: 'POST', headers: { 'x-admin-key': KEY } });
+  loadAll();
+}
+
+async function addResAll() {
+  const gold = prompt('Gold to add to ALL players:', '1000');
+  if (gold === null) return;
+  const wood = prompt('Wood:', '1000');
+  if (wood === null) return;
+  const ore = prompt('Ore:', '1000');
+  if (ore === null) return;
+  const r = await fetch('/api/admin/add-resources-all', {
+    method: 'POST',
+    headers: { 'x-admin-key': KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gold: +gold, wood: +wood, ore: +ore })
+  });
+  const data = await r.json();
+  alert('Added to ' + (data.players_updated || 0) + ' players');
+  loadAll();
+}
+
+async function addResPlayer(name) {
+  const gold = prompt('Gold for ' + name + ':', '5000');
+  if (gold === null) return;
+  const wood = prompt('Wood:', '5000');
+  if (wood === null) return;
+  const ore = prompt('Ore:', '5000');
+  if (ore === null) return;
+  await fetch('/api/admin/players/' + encodeURIComponent(name) + '/add-resources', {
+    method: 'POST',
+    headers: { 'x-admin-key': KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gold: +gold, wood: +wood, ore: +ore })
+  });
   loadAll();
 }
 

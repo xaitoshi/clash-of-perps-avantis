@@ -48,6 +48,7 @@ var _replay_buildings_snapshot: Array = []
 
 var _had_troops: bool = false
 var _skeleton_respawn_timer: float = 0.0
+var _victory_declared: bool = false
 
 # ---------------------------------------------------------------------------
 # Cleanup helpers
@@ -227,6 +228,7 @@ func _restore_ships_and_troops() -> void:
 ## Used when jumping to an enemy without having sailed first (e.g. direct
 ## attack from the main menu).
 func _switch_to_enemy_island() -> void:
+	_victory_declared = false
 	if _saved_fleet.is_empty():
 		_saved_fleet = await bs._build_fleet()
 	_battle_replay.clear()
@@ -333,6 +335,7 @@ func _switch_to_enemy_island() -> void:
 ## Skips the cloud-close step; the caller is responsible for closing the
 ## cloud before calling this function.
 func _switch_to_enemy_island_after_sail() -> void:
+	_victory_declared = false
 	_battle_replay.clear()
 	_battle_start_time = Time.get_ticks_msec() / 1000.0
 	_battle_timer = 0.0
@@ -465,6 +468,10 @@ func _return_home() -> void:
 	for ship in bs.get_tree().get_nodes_in_group("ships"):
 		if is_instance_valid(ship):
 			ship.queue_free()
+	for ship in bs.get_tree().get_nodes_in_group("deployed_ships"):
+		if is_instance_valid(ship):
+			ship.remove_from_group("deployed_ships")
+			ship.queue_free()
 	var attack_system = bs.get_node_or_null("../AttackSystem")
 	if attack_system and attack_system.has_method("exit_attack_mode"):
 		attack_system.exit_attack_mode()
@@ -497,6 +504,7 @@ func _return_home() -> void:
 		return_button.queue_free()
 		return_button = null
 	enemy_info = {}
+	_victory_declared = false
 	cloud.reveal()
 	await cloud.reveal_finished
 	if bridge:
@@ -516,10 +524,11 @@ func _return_home() -> void:
 ## Handles town hall destruction: sets troops to VICTORY, then destroys
 ## remaining buildings one-by-one with staggered explosions. Victory screen
 ## shows only after the last building is gone.
-const CHAIN_DESTROY_DELAY: float = 3.0  ## seconds between each building explosion
+const CHAIN_DESTROY_DELAY: float = 1.5  ## seconds between each building explosion
 
 func _on_town_hall_destroyed() -> void:
 	_battle_timer_active = false
+	_victory_declared = true
 
 	# 1. Set all troops to VICTORY immediately (they stop fighting)
 	var deployed_troops: Dictionary = {}
@@ -533,18 +542,23 @@ func _on_town_hall_destroyed() -> void:
 	var surviving_troops: Dictionary = {}
 	for troop in bs.get_tree().get_nodes_in_group("troops"):
 		if is_instance_valid(troop) and "state" in troop:
-			troop.state = troop.State.VICTORY
+			if troop.has_method("_play_victory"):
+				troop._play_victory()
+			else:
+				troop.state = troop.State.VICTORY
 			var t_key: String = _troop_script_to_name(troop)
 			if t_key != "":
 				surviving_troops[t_key] = surviving_troops.get(t_key, 0) + 1
 
-	# 2. Collect all remaining buildings (excluding TH which is already destroyed)
+	# 2. Collect remaining ALIVE buildings (skip TH and already-destroyed ones)
 	var remaining: Array = []
 	for bsys in bs._building_systems:
 		for b in bsys.placed_buildings:
 			if b.get("id", "") == "town_hall":
 				continue
 			if not is_instance_valid(b.get("node")):
+				continue
+			if b.get("hp", 0) <= 0:
 				continue
 			remaining.append({"b": b, "bsys": bsys})
 	# Shuffle for random destruction order
@@ -557,6 +571,11 @@ func _on_town_hall_destroyed() -> void:
 		await bs.get_tree().create_timer(CHAIN_DESTROY_DELAY).timeout
 		if not is_instance_valid(bs):
 			return
+		# Force any late-spawned troops into VICTORY (they may have spawned during the delay)
+		for troop in bs.get_tree().get_nodes_in_group("troops"):
+			if is_instance_valid(troop) and "state" in troop and troop.state != troop.State.VICTORY:
+				if troop.has_method("_play_victory"):
+					troop._play_victory()
 		var b: Dictionary = entry.b
 		var bsys: Node = entry.bsys
 		if not is_instance_valid(b.get("node")):
@@ -781,7 +800,7 @@ func _replay_cannon_fire(action: Dictionary) -> void:
 ## Detects when all attacking troops have been lost and ALL ships have been
 ## deployed (placed + sailed), then submits a defeat result after a grace period.
 func check_defeat(delta: float) -> void:
-	if not is_viewing_enemy or _replay_active:
+	if not is_viewing_enemy or _replay_active or _victory_declared:
 		return
 	if not bs.create_ui or bs.name != "BuildingSystem":
 		return
@@ -823,11 +842,11 @@ func check_defeat(delta: float) -> void:
 		return  # battle hasn't started yet
 
 	var fleet_size: int = _saved_fleet.size()
-	var ships_placed: int = 0
+	var total_launched: int = 0
 	if attack_system:
-		ships_placed = attack_system._ships_placed
-	# Still has unplaced ships — player can still send more, don't defeat yet
-	if ships_placed < fleet_size and attack_system and attack_system.is_attack_mode:
+		total_launched = attack_system._total_ships_launched
+	# Still has unlaunched ships — player can still send more, don't defeat yet
+	if total_launched < fleet_size:
 		_skeleton_respawn_timer = 0.0
 		return
 
@@ -844,6 +863,8 @@ func check_defeat(delta: float) -> void:
 	var def_id: String = enemy_info.get("id", "")
 	var defeat_casualties: Dictionary = {}
 	for ship in _saved_fleet:
+		if not ship.get("_placed", false):
+			continue  # skip ships that were never deployed
 		for t_name in ship.get("troops", []):
 			defeat_casualties[t_name] = defeat_casualties.get(t_name, 0) + 1
 	if net_def and net_def.has_token() and def_id != "":
@@ -861,8 +882,11 @@ func check_defeat(delta: float) -> void:
 ## Forces a defeat — used when battle timer expires.
 ## Only already-dead troops count as casualties. Survivors stay alive.
 func _force_defeat(reason: String) -> void:
+	if _victory_declared:
+		return
 	_had_troops = false
 	_skeleton_respawn_timer = 0.0
+	_victory_declared = true  # prevent check_defeat from firing again
 	# Casualties already reported to server via /troop-died in real-time
 	# Just send the defeat result with empty casualties (server already has the data)
 	var net_def: Node = bs._net
