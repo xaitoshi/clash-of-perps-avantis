@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ResourceBar from './ResourceBar';
 import PlayerInfo from './PlayerInfo';
 import ActionButtons from './ActionButtons';
@@ -31,6 +31,28 @@ export default function GameUI() {
   useEffect(() => {
     if (!selectedBuilding) setShowTroops(false);
   }, [selectedBuilding]);
+
+  // Fetch tutorial flags from server once on mount
+  const tutorialFetchedRef = useRef(false);
+  useEffect(() => {
+    if (!ready || tutorialFetchedRef.current) return;
+    const token = window._playerToken;
+    if (!token) return;
+    tutorialFetchedRef.current = true;
+    const tid = setTimeout(() => {
+      fetch('/api/tutorial', { headers: { 'x-token': token } })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(res => {
+          const flags = res.tutorial_flags ?? 0xFF;
+          if (flags === 0xFF) return;
+          setTutorialFlags(flags);
+          if (!(flags & 1)) setTutorialPhase('base');
+          else if (!(flags & 2)) setTutorialPhase('army');
+          else if (!(flags & 8)) setTutorialPhase('trade');
+        }).catch(() => {});
+    }, 3000); // delay 3s after game ready
+    return () => clearTimeout(tid);
+  }, [ready]);
 
   // Trigger attack tutorial on first enemy mode
   useEffect(() => {

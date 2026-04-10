@@ -32,9 +32,8 @@ export function GodotProvider({ children }) {
   const [resourceCaps, setResourceCaps] = useState({ gold: 5000, wood: 5000, ore: 5000 });
   const resourceCapsRef = useRef({ gold: 5000, wood: 5000, ore: 5000 });
   const errorTimerRef = useRef(null);
-  const [tutorialFlags, setTutorialFlags] = useState(0xFF); // default all done, server overrides
-  const [tutorialPhase, setTutorialPhase] = useState(null); // 'base'|'army'|'attack'|'trade'|null
-  const tutorialFetchedRef = useRef(false);
+  const [tutorialFlags, setTutorialFlags] = useState(0xFF);
+  const [tutorialPhase, setTutorialPhase] = useState(null);
 
   useEffect(() => {
     window.onGodotMessage = (msg) => {
@@ -49,29 +48,7 @@ export function GodotProvider({ children }) {
             if (JSON.stringify(next) === JSON.stringify(prev)) return prev;
             return next;
           });
-          if (data.token) {
-            window._playerToken = data.token;
-            // Fetch tutorial progress once (Godot bridge doesn't include it).
-            // Deferred to avoid blocking render. Uses requestIdleCallback where available.
-            if (!tutorialFetchedRef.current) {
-              tutorialFetchedRef.current = true;
-              const doFetch = () => {
-                fetch('/api/tutorial', { headers: { 'x-token': data.token } })
-                  .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-                  .then(res => {
-                    const flags = res.tutorial_flags ?? 0xFF;
-                    if (flags === 0xFF) return;
-                    setTutorialFlags(flags);
-                    if (!(flags & 1)) setTutorialPhase('base');
-                    else if (!(flags & 2)) setTutorialPhase('army');
-                    else if (!(flags & 8)) setTutorialPhase('trade');
-                  }).catch(() => {});
-              };
-              // Delay fetch so it doesn't block initial render
-              if (window.requestIdleCallback) window.requestIdleCallback(doFetch);
-              else setTimeout(doFetch, 2000);
-            }
-          }
+          if (data.token) window._playerToken = data.token;
           break;
         case 'resources':
           setResources(prev => {
