@@ -203,10 +203,10 @@ function BarracksPanel({ building, onClose }) {
   const reqBoxSize = mobile ? 60 : 90;
 
   return (
-    <div style={{...styles.overlay, ...(mobile ? { alignItems: 'stretch' } : {})}} onClick={onClose}>
+    <div style={styles.overlay} onClick={onClose}>
       <style>{UPGRADE_ANIM_CSS}</style>
 
-      <div style={{...styles.panel, ...(mobile ? { width: '100vw', maxWidth: '100vw', height: '100%', maxHeight: 'none', borderRadius: 0 } : {})}} onClick={stopPropagation}>
+      <div style={{...styles.panel, ...(mobile ? { width: '96vw', maxHeight: '88vh' } : {})}} onClick={stopPropagation}>
 
         <div style={styles.header}>
           <span style={{...styles.headerTitle, fontSize: mobile ? 18 : 24}}>{displayName}</span>

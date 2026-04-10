@@ -211,8 +211,8 @@ function BuildingInfoPanel({ onOpenTroops }) {
   );
 
   const renderModal = (title, level, leftContent, centerImg, rightContent, mainActionText, onMainAction) => (
-    <div style={{...LT.overlay, ...(isMobile ? { alignItems: 'stretch' } : {})}} onClick={handleDeselect}>
-      <div style={{...LT.panel, ...(isMobile ? { width: '100vw', maxWidth: '100vw', height: '100%', maxHeight: 'none', borderRadius: 0 } : {})}} onClick={e => e.stopPropagation()}>
+    <div style={LT.overlay} onClick={handleDeselect}>
+      <div style={{...LT.panel, ...(isMobile ? { width: '96vw', maxHeight: '88vh' } : {})}} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div style={{...LT.header, height: isMobile ? 44 : 54}}>
           <span style={{...LT.headerTitle, fontSize: isMobile ? 18 : 24}}>{title}</span>
@@ -406,8 +406,8 @@ function BuildingInfoPanel({ onOpenTroops }) {
     const cardW = isMobile ? 'calc(33% - 6px)' : 108;
 
     return (
-      <div style={{...LT.overlay, ...(isMobile ? { alignItems: 'stretch' } : {})}} onClick={handleClose}>
-        <div style={{...LT.panel, ...(isMobile ? { width: '100vw', maxWidth: '100vw', height: '100%', maxHeight: 'none', borderRadius: 0 } : {})}} onClick={e => e.stopPropagation()}>
+      <div style={LT.overlay} onClick={handleClose}>
+        <div style={{...LT.panel, ...(isMobile ? { width: '96vw', maxHeight: '88vh' } : {})}} onClick={e => e.stopPropagation()}>
           {/* Header */}
           <div style={{...LT.header, height: isMobile ? 44 : 54}}>
             <span style={{...LT.headerTitle, fontSize: isMobile ? 18 : 24}}>Choose Troops</span>
