@@ -97,7 +97,7 @@ const stmts = {
   // Players
   createPlayer: db.prepare(`
     INSERT INTO players (id, name, token, gold, wood, ore)
-    VALUES (?, ?, ?, 4000, 4000, 4000)
+    VALUES (?, ?, ?, 500, 600, 600)
   `),
   getPlayerByToken: db.prepare(`SELECT * FROM players WHERE token = ?`),
   getPlayerByName: db.prepare(`SELECT * FROM players WHERE name = ?`),
@@ -191,61 +191,61 @@ const BUILDING_DEFS = {
     size: [4, 4], max_level: 3,
     hp_levels: [3500, 6000, 10000],
     cost: { gold: 0, wood: 0, ore: 0 },
-    upgrade_cost: { 2: { gold: 5000, wood: 3000, ore: 2000 }, 3: { gold: 15000, wood: 10000, ore: 8000 } },
+    upgrade_cost: { 2: { gold: 2000, wood: 6000, ore: 5000 }, 3: { gold: 5000, wood: 20000, ore: 18000 } },
     max_count: 1,
   },
   mine: {
     size: [3, 3], max_level: 3,
     hp_levels: [1200, 2200, 3800],
-    cost: { gold: 300, wood: 280, ore: 0 },
+    cost: { gold: 200, wood: 500, ore: 0 },
     max_count: 4,
   },
   barn: {
     size: [4, 3], max_level: 3,
     hp_levels: [2000, 3500, 6000],
-    cost: { gold: 200, wood: 420, ore: 200 },
+    cost: { gold: 300, wood: 800, ore: 600 },
     max_count: 2,
   },
   port: {
     size: [4, 3], max_level: 3,
     hp_levels: [1800, 3200, 5500],
-    cost: { gold: 600, wood: 550, ore: 420 },
+    cost: { gold: 500, wood: 1200, ore: 1000 },
     max_count: 2,
   },
   sawmill: {
     size: [3, 3], max_level: 3,
     hp_levels: [1200, 2200, 3800],
-    cost: { gold: 250, wood: 0, ore: 220 },
+    cost: { gold: 200, wood: 0, ore: 500 },
     max_count: 4,
   },
   turret: {
     size: [2, 2], max_level: 3,
     hp_levels: [900, 1600, 2800],
-    cost: { gold: 500, wood: 700, ore: 500 },
+    cost: { gold: 400, wood: 1500, ore: 1200 },
     max_count: 6,
   },
   tombstone: {
     size: [3, 3], max_level: 3,
     hp_levels: [1000, 1500, 2000],
-    cost: { gold: 150, wood: 0, ore: 280 },
+    cost: { gold: 200, wood: 0, ore: 800 },
     max_count: 4,
   },
   storage: {
     size: [4, 5], max_level: 3,
     hp_levels: [1400, 2500, 4200],
-    cost: { gold: 300, wood: 560, ore: 0 },
+    cost: { gold: 300, wood: 1200, ore: 0 },
     max_count: 3,
   },
   archer_tower: {
     size: [3, 3], max_level: 3,
     hp_levels: [800, 1500, 2500],
-    cost: { gold: 500, wood: 700, ore: 0 },
+    cost: { gold: 400, wood: 1500, ore: 0 },
     max_count: 4,
   },
   barracks: {
     size: [3, 3], max_level: 3,
     hp_levels: [1500, 2800, 4500],
-    cost: { gold: 400, wood: 500, ore: 0 },
+    cost: { gold: 300, wood: 1000, ore: 0 },
     max_count: 2,
   },
 };
@@ -299,9 +299,9 @@ function authenticatePlayer(token) {
 
 // Base capacity from Town Hall (without any Storage buildings)
 const TH_BASE_CAPACITY = {
-  1: { gold: 5000, wood: 5000, ore: 5000 },
-  2: { gold: 10000, wood: 10000, ore: 10000 },
-  3: { gold: 20000, wood: 20000, ore: 20000 },
+  1: { gold: 10000, wood: 10000, ore: 10000 },
+  2: { gold: 20000, wood: 20000, ore: 20000 },
+  3: { gold: 40000, wood: 40000, ore: 40000 },
 };
 
 // Additional capacity per Storage building per level
@@ -376,6 +376,16 @@ function getTownHallLevel(playerId) {
 function placeBuilding(playerId, type, gridX, gridZ, gridIndex = 0) {
   const def = BUILDING_DEFS[type];
   if (!def) return { error: `Unknown building type: ${type}` };
+
+  // Require Mine and Sawmill before any other building (except town_hall)
+  if (type !== 'town_hall' && type !== 'mine' && type !== 'sawmill') {
+    const existing = stmts.getBuildings.all(playerId);
+    const hasMine = existing.some(b => b.type === 'mine');
+    const hasSawmill = existing.some(b => b.type === 'sawmill');
+    if (!hasMine || !hasSawmill) {
+      return { error: 'Build a Mine and Sawmill first!' };
+    }
+  }
 
   // Check TH-based unlock and max count
   const thLevel = getTownHallLevel(playerId);

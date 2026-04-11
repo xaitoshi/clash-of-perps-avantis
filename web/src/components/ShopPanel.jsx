@@ -156,13 +156,18 @@ function ShopPanel({ onClose }) {
         const placed = placedCounts[id] || 0;
         const maxCount = thMaxCounts[id] ?? (def.max_count > 0 ? def.max_count : 99);
         const unlockAt = thUnlock[id];
-        const locked = unlockAt && thLevel < unlockAt;
+        // Require mine + sawmill before anything else
+        const hasMine = (placedCounts['mine'] || 0) > 0;
+        const hasSawmill = (placedCounts['sawmill'] || 0) > 0;
+        const needsBasics = id !== 'mine' && id !== 'sawmill' && id !== 'town_hall' && (!hasMine || !hasSawmill);
+        const locked = needsBasics || (unlockAt && thLevel < unlockAt);
         const maxed = maxCount < 99 && placed >= maxCount;
         const cost = def.cost || {};
         const canAfford = (resources.gold || 0) >= (cost.gold || 0) &&
                           (resources.wood || 0) >= (cost.wood || 0) &&
                           (resources.ore || 0) >= (cost.ore || 0);
-        return [id, def, { placed, maxCount, locked, maxed, canAfford, unlockAt }];
+        const lockReason = needsBasics ? 'Build Mine & Sawmill first' : (locked ? `Unlocks at TH ${unlockAt}` : null);
+        return [id, def, { placed, maxCount, locked, maxed, canAfford, unlockAt, lockReason }];
       })
       .sort((a, b) => {
         // Available first, then maxed, then locked
@@ -243,7 +248,7 @@ function ShopPanel({ onClose }) {
                   <div style={styles.lockOverlay}>
                     <span style={styles.lockIcon}>🔒</span>
                     <span style={styles.lockName}>{def.name}</span>
-                    <span style={styles.lockText}>Unlocks at TH {status.unlockAt}</span>
+                    <span style={styles.lockText}>{status.lockReason || `Unlocks at TH ${status.unlockAt}`}</span>
                   </div>
                 ) : (
                 <>
