@@ -93,11 +93,15 @@ async function buildSnapshot(player, task) {
 // ---------- Verifiers ----------
 // Each returns { progress_value, target_value, completed }
 
+// Solana base58 address: 32-44 chars, no '0OIl'
+const SOLANA_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+function isSolanaWallet(w) { return typeof w === 'string' && SOLANA_RE.test(w); }
+
 function resolveWallet(player) {
-  if (player && player.wallet) return player.wallet;
+  if (player && isSolanaWallet(player.wallet)) return player.wallet;
   try {
     const row = db.db.prepare('SELECT wallet FROM trading_rewards WHERE player_id = ?').get(player.id);
-    if (row && row.wallet) return row.wallet;
+    if (row && isSolanaWallet(row.wallet)) return row.wallet;
   } catch {}
   return null;
 }

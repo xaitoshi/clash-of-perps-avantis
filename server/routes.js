@@ -825,10 +825,10 @@ router.post('/trading/claim-gold', auth, async (req, res) => {
       db.db.prepare('INSERT INTO trading_rewards (player_id, wallet) VALUES (?, ?)').run(req.player.id, wallet);
       reward = db.db.prepare('SELECT * FROM trading_rewards WHERE player_id = ?').get(req.player.id);
     }
-    // Auto-link wallet to player account if not yet set (common for Farcaster flow where
-    // registration happens before wallet connects). Lets tasks/quests find the wallet.
-    if (!req.player.wallet && wallet) {
-      try { db.db.prepare('UPDATE players SET wallet = ? WHERE id = ? AND (wallet IS NULL OR wallet = \'\')').run(wallet, req.player.id); } catch {}
+    // Auto-link wallet to player account if missing or still a Farcaster placeholder
+    // (`fc_<fid>` saved during Farcaster auto-register). Lets tasks/quests find the real wallet.
+    if (isValidWallet(wallet) && (!isValidWallet(req.player.wallet))) {
+      try { db.db.prepare('UPDATE players SET wallet = ? WHERE id = ?').run(wallet, req.player.id); } catch {}
     }
 
     // Fetch trades from Pacifica (verified source of truth)

@@ -27,7 +27,10 @@ function RegisterPanel() {
     if (isInFrame && fcUser && !triedFcLogin.current) {
       triedFcLogin.current = true;
       const fcName = String(fcUser.username || fcUser.displayName || 'fc_' + fcUser.fid);
-      sendToGodot('register', { name: fcName, wallet: 'fc_' + fcUser.fid });
+      // Don't pass Farcaster FID as wallet — it's not a Solana address and breaks
+      // wallet-dependent features (Pacifica trades, quests). Real wallet will be
+      // linked later when the Solana wallet connects (see wallet_connected flow).
+      sendToGodot('register', { name: fcName });
     }
   }, [isInFrame, fcUser, sendToGodot]);
 
