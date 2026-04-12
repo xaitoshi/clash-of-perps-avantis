@@ -1281,17 +1281,43 @@ router.get('/admin/stats', adminAuth, (req, res) => {
 // ---------- Admin: Tasks CRUD ----------
 router.get('/admin/tasks', adminAuth, (req, res) => {
   const list = tasks.getAllTasks();
-  // Attach completion counts
-  const countByTask = db.db.prepare(
-    `SELECT task_id, COUNT(*) AS claimed FROM player_tasks WHERE claimed_at IS NOT NULL GROUP BY task_id`
+  // Aggregate stats per task
+  const startedRows = db.db.prepare(
+    `SELECT task_id, COUNT(*) AS n FROM player_tasks GROUP BY task_id`
   ).all();
-  const claimedMap = {};
-  for (const r of countByTask) claimedMap[r.task_id] = r.claimed;
+  const claimedRows = db.db.prepare(
+    `SELECT task_id, COUNT(*) AS n FROM player_tasks WHERE claimed_at IS NOT NULL GROUP BY task_id`
+  ).all();
+  const startedMap = {}; for (const r of startedRows) startedMap[r.task_id] = r.n;
+  const claimedMap = {}; for (const r of claimedRows) claimedMap[r.task_id] = r.n;
   res.json(list.map(t => ({
     ...t,
     params: tasks.parseParams(t.params),
+    started_count: startedMap[t.id] || 0,
     claimed_count: claimedMap[t.id] || 0,
   })));
+});
+
+// Per-task player breakdown: who started, who claimed, progress, last claim time
+router.get('/admin/tasks/:id/players', adminAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
+  const task = tasks.getTaskById(id);
+  if (!task) return res.status(404).json({ error: 'not found' });
+  const rows = db.db.prepare(`
+    SELECT pt.player_id, pt.progress_value, pt.target_value,
+           pt.started_at, pt.claimed_at, p.name AS player_name, p.wallet
+    FROM player_tasks pt
+    LEFT JOIN players p ON p.id = pt.player_id
+    WHERE pt.task_id = ?
+    ORDER BY (pt.claimed_at IS NOT NULL) DESC, pt.started_at DESC
+  `).all(id);
+  res.json({
+    task: { id: task.id, title: task.title, type: task.type, repeatable: !!task.repeatable },
+    players: rows,
+    started: rows.length,
+    claimed: rows.filter(r => r.claimed_at).length,
+  });
 });
 
 router.post('/admin/tasks', adminAuth, (req, res) => {

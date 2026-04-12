@@ -284,8 +284,21 @@ app.get('/api/admin/panel', (req, res) => {
       <div class="stat"><div class="v" id="tasksActive" style="color:#34d399">0</div><div class="l">Active</div></div>
     </div>
     <table><thead><tr>
-      <th>ID</th><th>Type</th><th>Title</th><th>Params</th><th>Reward</th><th>Active</th><th>Repeat</th><th>Claimed</th><th>Actions</th>
+      <th>ID</th><th>Type</th><th>Title</th><th>Params</th><th>Reward</th><th>Active</th><th>Repeat</th><th>Started</th><th>Claimed</th><th>Actions</th>
     </tr></thead><tbody id="tasksBody"></tbody></table>
+  </div>
+
+  <div id="taskStatsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center;padding:20px">
+    <div style="background:#1f2937;border:1px solid #374151;border-radius:16px;padding:20px;max-width:760px;width:100%;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h2 id="taskStatsTitle" style="color:#f59e0b;font-size:18px">Task stats</h2>
+        <button class="btn" onclick="document.getElementById('taskStatsModal').style.display='none'">Close</button>
+      </div>
+      <div id="taskStatsSummary" style="display:flex;gap:10px;margin-bottom:12px"></div>
+      <table><thead><tr>
+        <th>Player</th><th>Wallet</th><th>Progress</th><th>Started</th><th>Claimed</th>
+      </tr></thead><tbody id="taskStatsBody"></tbody></table>
+    </div>
   </div>
 
   <div id="taskModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center;padding:20px">
@@ -677,8 +690,9 @@ async function loadTasks() {
         '<td>' + reward + '</td>' +
         '<td>' + (t.active ? '<span class="badge badge-ok">on</span>' : '<span class="badge badge-off">off</span>') + '</td>' +
         '<td>' + (t.repeatable ? ('<span class="badge badge-shield">' + t.cooldown_hours + 'h</span>') : '—') + '</td>' +
+        '<td>' + (t.started_count || 0) + '</td>' +
         '<td>' + (t.claimed_count || 0) + '</td>' +
-        '<td><button class="btn" onclick="editTask(' + t.id + ')">Edit</button> <button class="btn" onclick="toggleTask(' + t.id + ',' + (t.active?0:1) + ')">' + (t.active?'Disable':'Enable') + '</button> <button class="btn btn-danger" onclick="deleteTask(' + t.id + ')">Del</button></td>' +
+        '<td><button class="btn" onclick="taskStats(' + t.id + ')">Stats</button> <button class="btn" onclick="editTask(' + t.id + ')">Edit</button> <button class="btn" onclick="toggleTask(' + t.id + ',' + (t.active?0:1) + ')">' + (t.active?'Disable':'Enable') + '</button> <button class="btn btn-danger" onclick="deleteTask(' + t.id + ')">Del</button></td>' +
         '</tr>';
     }).join('');
   } catch(e) { console.error(e); }
@@ -696,6 +710,31 @@ async function toggleTask(id, active) {
     body: JSON.stringify({ active: !!active }),
   });
   loadTasks();
+}
+
+async function taskStats(id) {
+  try {
+    const s = await api('/admin/tasks/' + id + '/players');
+    document.getElementById('taskStatsTitle').textContent = 'Stats: ' + s.task.title + ' (#' + s.task.id + ')';
+    document.getElementById('taskStatsSummary').innerHTML =
+      '<div class="stat"><div class="v">' + s.started + '</div><div class="l">Started</div></div>' +
+      '<div class="stat"><div class="v" style="color:#34d399">' + s.claimed + '</div><div class="l">Claimed</div></div>' +
+      '<div class="stat"><div class="v" style="color:#fca5a5">' + (s.started - s.claimed) + '</div><div class="l">In progress</div></div>';
+    document.getElementById('taskStatsBody').innerHTML = (s.players || []).map(p => {
+      const pct = p.target_value > 0 ? Math.min(100, Math.round((p.progress_value / p.target_value) * 100)) : 0;
+      const progBar = '<div style="width:120px;height:8px;background:#111827;border-radius:4px;overflow:hidden;border:1px solid #374151"><div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#f59e0b,#d97706)"></div></div>' +
+        '<div style="font-size:10px;color:#9ca3af;margin-top:2px">' + Math.floor(p.progress_value||0) + ' / ' + Math.floor(p.target_value||0) + ' (' + pct + '%)</div>';
+      const walletShort = p.wallet ? (p.wallet.slice(0,4) + '…' + p.wallet.slice(-4)) : '—';
+      return '<tr>' +
+        '<td><strong>' + esc(p.player_name || p.player_id) + '</strong></td>' +
+        '<td class="mono" style="font-size:11px;color:#9ca3af">' + walletShort + '</td>' +
+        '<td>' + progBar + '</td>' +
+        '<td class="mono" style="font-size:11px">' + (p.started_at || '—').replace('T',' ').split('.')[0] + '</td>' +
+        '<td>' + (p.claimed_at ? '<span class="badge badge-ok">' + p.claimed_at.replace('T',' ').split('.')[0] + '</span>' : '<span class="badge badge-off">—</span>') + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:20px">No players yet</td></tr>';
+    document.getElementById('taskStatsModal').style.display = 'flex';
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 async function deleteTask(id) {
