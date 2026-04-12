@@ -10,6 +10,7 @@ import TradingViewWidget from './TradingViewWidget';
 import OrderBook from './OrderBook';
 import TradeHistory from './TradeHistory';
 import FundingHistory from './FundingHistory';
+import QuestsTab from './QuestsTab';
 import FilterPopup from './FilterPopup';
 import pacificaLogo from '../assets/pacifica.png';
 
@@ -17,6 +18,7 @@ const TABS = [
   { id: 'Trade', icon: <svg className="tab-icon-trade" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path className="trend-line" d="m19 9-5 5-4-4-3 3"/></svg>, label: 'Trade' },
   { id: 'Positions', icon: <svg className="tab-icon-positions" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect className="briefcase-body" width="20" height="14" x="2" y="7" rx="2" ry="2"/><path className="handle" d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>, label: 'Positions' },
   { id: 'Orders', icon: <svg className="tab-icon-orders" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line className="order-line" x1="8" y1="6" x2="21" y2="6"/><line className="order-line" x1="8" y1="12" x2="21" y2="12"/><line className="order-line" x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>, label: 'Orders' },
+  { id: 'Quests', icon: <svg className="tab-icon-quests" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 2h10l3 6-8 14L4 8z"/><path d="M7 2l5 6 5-6"/><path d="M4 8h16"/></svg>, label: 'Quests' },
   { id: 'Account', icon: <svg className="tab-icon-account" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path className="avatar-body" d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle className="avatar-head" cx="12" cy="7" r="4"/></svg>, label: 'Account' },
 ];
 
@@ -1201,6 +1203,7 @@ function FuturesPanel() {
     if (activeTab === 'Positions') return renderPositions();
     if (activeTab === 'Orders') return renderOrders();
     if (activeTab === 'Account') return renderAccount();
+    if (activeTab === 'Quests') return <QuestsTab />;
   };
 
   return (
@@ -1268,6 +1271,10 @@ function FuturesPanel() {
 export default memo(FuturesPanel);
 
 const animCSS = `
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 rgba(232, 184, 48, 0.6); }
+    50% { box-shadow: 0 0 12px rgba(232, 184, 48, 0.9); }
+  }
   /* Gradient Scrollbar */
   .grad-scrollbar::-webkit-scrollbar { width: 8px; }
   .grad-scrollbar::-webkit-scrollbar-track { background: #fdf8e7; border-radius: 4px; }

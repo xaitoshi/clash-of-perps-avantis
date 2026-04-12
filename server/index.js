@@ -239,6 +239,7 @@ app.get('/api/admin/panel', (req, res) => {
   <div class="tabs">
     <div class="tab active" onclick="switchTab('players')">Players</div>
     <div class="tab" onclick="switchTab('replays')">Battle Replays</div>
+    <div class="tab" onclick="switchTab('tasks')">Tasks</div>
     <div class="tab" onclick="switchTab('logs')">Logs</div>
     <div class="tab" onclick="switchTab('stats')">Stats</div>
   </div>
@@ -274,6 +275,65 @@ app.get('/api/admin/panel', (req, res) => {
     <table><thead><tr>
       <th>Name</th><th>Trophies</th><th>Gold</th><th>Wood</th><th>Ore</th>
     </tr></thead><tbody id="topPlayersBody"></tbody></table>
+  </div>
+
+  <div class="panel" id="tab-tasks">
+    <div class="stats">
+      <div class="stat" style="cursor:pointer;border-color:#34d399" onclick="openTaskForm()"><div class="v" style="font-size:14px;color:#34d399">+ NEW TASK</div><div class="l">Create Quest</div></div>
+      <div class="stat"><div class="v" id="tasksCount">0</div><div class="l">Total</div></div>
+      <div class="stat"><div class="v" id="tasksActive" style="color:#34d399">0</div><div class="l">Active</div></div>
+    </div>
+    <table><thead><tr>
+      <th>ID</th><th>Type</th><th>Title</th><th>Params</th><th>Reward</th><th>Active</th><th>Repeat</th><th>Claimed</th><th>Actions</th>
+    </tr></thead><tbody id="tasksBody"></tbody></table>
+  </div>
+
+  <div id="taskModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center;padding:20px">
+    <div style="background:#1f2937;border:1px solid #374151;border-radius:16px;padding:24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto">
+      <h2 id="taskFormTitle" style="color:#f59e0b;font-size:20px;margin-bottom:16px">Create Task</h2>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label style="font-size:12px;color:#9ca3af">Type
+          <select id="tf_type" onchange="updateTaskFormFields()" style="width:100%;padding:8px;background:#111827;border:1px solid #4b5563;border-radius:6px;color:#fff;margin-top:4px">
+            <option value="volume">Volume ($)</option>
+            <option value="positions">Positions count</option>
+            <option value="combo_volume_attack">Combo: Volume + Attack wins</option>
+            <option value="daily_trade_gold">Gold earned from trading (window)</option>
+          </select>
+        </label>
+        <label style="font-size:12px;color:#9ca3af">Title
+          <input id="tf_title" style="width:100%;padding:8px;background:#111827;border:1px solid #4b5563;border-radius:6px;color:#fff;margin-top:4px" placeholder="e.g. Trade $500 on BTC">
+        </label>
+        <label style="font-size:12px;color:#9ca3af">Description
+          <input id="tf_desc" style="width:100%;padding:8px;background:#111827;border:1px solid #4b5563;border-radius:6px;color:#fff;margin-top:4px" placeholder="Shown to players">
+        </label>
+        <div id="tf_fields" style="display:flex;flex-direction:column;gap:10px;padding:12px;background:#111827;border-radius:8px;border:1px solid #374151"></div>
+        <div style="display:flex;gap:8px">
+          <label style="font-size:12px;color:#9ca3af;flex:1">Reward Gold
+            <input type="number" id="tf_rg" value="0" style="width:100%;padding:8px;background:#111827;border:1px solid #4b5563;border-radius:6px;color:#e8b830;margin-top:4px">
+          </label>
+          <label style="font-size:12px;color:#9ca3af;flex:1">Wood
+            <input type="number" id="tf_rw" value="0" style="width:100%;padding:8px;background:#111827;border:1px solid #4b5563;border-radius:6px;color:#6ab344;margin-top:4px">
+          </label>
+          <label style="font-size:12px;color:#9ca3af;flex:1">Ore
+            <input type="number" id="tf_ro" value="0" style="width:100%;padding:8px;background:#111827;border:1px solid #4b5563;border-radius:6px;color:#8a9aaa;margin-top:4px">
+          </label>
+        </div>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <label style="font-size:13px;color:#e5e7eb"><input type="checkbox" id="tf_active" checked> Active</label>
+          <label style="font-size:13px;color:#e5e7eb"><input type="checkbox" id="tf_repeat" onchange="document.getElementById('tf_cooldown').disabled = !this.checked"> Repeatable</label>
+          <label style="font-size:12px;color:#9ca3af">Cooldown (h)
+            <input type="number" id="tf_cooldown" value="0" disabled style="width:70px;padding:6px;background:#111827;border:1px solid #4b5563;border-radius:6px;color:#fff;margin-left:6px">
+          </label>
+          <label style="font-size:12px;color:#9ca3af">Order
+            <input type="number" id="tf_order" value="0" style="width:60px;padding:6px;background:#111827;border:1px solid #4b5563;border-radius:6px;color:#fff;margin-left:6px">
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+          <button class="btn" onclick="closeTaskForm()">Cancel</button>
+          <button class="btn" style="border-color:#34d399;color:#34d399" onclick="saveTask()">Save</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="panel" id="tab-replays">
@@ -490,12 +550,167 @@ async function loadStats() {
   } catch(e) { console.error(e); }
 }
 
+// ---------- Tasks admin ----------
+let editingTaskId = null;
+
+const TASK_FIELD_SPECS = {
+  volume: [
+    { k: 'symbol', label: 'Symbol (ANY or BTC/ETH/...)', type: 'text', default: 'ANY' },
+    { k: 'side', label: 'Side', type: 'select', options: ['any','long','short'], default: 'any' },
+    { k: 'target_volume', label: 'Target volume (USD)', type: 'number', default: 100 },
+  ],
+  positions: [
+    { k: 'symbol', label: 'Symbol (ANY or BTC/ETH/...)', type: 'text', default: 'ANY' },
+    { k: 'side', label: 'Side', type: 'select', options: ['any','long','short'], default: 'any' },
+    { k: 'target_positions', label: 'Positions to open', type: 'number', default: 5 },
+    { k: 'count_close', label: 'Count close trades too?', type: 'checkbox', default: false },
+  ],
+  combo_volume_attack: [
+    { k: 'symbol', label: 'Symbol (ANY or BTC/ETH/...)', type: 'text', default: 'ANY' },
+    { k: 'side', label: 'Side', type: 'select', options: ['any','long','short'], default: 'any' },
+    { k: 'target_volume', label: 'Target volume (USD)', type: 'number', default: 100 },
+    { k: 'target_wins', label: 'Attack wins required', type: 'number', default: 1 },
+  ],
+  daily_trade_gold: [
+    { k: 'target_gold', label: 'Target gold earned from trading', type: 'number', default: 1000 },
+    { k: 'window_hours', label: 'Window (hours, 24 = daily)', type: 'number', default: 24 },
+  ],
+};
+
+function updateTaskFormFields(seed) {
+  const type = document.getElementById('tf_type').value;
+  const specs = TASK_FIELD_SPECS[type] || [];
+  const root = document.getElementById('tf_fields');
+  root.innerHTML = specs.map(s => {
+    const val = seed && seed[s.k] != null ? seed[s.k] : s.default;
+    if (s.type === 'select') {
+      return '<label style="font-size:12px;color:#9ca3af">' + s.label +
+        '<select id="tfp_' + s.k + '" style="width:100%;padding:8px;background:#0b1322;border:1px solid #4b5563;border-radius:6px;color:#fff;margin-top:4px">' +
+        s.options.map(o => '<option value="' + o + '"' + (o===val?' selected':'') + '>' + o + '</option>').join('') +
+        '</select></label>';
+    }
+    if (s.type === 'checkbox') {
+      return '<label style="font-size:13px;color:#e5e7eb"><input type="checkbox" id="tfp_' + s.k + '"' + (val?' checked':'') + '> ' + s.label + '</label>';
+    }
+    return '<label style="font-size:12px;color:#9ca3af">' + s.label +
+      '<input id="tfp_' + s.k + '" type="' + s.type + '" value="' + (val != null ? val : '') + '" style="width:100%;padding:8px;background:#0b1322;border:1px solid #4b5563;border-radius:6px;color:#fff;margin-top:4px"></label>';
+  }).join('');
+}
+
+function openTaskForm(task) {
+  editingTaskId = task ? task.id : null;
+  document.getElementById('taskFormTitle').textContent = task ? 'Edit Task #' + task.id : 'Create Task';
+  document.getElementById('tf_type').value = task ? task.type : 'volume';
+  document.getElementById('tf_title').value = task ? task.title : '';
+  document.getElementById('tf_desc').value = task ? task.description : '';
+  document.getElementById('tf_rg').value = task ? task.reward_gold : 0;
+  document.getElementById('tf_rw').value = task ? task.reward_wood : 0;
+  document.getElementById('tf_ro').value = task ? task.reward_ore : 0;
+  document.getElementById('tf_active').checked = task ? !!task.active : true;
+  document.getElementById('tf_repeat').checked = task ? !!task.repeatable : false;
+  document.getElementById('tf_cooldown').value = task ? (task.cooldown_hours || 0) : 0;
+  document.getElementById('tf_cooldown').disabled = !(task && task.repeatable);
+  document.getElementById('tf_order').value = task ? (task.sort_order || 0) : 0;
+  updateTaskFormFields(task ? task.params : null);
+  document.getElementById('taskModal').style.display = 'flex';
+}
+
+function closeTaskForm() {
+  document.getElementById('taskModal').style.display = 'none';
+  editingTaskId = null;
+}
+
+async function saveTask() {
+  const type = document.getElementById('tf_type').value;
+  const specs = TASK_FIELD_SPECS[type] || [];
+  const params = {};
+  for (const s of specs) {
+    const el = document.getElementById('tfp_' + s.k);
+    if (!el) continue;
+    if (s.type === 'checkbox') params[s.k] = el.checked;
+    else if (s.type === 'number') params[s.k] = Number(el.value);
+    else params[s.k] = el.value;
+  }
+  const body = {
+    type,
+    title: document.getElementById('tf_title').value.trim(),
+    description: document.getElementById('tf_desc').value,
+    params,
+    reward_gold: +document.getElementById('tf_rg').value,
+    reward_wood: +document.getElementById('tf_rw').value,
+    reward_ore: +document.getElementById('tf_ro').value,
+    active: document.getElementById('tf_active').checked,
+    repeatable: document.getElementById('tf_repeat').checked,
+    cooldown_hours: +document.getElementById('tf_cooldown').value,
+    sort_order: +document.getElementById('tf_order').value,
+  };
+  if (!body.title) { alert('Title required'); return; }
+  const url = editingTaskId ? '/api/admin/tasks/' + editingTaskId : '/api/admin/tasks';
+  const method = editingTaskId ? 'PATCH' : 'POST';
+  const r = await fetch(url, {
+    method,
+    headers: { 'x-admin-key': KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json();
+  if (!r.ok) { alert('Error: ' + (j.error || r.status)); return; }
+  closeTaskForm();
+  loadTasks();
+}
+
+let TASKS_CACHE = [];
+
+async function loadTasks() {
+  try {
+    const list = await api('/admin/tasks');
+    TASKS_CACHE = list;
+    document.getElementById('tasksCount').textContent = list.length;
+    document.getElementById('tasksActive').textContent = list.filter(t => t.active).length;
+    document.getElementById('tasksBody').innerHTML = list.map(t => {
+      const paramsText = Object.entries(t.params || {}).map(([k,v]) => k + '=' + v).join(', ');
+      const reward = [t.reward_gold && ('G:' + t.reward_gold), t.reward_wood && ('W:' + t.reward_wood), t.reward_ore && ('O:' + t.reward_ore)].filter(Boolean).join(' ');
+      return '<tr>' +
+        '<td class="mono">' + t.id + '</td>' +
+        '<td><span class="badge" style="background:#1e3a5f;color:#93c5fd">' + t.type + '</span></td>' +
+        '<td><strong>' + esc(t.title) + '</strong><div style="color:#6b7280;font-size:11px">' + esc(t.description||'') + '</div></td>' +
+        '<td class="mono" style="font-size:11px;color:#9ca3af;max-width:220px;word-break:break-all">' + esc(paramsText) + '</td>' +
+        '<td>' + reward + '</td>' +
+        '<td>' + (t.active ? '<span class="badge badge-ok">on</span>' : '<span class="badge badge-off">off</span>') + '</td>' +
+        '<td>' + (t.repeatable ? ('<span class="badge badge-shield">' + t.cooldown_hours + 'h</span>') : '—') + '</td>' +
+        '<td>' + (t.claimed_count || 0) + '</td>' +
+        '<td><button class="btn" onclick="editTask(' + t.id + ')">Edit</button> <button class="btn" onclick="toggleTask(' + t.id + ',' + (t.active?0:1) + ')">' + (t.active?'Disable':'Enable') + '</button> <button class="btn btn-danger" onclick="deleteTask(' + t.id + ')">Del</button></td>' +
+        '</tr>';
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+function editTask(id) {
+  const task = TASKS_CACHE.find(t => t.id === id);
+  if (task) openTaskForm(task);
+}
+
+async function toggleTask(id, active) {
+  await fetch('/api/admin/tasks/' + id, {
+    method: 'PATCH',
+    headers: { 'x-admin-key': KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active: !!active }),
+  });
+  loadTasks();
+}
+
+async function deleteTask(id) {
+  if (!confirm('Delete task #' + id + '?')) return;
+  await fetch('/api/admin/tasks/' + id, { method: 'DELETE', headers: { 'x-admin-key': KEY } });
+  loadTasks();
+}
+
 // Load logs/stats when switching to those tabs
 const origSwitch = switchTab;
 switchTab = function(name) {
   origSwitch(name);
   if (name === 'logs') loadLogs();
   if (name === 'stats') loadStats();
+  if (name === 'tasks') loadTasks();
 };
 
 // Auto-login if key saved

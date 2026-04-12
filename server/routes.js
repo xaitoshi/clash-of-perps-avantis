@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('./db');
+const tasks = require('./tasks');
 
 const router = express.Router();
 
@@ -962,6 +963,139 @@ router.get('/trading/stats', auth, async (req, res) => {
   });
 });
 
+// ==================== TASKS (QUESTS) ====================
+
+// Rate-limit tasks endpoints per player (2s)
+const taskRateLimit = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 60000;
+  for (const [k, v] of taskRateLimit) if (v < cutoff) taskRateLimit.delete(k);
+}, 600000);
+
+function rateGate(playerId, ms = 2000) {
+  const last = taskRateLimit.get(playerId);
+  if (last && Date.now() - last < ms) return false;
+  taskRateLimit.set(playerId, Date.now());
+  return true;
+}
+
+// List active tasks + player progress
+router.get('/tasks', auth, async (req, res) => {
+  if (!rateGate('list:' + req.player.id, 500)) {
+    return res.status(429).json({ error: 'slow down' });
+  }
+  const list = tasks.getActiveTasks();
+  const out = [];
+  for (const t of list) {
+    const pt = tasks.getPlayerTask(req.player.id, t.id);
+    out.push({
+      id: t.id,
+      type: t.type,
+      title: t.title,
+      description: t.description,
+      params: tasks.parseParams(t.params),
+      reward_gold: t.reward_gold,
+      reward_wood: t.reward_wood,
+      reward_ore: t.reward_ore,
+      repeatable: !!t.repeatable,
+      cooldown_hours: t.cooldown_hours,
+      started: !!pt,
+      progress_value: pt ? pt.progress_value : 0,
+      target_value: pt ? pt.target_value : 0,
+      claimed_at: pt ? pt.claimed_at : null,
+    });
+  }
+  res.json(out);
+});
+
+// Start a task (captures baseline snapshot)
+router.post('/tasks/:id/start', auth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
+  const task = tasks.getTaskById(id);
+  if (!task || !task.active) return res.status(404).json({ error: 'Task not active' });
+
+  const existing = tasks.getPlayerTask(req.player.id, id);
+  if (existing && !existing.claimed_at) {
+    return res.json({ ok: true, already_started: true });
+  }
+  // Repeatable + claimed: check cooldown before allowing re-start
+  if (existing && existing.claimed_at) {
+    const check = tasks.canClaim(existing, task);
+    if (!check.ok && check.reason && check.reason.startsWith('Cooldown')) {
+      return res.status(429).json({ error: check.reason });
+    }
+  }
+
+  const snap = await tasks.buildSnapshot(req.player, task);
+  db.db.prepare(
+    `INSERT OR REPLACE INTO player_tasks (player_id, task_id, snapshot, progress, progress_value, target_value, started_at, claimed_at)
+     VALUES (?, ?, ?, 0, 0, 0, datetime('now'), NULL)`
+  ).run(req.player.id, id, JSON.stringify(snap));
+  res.json({ ok: true, started: true });
+});
+
+// Claim a task — verifies against Pacifica + battle_replays, pays out on success
+router.post('/tasks/:id/claim', auth, async (req, res) => {
+  if (!rateGate('claim:' + req.player.id, 3000)) {
+    return res.status(429).json({ error: 'slow down' });
+  }
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
+  const task = tasks.getTaskById(id);
+  if (!task || !task.active) return res.status(404).json({ error: 'Task not active' });
+
+  let pt = tasks.getPlayerTask(req.player.id, id);
+  if (!pt) {
+    // auto-start — snapshot taken now, so there's nothing yet to claim
+    const snap = await tasks.buildSnapshot(req.player, task);
+    db.db.prepare(
+      `INSERT INTO player_tasks (player_id, task_id, snapshot) VALUES (?, ?, ?)`
+    ).run(req.player.id, id, JSON.stringify(snap));
+    pt = tasks.getPlayerTask(req.player.id, id);
+  }
+  const claimCheck = tasks.canClaim(pt, task);
+  if (!claimCheck.ok) return res.status(400).json({ error: claimCheck.reason });
+
+  const snap = tasks.parseParams(pt.snapshot);
+  const result = await tasks.verifyTask(req.player, task, snap);
+
+  // Always update cached progress
+  db.db.prepare(
+    `UPDATE player_tasks SET progress_value = ?, target_value = ?, progress = ? WHERE player_id = ? AND task_id = ?`
+  ).run(result.progress_value, result.target_value, result.target_value > 0 ? Math.min(1, result.progress_value / result.target_value) : 0, req.player.id, id);
+
+  if (!result.completed) {
+    return res.json({ ok: false, completed: false, progress_value: result.progress_value, target_value: result.target_value, breakdown: result.breakdown });
+  }
+
+  // Payout in a transaction
+  const payout = db.db.transaction(() => {
+    db.addResources(req.player.id, task.reward_gold || 0, task.reward_wood || 0, task.reward_ore || 0);
+    if (task.reward_gold > 0) {
+      try {
+        db.db.prepare('INSERT INTO gold_history (player_id, amount, reason) VALUES (?, ?, ?)')
+          .run(req.player.id, task.reward_gold, `Quest: ${task.title}`);
+      } catch {}
+    }
+    db.db.prepare(`UPDATE player_tasks SET claimed_at = datetime('now') WHERE player_id = ? AND task_id = ?`).run(req.player.id, id);
+    // If repeatable with no cooldown — keep snapshot refreshed for next run? We reset via cooldown claim flow instead.
+  });
+  payout();
+
+  try {
+    logEconomy('Task claimed', { player: req.player.name, task: task.title, gold: task.reward_gold, wood: task.reward_wood, ore: task.reward_ore });
+  } catch {}
+
+  res.json({
+    ok: true,
+    completed: true,
+    reward: { gold: task.reward_gold, wood: task.reward_wood, ore: task.reward_ore },
+    progress_value: result.progress_value,
+    target_value: result.target_value,
+  });
+});
+
 // ==================== FULL STATE ====================
 
 // Get full player state (resources + buildings + troops)
@@ -1142,6 +1276,81 @@ router.get('/admin/stats', adminAuth, (req, res) => {
     uptime: Math.floor(process.uptime()),
     memory: Math.round(process.memoryUsage().rss / 1024 / 1024),
   });
+});
+
+// ---------- Admin: Tasks CRUD ----------
+router.get('/admin/tasks', adminAuth, (req, res) => {
+  const list = tasks.getAllTasks();
+  // Attach completion counts
+  const countByTask = db.db.prepare(
+    `SELECT task_id, COUNT(*) AS claimed FROM player_tasks WHERE claimed_at IS NOT NULL GROUP BY task_id`
+  ).all();
+  const claimedMap = {};
+  for (const r of countByTask) claimedMap[r.task_id] = r.claimed;
+  res.json(list.map(t => ({
+    ...t,
+    params: tasks.parseParams(t.params),
+    claimed_count: claimedMap[t.id] || 0,
+  })));
+});
+
+router.post('/admin/tasks', adminAuth, (req, res) => {
+  const b = req.body || {};
+  if (!tasks.VALID_TYPES.includes(b.type)) return res.status(400).json({ error: 'bad type' });
+  if (!b.title || typeof b.title !== 'string') return res.status(400).json({ error: 'title required' });
+  const params = typeof b.params === 'object' && b.params !== null ? b.params : {};
+  if (params.side && !tasks.VALID_SIDES.includes(params.side)) return res.status(400).json({ error: 'bad side' });
+  const r = db.db.prepare(
+    `INSERT INTO tasks (type, title, description, params, reward_gold, reward_wood, reward_ore, active, repeatable, cooldown_hours, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    b.type,
+    b.title.trim(),
+    b.description || '',
+    JSON.stringify(params),
+    Number(b.reward_gold) || 0,
+    Number(b.reward_wood) || 0,
+    Number(b.reward_ore) || 0,
+    b.active === false ? 0 : 1,
+    b.repeatable ? 1 : 0,
+    Number(b.cooldown_hours) || 0,
+    Number(b.sort_order) || 0,
+  );
+  res.json({ id: r.lastInsertRowid });
+});
+
+router.patch('/admin/tasks/:id', adminAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
+  const b = req.body || {};
+  const existing = tasks.getTaskById(id);
+  if (!existing) return res.status(404).json({ error: 'not found' });
+  const params = b.params && typeof b.params === 'object' ? b.params : tasks.parseParams(existing.params);
+  const merged = {
+    type: tasks.VALID_TYPES.includes(b.type) ? b.type : existing.type,
+    title: b.title != null ? String(b.title).trim() : existing.title,
+    description: b.description != null ? String(b.description) : existing.description,
+    params: JSON.stringify(params),
+    reward_gold: b.reward_gold != null ? Number(b.reward_gold) : existing.reward_gold,
+    reward_wood: b.reward_wood != null ? Number(b.reward_wood) : existing.reward_wood,
+    reward_ore: b.reward_ore != null ? Number(b.reward_ore) : existing.reward_ore,
+    active: b.active != null ? (b.active ? 1 : 0) : existing.active,
+    repeatable: b.repeatable != null ? (b.repeatable ? 1 : 0) : existing.repeatable,
+    cooldown_hours: b.cooldown_hours != null ? Number(b.cooldown_hours) : existing.cooldown_hours,
+    sort_order: b.sort_order != null ? Number(b.sort_order) : existing.sort_order,
+  };
+  db.db.prepare(
+    `UPDATE tasks SET type = ?, title = ?, description = ?, params = ?, reward_gold = ?, reward_wood = ?, reward_ore = ?, active = ?, repeatable = ?, cooldown_hours = ?, sort_order = ? WHERE id = ?`
+  ).run(merged.type, merged.title, merged.description, merged.params, merged.reward_gold, merged.reward_wood, merged.reward_ore, merged.active, merged.repeatable, merged.cooldown_hours, merged.sort_order, id);
+  res.json({ ok: true });
+});
+
+router.delete('/admin/tasks/:id', adminAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
+  db.db.prepare('DELETE FROM player_tasks WHERE task_id = ?').run(id);
+  db.db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+  res.json({ ok: true });
 });
 
 // Wipe entire database
