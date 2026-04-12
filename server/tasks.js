@@ -93,6 +93,15 @@ async function buildSnapshot(player, task) {
 // ---------- Verifiers ----------
 // Each returns { progress_value, target_value, completed }
 
+function resolveWallet(player) {
+  if (player && player.wallet) return player.wallet;
+  try {
+    const row = db.db.prepare('SELECT wallet FROM trading_rewards WHERE player_id = ?').get(player.id);
+    if (row && row.wallet) return row.wallet;
+  } catch {}
+  return null;
+}
+
 async function fetchWalletTrades(wallet) {
   if (!wallet) return [];
   try {
@@ -109,15 +118,19 @@ async function verifyVolume(player, task, snap) {
   const target = Number(p.target_volume) || 0;
   const symbol = p.symbol || 'any';
   const side = p.side || 'any';
-  const trades = await fetchWalletTrades(player.wallet);
+  const wallet = resolveWallet(player);
+  const trades = await fetchWalletTrades(wallet);
   const startId = snap.trade_id_start || 0;
   let vol = 0;
+  let matched = 0;
   for (const t of trades) {
     if ((t.history_id || 0) <= startId) continue;
     if (!matchesSymbol(t.symbol, symbol)) continue;
     if (!matchesSide(t.side, side)) continue;
     vol += (parseFloat(t.price) || 0) * (parseFloat(t.amount) || 0);
+    matched += 1;
   }
+  console.log(`[task ${task.id} volume] player=${player.name} wallet=${wallet || 'NONE'} trades_total=${trades.length} start_id=${startId} symbol=${symbol} side=${side} matched=${matched} vol=$${vol.toFixed(2)} target=$${target}`);
   return { progress_value: vol, target_value: target, completed: vol >= target };
 }
 
@@ -127,7 +140,7 @@ async function verifyPositions(player, task, snap) {
   const symbol = p.symbol || 'any';
   const side = p.side || 'any';
   const countClose = !!p.count_close; // default: count openings only
-  const trades = await fetchWalletTrades(player.wallet);
+  const trades = await fetchWalletTrades(resolveWallet(player));
   const startId = snap.trade_id_start || 0;
   let n = 0;
   for (const t of trades) {
@@ -148,7 +161,7 @@ async function verifyComboVolumeAttack(player, task, snap) {
   const symbol = p.symbol || 'any';
   const side = p.side || 'any';
 
-  const trades = await fetchWalletTrades(player.wallet);
+  const trades = await fetchWalletTrades(resolveWallet(player));
   const startId = snap.trade_id_start || 0;
   let vol = 0;
   for (const t of trades) {

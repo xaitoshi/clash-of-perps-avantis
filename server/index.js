@@ -692,7 +692,7 @@ async function loadTasks() {
         '<td>' + (t.repeatable ? ('<span class="badge badge-shield">' + t.cooldown_hours + 'h</span>') : '—') + '</td>' +
         '<td>' + (t.started_count || 0) + '</td>' +
         '<td>' + (t.claimed_count || 0) + '</td>' +
-        '<td><button class="btn" onclick="taskStats(' + t.id + ')">Stats</button> <button class="btn" onclick="editTask(' + t.id + ')">Edit</button> <button class="btn" onclick="toggleTask(' + t.id + ',' + (t.active?0:1) + ')">' + (t.active?'Disable':'Enable') + '</button> <button class="btn btn-danger" onclick="deleteTask(' + t.id + ')">Del</button></td>' +
+        '<td><button class="btn" onclick="taskStats(' + t.id + ')">Stats</button> <button class="btn" onclick="editTask(' + t.id + ')">Edit</button> <button class="btn" onclick="toggleTask(' + t.id + ',' + (t.active?0:1) + ')">' + (t.active?'Disable':'Enable') + '</button> <button class="btn" onclick="resetTaskProgress(' + t.id + ')" style="border-color:#f59e0b;color:#f59e0b">Reset</button> <button class="btn btn-danger" onclick="deleteTask(' + t.id + ')">Del</button></td>' +
         '</tr>';
     }).join('');
   } catch(e) { console.error(e); }
@@ -735,6 +735,14 @@ async function taskStats(id) {
     }).join('') || '<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:20px">No players yet</td></tr>';
     document.getElementById('taskStatsModal').style.display = 'flex';
   } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function resetTaskProgress(id) {
+  if (!confirm('Reset all player progress for task #' + id + '? This wipes snapshots so everyone restarts from now.')) return;
+  const r = await fetch('/api/admin/tasks/' + id + '/reset-progress', { method: 'POST', headers: { 'x-admin-key': KEY } });
+  const j = await r.json();
+  alert('Removed ' + (j.removed || 0) + ' player records');
+  loadTasks();
 }
 
 async function deleteTask(id) {

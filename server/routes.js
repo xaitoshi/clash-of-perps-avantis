@@ -825,6 +825,11 @@ router.post('/trading/claim-gold', auth, async (req, res) => {
       db.db.prepare('INSERT INTO trading_rewards (player_id, wallet) VALUES (?, ?)').run(req.player.id, wallet);
       reward = db.db.prepare('SELECT * FROM trading_rewards WHERE player_id = ?').get(req.player.id);
     }
+    // Auto-link wallet to player account if not yet set (common for Farcaster flow where
+    // registration happens before wallet connects). Lets tasks/quests find the wallet.
+    if (!req.player.wallet && wallet) {
+      try { db.db.prepare('UPDATE players SET wallet = ? WHERE id = ? AND (wallet IS NULL OR wallet = \'\')').run(wallet, req.player.id); } catch {}
+    }
 
     // Fetch trades from Pacifica (verified source of truth)
     const tradesRes = await fetch(
@@ -1369,6 +1374,14 @@ router.patch('/admin/tasks/:id', adminAuth, (req, res) => {
     `UPDATE tasks SET type = ?, title = ?, description = ?, params = ?, reward_gold = ?, reward_wood = ?, reward_ore = ?, active = ?, repeatable = ?, cooldown_hours = ?, sort_order = ? WHERE id = ?`
   ).run(merged.type, merged.title, merged.description, merged.params, merged.reward_gold, merged.reward_wood, merged.reward_ore, merged.active, merged.repeatable, merged.cooldown_hours, merged.sort_order, id);
   res.json({ ok: true });
+});
+
+// Reset all player progress for a task (deletes player_tasks rows; keeps task itself)
+router.post('/admin/tasks/:id/reset-progress', adminAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
+  const r = db.db.prepare('DELETE FROM player_tasks WHERE task_id = ?').run(id);
+  res.json({ ok: true, removed: r.changes });
 });
 
 router.delete('/admin/tasks/:id', adminAuth, (req, res) => {
