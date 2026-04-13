@@ -42,8 +42,8 @@ function ExplainMoveModal({ symbol, onClose }) {
     <div style={S.backdrop} onClick={onClose}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.header}>
-          <span style={S.brain}>🧠</span>
-          <h3 style={S.title}>Why is {symbol} moving?</h3>
+          <span style={S.brain}>?</span>
+          <h3 style={S.title}>What's happening with {symbol}?</h3>
           <button style={S.closeBtn} onClick={onClose}>✕</button>
         </div>
 
@@ -86,7 +86,11 @@ const S = {
     maxWidth: 460, width: '100%', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
   },
   header: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
-  brain: { fontSize: 24 },
+  brain: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 28, height: 28, borderRadius: '50%',
+    background: '#5C3A21', color: '#fff', fontSize: 18, fontWeight: 900,
+  },
   title: { fontSize: 16, fontWeight: 900, color: '#5C3A21', flex: 1, margin: 0 },
   closeBtn: {
     background: 'transparent', border: 'none', color: '#5C3A21',

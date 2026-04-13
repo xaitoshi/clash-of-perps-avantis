@@ -34,9 +34,11 @@ async function fetchElfa(path, params = {}, opts = {}) {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs || 8000);
+    const headers = { 'x-elfa-api-key': apiKey(), 'Accept': 'application/json' };
+    if (opts.body) headers['Content-Type'] = 'application/json';
     const r = await fetch(url, {
       method: opts.method || 'GET',
-      headers: { 'x-elfa-api-key': apiKey(), 'Accept': 'application/json' },
+      headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
       signal: ctrl.signal,
     });
@@ -127,21 +129,22 @@ async function getExplain(symbol) {
     let explanation = null;
     let mentions_count = 0;
     let credits_used = 0;
+    // Pull trending context once — shared between chat prompt and fallback text.
+    const all = hasKey() ? await getAllSignals() : { signals: {} };
+    const ctx = all.signals[sym];
+    if (ctx) mentions_count = ctx.mentions;
 
     if (hasKey()) {
-      // Pull trending context (cheap) so the chat answer can reference concrete numbers.
-      const all = await getAllSignals();
-      const ctx = all.signals[sym];
       const ctxStr = ctx
         ? `Current 24h trending stats for ${sym}: ${ctx.mentions} mentions (${ctx.change_percent >= 0 ? '+' : ''}${ctx.change_percent}% vs prev window).`
         : '';
-      mentions_count = ctx ? ctx.mentions : 0;
 
-      const prompt = `In 2 short factual sentences explain why ${sym} (crypto ticker) is moving right now. Use real X/Twitter social signal data you have. No hype. Cite one handle if useful. ${ctxStr}`;
+      const prompt = `In 2-3 short factual sentences describe what's happening with ${sym} (crypto ticker) on social media right now — the current narrative, key events, and notable voices. Don't frame it as "why it's moving" — it may not be moving. Focus on what people are actually saying. No hype. Cite one handle if useful. ${ctxStr}`;
 
       const chat = await fetchElfa('/chat', {}, { method: 'POST', body: { message: prompt } });
       const msg = chat && chat.data && (chat.data.message || chat.data.response || chat.data.text);
       credits_used = (chat && chat.data && chat.data.creditsConsumed) || 0;
+      console.log(`[elfa.chat] ${sym} raw_msg_len=${msg ? msg.length : 0} credits=${credits_used} keys=${chat && chat.data ? Object.keys(chat.data).join(',') : 'none'}`);
       if (msg) {
         // Elfa often returns a TL;DR + long breakdown. Keep just the TL;DR block if present.
         const m = msg.match(/TL;DR:?\s*([\s\S]*?)(?:\n\s*\n|─|$)/i);
@@ -149,17 +152,19 @@ async function getExplain(symbol) {
         // Strip any leading heading like "# TL;DR:" that snuck in
         explanation = explanation.replace(/^#+\s*/, '').trim();
       }
-      if (credits_used) console.log(`[elfa.chat] ${sym} consumed ${credits_used} credits`);
     }
 
     if (!explanation) {
-      const stub = STUB_TRENDING.find(t => t.token.toUpperCase() === sym);
-      if (stub) {
-        mentions_count = stub.current_count;
-        const dir = stub.change_percent >= 20 ? 'rising' : stub.change_percent <= -20 ? 'cooling' : 'flat';
-        explanation = `${sym} shows ${stub.current_count} mentions in the last 24h (${stub.change_percent >= 0 ? '+' : ''}${stub.change_percent}% vs prev window) — social chatter is ${dir}. ${hasKey() ? 'Elfa chat returned no text.' : '(stub response — no API key)'}`;
+      // Fall back to trending-tokens cache which has data for many more symbols than STUB_TRENDING
+      const sigData = ctx || STUB_TRENDING.find(t => t.token.toUpperCase() === sym);
+      if (sigData) {
+        const cur = sigData.mentions != null ? sigData.mentions : sigData.current_count;
+        const chg = sigData.change_percent;
+        mentions_count = cur;
+        const dir = chg >= 20 ? 'rising' : chg <= -20 ? 'cooling' : 'stable';
+        explanation = `${sym} has ${cur} mentions in the last 24h (${chg >= 0 ? '+' : ''}${chg}% vs previous window) — social chatter is ${dir}. ${hasKey() ? 'No detailed narrative available right now.' : '(stub response — no API key)'}`;
       } else {
-        explanation = `No social data for ${sym}. ${hasKey() ? 'Not enough chatter to explain.' : '(stub response — no API key)'}`;
+        explanation = `No social data for ${sym}. ${hasKey() ? 'This ticker isn\'t tracked by Elfa right now — too little Twitter/X chatter.' : '(stub response — no API key)'}`;
       }
     }
 

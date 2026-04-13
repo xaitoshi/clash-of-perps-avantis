@@ -630,13 +630,17 @@ function FuturesPanel() {
           {(!fullscreen || isMobile) && currentPrice && <span style={{fontSize: 13, color: '#5C3A21', fontWeight: 700}}>${fmtPrice(parseFloat(currentPrice))}</span>}
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
-        <button data-nodrag onClick={() => setExplainOpen(true)} title="Explain this move (AI)" style={{
+        <button data-nodrag onClick={() => setExplainOpen(true)} title="What's happening with this token?" style={{
           display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px',
           background: 'linear-gradient(180deg, #fff5cc 0%, #f3ebd1 100%)',
           border: '2px solid #d4c8b0', borderRadius: 8, color: '#5C3A21',
           fontSize: 12, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap',
         }}>
-          <span style={{fontSize: 14}}>🧠</span>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 18, height: 18, borderRadius: '50%',
+            background: '#5C3A21', color: '#fff', fontSize: 12, fontWeight: 900,
+          }}>?</span>
           <span>Explain</span>
         </button>
         {fullscreen && !isMobile && (
