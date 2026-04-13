@@ -630,19 +630,6 @@ function FuturesPanel() {
           {(!fullscreen || isMobile) && currentPrice && <span style={{fontSize: 13, color: '#5C3A21', fontWeight: 700}}>${fmtPrice(parseFloat(currentPrice))}</span>}
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
-        <button data-nodrag onClick={() => setExplainOpen(true)} title="What's happening with this token?" style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px',
-          background: 'linear-gradient(180deg, #fff5cc 0%, #f3ebd1 100%)',
-          border: '2px solid #d4c8b0', borderRadius: 8, color: '#5C3A21',
-          fontSize: 12, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap',
-        }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 18, height: 18, borderRadius: '50%',
-            background: '#5C3A21', color: '#fff', fontSize: 12, fontWeight: 900,
-          }}>?</span>
-          <span>Explain</span>
-        </button>
         {fullscreen && !isMobile && (
           <>
             <div style={S.infoCell}><span style={S.infoCellLabel}>Mark</span><span style={S.infoCellValue}>{currentPrice ? fmtPrice(parseFloat(currentPrice)) : '—'}</span></div>
@@ -896,6 +883,20 @@ function FuturesPanel() {
       </div>
     ) : null;
 
+    // Floating Explain pill — bottom-right of chart, opposite TradingView logo
+    const explainBadge = (
+      <button
+        data-nodrag
+        onClick={() => setExplainOpen(true)}
+        className="explain-chart-pill"
+        title="What's happening with this token?"
+        aria-label="Explain"
+      >
+        <span className="explain-q">?</span>
+        <span className="explain-label">Explain</span>
+      </button>
+    );
+
     if (fullscreen) {
       if (isMobile) {
         return (
@@ -905,6 +906,7 @@ function FuturesPanel() {
             <div style={{flex: 1, position: 'relative', minHeight: 0}}>
               <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} />
               {fundingBadge}
+              {explainBadge}
             </div>
 
             {/* Bottom: Trade controls */}
@@ -922,6 +924,7 @@ function FuturesPanel() {
           <div style={{display: 'flex', flex: 1, overflow: 'hidden'}}>
             <div style={{flex: `0 0 ${chartPct}%`, maxWidth: `${chartPct}%`, position: 'relative'}}>
               <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} />
+              {explainBadge}
             </div>
             {/* Drag handle: chart ↔ orderbook */}
             <div style={S.dragHandleV} onMouseDown={dragChart} />
@@ -965,6 +968,7 @@ function FuturesPanel() {
         <div style={{...S.chartArea, position: 'relative'}}>
           <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} />
           {fundingBadge}
+          {explainBadge}
         </div>
         {renderTradeControls()}
       </>
@@ -1304,6 +1308,52 @@ export default memo(FuturesPanel);
 
 const animCSS = `
   .futures-tabs-scroll::-webkit-scrollbar { display: none; }
+
+  /* Floating Explain pill — starts as a circle (just "?"), expands on hover to show "Explain" */
+  .explain-chart-pill {
+    position: absolute; bottom: 8px; right: 8px; z-index: 20;
+    display: inline-flex; align-items: center;
+    height: 28px; width: 28px; padding: 0;
+    background: rgba(255, 255, 255, 0.92);
+    color: #5C3A21;
+    border: 2px solid #5C3A21;
+    border-radius: 999px;
+    cursor: pointer; overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    transition: width 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), padding 0.22s ease, background 0.15s ease;
+    font-family: inherit;
+  }
+  .explain-chart-pill:hover,
+  .explain-chart-pill:focus-visible {
+    width: 94px;
+    padding: 0 10px 0 4px;
+    background: #fff;
+    outline: none;
+  }
+  .explain-chart-pill .explain-q {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; flex-shrink: 0;
+    margin-left: 1px;
+    border-radius: 50%;
+    background: #5C3A21; color: #fff;
+    font-size: 14px; font-weight: 900; line-height: 1;
+  }
+  .explain-chart-pill .explain-label {
+    max-width: 0; opacity: 0;
+    overflow: hidden; white-space: nowrap;
+    font-size: 12px; font-weight: 800;
+    margin-left: 0;
+    transition: max-width 0.22s ease, opacity 0.15s ease 0.05s, margin-left 0.22s ease;
+  }
+  .explain-chart-pill:hover .explain-label,
+  .explain-chart-pill:focus-visible .explain-label {
+    max-width: 80px; opacity: 1; margin-left: 6px;
+  }
+  /* On touch devices — stay as a circle; a tap just opens the modal */
+  @media (hover: none) {
+    .explain-chart-pill:hover { width: 28px; padding: 0; }
+    .explain-chart-pill:hover .explain-label { max-width: 0; opacity: 0; margin-left: 0; }
+  }
   @keyframes pulse-glow {
     0%, 100% { box-shadow: 0 0 0 rgba(232, 184, 48, 0.6); }
     50% { box-shadow: 0 0 12px rgba(232, 184, 48, 0.9); }

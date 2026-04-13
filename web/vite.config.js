@@ -32,8 +32,12 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
     proxy: {
-      '/api': 'http://localhost:4000',
-      '/ws': { target: 'ws://localhost:4000', ws: true },
+      '/api': process.env.VITE_API_PROXY || 'http://localhost:4000',
+      '/ws': {
+        target: process.env.VITE_WS_PROXY || 'ws://localhost:4000',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 })

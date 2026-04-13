@@ -1,4 +1,5 @@
 import { useState, useEffect, memo } from 'react';
+import elfaLogo from '../assets/elfa.svg';
 
 const GAME_API = import.meta.env.VITE_GAME_API || '/api';
 
@@ -67,7 +68,10 @@ function ExplainMoveModal({ symbol, onClose }) {
                 <span style={S.metaValue}>{data.cached ? 'cached' : 'fresh'}</span>
               </div>
             </div>
-            <div style={S.poweredBy}>Powered by Elfa AI</div>
+            <div style={S.poweredBy}>
+              <span>Powered by</span>
+              <img src={elfaLogo} alt="Elfa" style={S.poweredLogo} />
+            </div>
           </>
         )}
       </div>
@@ -106,7 +110,11 @@ const S = {
   metaItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 },
   metaLabel: { fontSize: 10, color: '#8a7252', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 },
   metaValue: { fontSize: 13, fontWeight: 900, color: '#5C3A21' },
-  poweredBy: { fontSize: 10, color: '#a3906a', textAlign: 'center', marginTop: 10, fontStyle: 'italic', fontWeight: 700 },
+  poweredBy: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+    fontSize: 10, color: '#a3906a', marginTop: 12, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase',
+  },
+  poweredLogo: { height: 16, width: 'auto', objectFit: 'contain', display: 'block' },
 };
 
 export default memo(ExplainMoveModal);
