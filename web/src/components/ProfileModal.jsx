@@ -1,7 +1,7 @@
 import { memo, useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
-import { usePlayer, useResources } from '../hooks/useGodot';
+import { usePlayer, useResources, useBuilding } from '../hooks/useGodot';
 import { usePacifica } from '../hooks/usePacifica';
 import { useFarcaster } from '../hooks/useFarcaster';
 import { cartoonBtn } from '../styles/theme';
@@ -16,7 +16,10 @@ function ProfileModal({ onClose }) {
   const { account } = usePacifica();
   const [tradingStats, setTradingStats] = useState(null);
 
-  const townHallLevel = player?.buildings?.town_hall?.level || 1;
+  const { buildingDefs } = useBuilding();
+  // Use same source as HUD (PlayerInfo) — buildingDefs.th_level is authoritative.
+  // Fall back to player.buildings structure only if buildingDefs isn't ready yet.
+  const townHallLevel = buildingDefs?.th_level || player?.buildings?.town_hall?.level || 1;
   const pacBalance = parseFloat(account?.balance || 0);
   const pacEquity = parseFloat(account?.account_equity || 0);
 

@@ -1241,18 +1241,18 @@ function FuturesPanel() {
         transition: isDragging ? 'none' : 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
       }}>
         <div style={S.header} onPointerDown={handlePointerDown}>
-          <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+          <div className="futures-tabs-scroll" style={{display: 'flex', gap: 6, alignItems: 'center', flex: 1, minWidth: 0, overflowX: 'auto', scrollbarWidth: 'none'}}>
             {TABS.map(t => {
               const active = activeTab === t.id;
               return (
-                <button key={t.id} onClick={() => setActiveTab(t.id)} className={`tab-btn ${active ? 'active' : ''}`} style={active ? S.tabActive : S.tabInactive}>
+                <button key={t.id} onClick={() => setActiveTab(t.id)} className={`tab-btn ${active ? 'active' : ''}`} style={{...(active ? S.tabActive : S.tabInactive), flexShrink: 0}}>
                   {t.icon}
                   {active && <span style={{fontSize: 14, fontWeight: 800}}>{t.label}</span>}
                 </button>
               );
             })}
           </div>
-          <div style={{display: 'flex', gap: 10, alignItems: 'center'}}>
+          <div style={{display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 8}}>
             <button data-nodrag onClick={() => setFullscreen(!fullscreen)} style={S.headerBtn} title={fullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}>
               {fullscreen ? (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
@@ -1299,6 +1299,7 @@ function FuturesPanel() {
 export default memo(FuturesPanel);
 
 const animCSS = `
+  .futures-tabs-scroll::-webkit-scrollbar { display: none; }
   @keyframes pulse-glow {
     0%, 100% { box-shadow: 0 0 0 rgba(232, 184, 48, 0.6); }
     50% { box-shadow: 0 0 12px rgba(232, 184, 48, 0.9); }
@@ -1426,14 +1427,15 @@ const S = {
   },
   headerTitle: { fontSize: 16, fontWeight: 900, color: '#5C3A21' },
   tabActive: {
-    display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px',
+    display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px',
     background: '#fdf8e7', border: '3px solid #bba882', borderRadius: 12,
     color: '#333', boxShadow: '0 3px 0 #bba882', transform: 'translateY(-1px)', cursor: 'default',
+    minHeight: 36,
   },
   tabInactive: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36,
     background: '#bba882', border: '3px solid #a3906a', borderRadius: 12,
-    color: '#333', boxShadow: '0 3px 0 #a3906a', cursor: 'pointer',
+    color: '#333', boxShadow: '0 3px 0 #a3906a', cursor: 'pointer', padding: 0,
   },
   closeBtn: {
     width: 32, height: 32, borderRadius: '50%', background: '#E53935', border: '3px solid #fff',
