@@ -1161,8 +1161,17 @@ router.get('/elfa/explain/:symbol', auth, async (req, res) => {
   if (!explainRateLimit(req.player.id)) {
     return res.status(429).json({ error: 'Too many requests — try again in a minute' });
   }
-  const data = await elfa.getExplain(symbol);
+  const data = await elfa.getExplain(symbol, req.player.name);
   res.json(data);
+});
+
+// Admin: per-symbol Elfa stats + error log
+router.get('/admin/elfa/stats', adminAuth, (req, res) => {
+  res.json({
+    has_key: elfa.hasKey(),
+    stats: elfa.getStats(),
+    errors: elfa.getErrors(),
+  });
 });
 
 // ==================== FULL STATE ====================

@@ -3,17 +3,6 @@ import elfaLogo from '../assets/elfa.svg';
 
 const GAME_API = import.meta.env.VITE_GAME_API || '/api';
 
-function timeAgo(iso) {
-  if (!iso) return '';
-  const ms = Date.now() - new Date(iso).getTime();
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  return `${h}h ago`;
-}
-
 function ExplainMoveModal({ symbol, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -54,20 +43,6 @@ function ExplainMoveModal({ symbol, onClose }) {
         {data && !loading && (
           <>
             <p style={S.text}>{data.explanation}</p>
-            <div style={S.metaRow}>
-              <div style={S.metaItem}>
-                <span style={S.metaLabel}>Mentions 24h</span>
-                <span style={S.metaValue}>{data.mentions_count || 0}</span>
-              </div>
-              <div style={S.metaItem}>
-                <span style={S.metaLabel}>Updated</span>
-                <span style={S.metaValue}>{timeAgo(data.updated_at)}</span>
-              </div>
-              <div style={S.metaItem}>
-                <span style={S.metaLabel}>Source</span>
-                <span style={S.metaValue}>{data.cached ? 'cached' : 'fresh'}</span>
-              </div>
-            </div>
             <div style={S.poweredBy}>
               <span>Powered by</span>
               <img src={elfaLogo} alt="Elfa" style={S.poweredLogo} />
@@ -103,13 +78,6 @@ const S = {
   loading: { fontSize: 13, color: '#8a7252', fontWeight: 700, padding: '20px 0', textAlign: 'center' },
   error: { fontSize: 13, color: '#c33', fontWeight: 700, padding: '12px 0' },
   text: { fontSize: 14, color: '#5C3A21', lineHeight: 1.5, fontWeight: 600, marginBottom: 14 },
-  metaRow: {
-    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8,
-    background: '#fff5cc', border: '2px solid #d4c8b0', borderRadius: 8, padding: 10,
-  },
-  metaItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 },
-  metaLabel: { fontSize: 10, color: '#8a7252', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 },
-  metaValue: { fontSize: 13, fontWeight: 900, color: '#5C3A21' },
   poweredBy: {
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
     fontSize: 10, color: '#a3906a', marginTop: 12, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase',

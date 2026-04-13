@@ -6,6 +6,45 @@ const ELFA_BASE = 'https://api.elfa.ai/v2';
 function apiKey() { return process.env.ELFA_API_KEY || null; }
 function hasKey() { return !!apiKey(); }
 
+// ---------- Per-symbol stats (for admin panel) ----------
+// { SYM: { explain_hits, cache_hits, fresh_calls, credits_total, last_refreshed_at, last_error, last_player } }
+const stats = new Map();
+// Ring buffer of recent errors { ts, path, status, message }
+const errorLog = [];
+const ERROR_LOG_MAX = 100;
+
+function recordStat(sym, fields) {
+  const key = sym.toUpperCase();
+  const s = stats.get(key) || {
+    symbol: key,
+    explain_hits: 0,
+    cache_hits: 0,
+    fresh_calls: 0,
+    credits_total: 0,
+    last_refreshed_at: null,
+    last_error: null,
+    last_player: null,
+  };
+  for (const [k, v] of Object.entries(fields)) {
+    if (typeof v === 'number') s[k] = (s[k] || 0) + v;
+    else s[k] = v;
+  }
+  stats.set(key, s);
+}
+
+function recordError(path, status, message) {
+  errorLog.push({ ts: new Date().toISOString(), path, status, message });
+  if (errorLog.length > ERROR_LOG_MAX) errorLog.shift();
+}
+
+function getStats() {
+  return Array.from(stats.values()).sort((a, b) => (b.explain_hits || 0) - (a.explain_hits || 0));
+}
+
+function getErrors() {
+  return errorLog.slice().reverse();
+}
+
 // ---------- Cache ----------
 const cache = new Map();
 function cacheGet(key) {
@@ -45,11 +84,13 @@ async function fetchElfa(path, params = {}, opts = {}) {
     clearTimeout(timer);
     if (!r.ok) {
       console.warn(`[elfa] ${path} → ${r.status}`);
+      recordError(path, r.status, `HTTP ${r.status}`);
       return null;
     }
     return await r.json();
   } catch (e) {
     console.warn(`[elfa] ${path} error: ${e.message}`);
+    recordError(path, 0, e.message);
     return null;
   }
 }
@@ -115,13 +156,18 @@ const inFlightExplain = new Map();
 
 // Returns explanation for a single symbol. TTL = 1 hour.
 // Cost: ~46 credits per fresh call via Elfa /chat endpoint. Cache is critical.
-async function getExplain(symbol) {
+async function getExplain(symbol, playerName) {
   const sym = String(symbol || '').toUpperCase();
+  recordStat(sym, { explain_hits: 1, last_player: playerName || null });
   const key = 'explain:' + sym;
   const cached = cacheGet(key);
-  if (cached) return { ...cached, cached: true };
+  if (cached) {
+    recordStat(sym, { cache_hits: 1 });
+    return { ...cached, cached: true };
+  }
 
   if (inFlightExplain.has(key)) {
+    recordStat(sym, { cache_hits: 1 });
     return inFlightExplain.get(key);
   }
 
@@ -144,6 +190,11 @@ async function getExplain(symbol) {
       const chat = await fetchElfa('/chat', {}, { method: 'POST', body: { message: prompt } });
       const msg = chat && chat.data && (chat.data.message || chat.data.response || chat.data.text);
       credits_used = (chat && chat.data && chat.data.creditsConsumed) || 0;
+      recordStat(sym, {
+        fresh_calls: 1,
+        credits_total: credits_used,
+        last_refreshed_at: new Date().toISOString(),
+      });
       console.log(`[elfa.chat] ${sym} raw_msg_len=${msg ? msg.length : 0} credits=${credits_used} keys=${chat && chat.data ? Object.keys(chat.data).join(',') : 'none'}`);
       if (msg) {
         // Elfa often returns a TL;DR + long breakdown. Keep just the TL;DR block if present.
@@ -155,7 +206,7 @@ async function getExplain(symbol) {
     }
 
     if (!explanation) {
-      // Fall back to trending-tokens cache which has data for many more symbols than STUB_TRENDING
+      // 1st fallback: trending-tokens cache
       const sigData = ctx || STUB_TRENDING.find(t => t.token.toUpperCase() === sym);
       if (sigData) {
         const cur = sigData.mentions != null ? sigData.mentions : sigData.current_count;
@@ -163,8 +214,20 @@ async function getExplain(symbol) {
         mentions_count = cur;
         const dir = chg >= 20 ? 'rising' : chg <= -20 ? 'cooling' : 'stable';
         explanation = `${sym} has ${cur} mentions in the last 24h (${chg >= 0 ? '+' : ''}${chg}% vs previous window) — social chatter is ${dir}. ${hasKey() ? 'No detailed narrative available right now.' : '(stub response — no API key)'}`;
+      } else if (hasKey()) {
+        // 2nd fallback: keyword-mentions endpoint works for any string (stocks, commodities, etc.)
+        const kw = await fetchElfa('/data/keyword-mentions', { keywords: sym, timeWindow: '24h', limit: 5 });
+        const items = kw && kw.data && Array.isArray(kw.data) ? kw.data : [];
+        const total = (kw && kw.data && kw.metadata && kw.metadata.total) || items.length;
+        if (total > 0) {
+          mentions_count = total;
+          const handles = items.map(i => i.account && i.account.username).filter(Boolean).slice(0, 3);
+          explanation = `${sym} has ${total} mentions on X in the last 24h${handles.length ? ` — recent voices include @${handles.join(', @')}` : ''}. Elfa doesn't have a curated narrative for this ticker (likely a stock/commodity outside its crypto focus).`;
+        } else {
+          explanation = `No social data for ${sym}. This ticker isn't tracked by Elfa right now — too little Twitter/X chatter.`;
+        }
       } else {
-        explanation = `No social data for ${sym}. ${hasKey() ? 'This ticker isn\'t tracked by Elfa right now — too little Twitter/X chatter.' : '(stub response — no API key)'}`;
+        explanation = `No social data for ${sym}. (stub response — no API key)`;
       }
     }
 
@@ -193,4 +256,6 @@ module.exports = {
   getExplain,
   cacheGet,
   cacheSet,
+  getStats,
+  getErrors,
 };

@@ -240,6 +240,7 @@ app.get('/api/admin/panel', (req, res) => {
     <div class="tab active" onclick="switchTab('players')">Players</div>
     <div class="tab" onclick="switchTab('replays')">Battle Replays</div>
     <div class="tab" onclick="switchTab('tasks')">Tasks</div>
+    <div class="tab" onclick="switchTab('elfa')">Elfa</div>
     <div class="tab" onclick="switchTab('logs')">Logs</div>
     <div class="tab" onclick="switchTab('stats')">Stats</div>
   </div>
@@ -296,6 +297,23 @@ app.get('/api/admin/panel', (req, res) => {
     <table><thead><tr>
       <th>ID</th><th>Type</th><th>Title</th><th>Params</th><th>Reward</th><th>Active</th><th>Repeat</th><th>Started</th><th>Claimed</th><th>Rate</th><th>Avg %</th><th>Last Claim</th><th>Actions</th>
     </tr></thead><tbody id="tasksBody"></tbody></table>
+  </div>
+
+  <div class="panel" id="tab-elfa">
+    <div class="stats" id="elfaSummary"></div>
+    <h2 style="color:#f59e0b;font-size:16px;margin:16px 0 8px">Per-Symbol Usage</h2>
+    <div class="filter">
+      <input id="elfaSearch" placeholder="Filter by symbol..." oninput="renderElfaStats()" style="width:200px">
+      <button class="btn" onclick="loadElfa()">Refresh</button>
+      <span id="elfaCount" style="color:#6b7280;font-size:12px;margin-left:8px"></span>
+    </div>
+    <table><thead><tr>
+      <th>Symbol</th><th>Requests</th><th>Cache Hits</th><th>Fresh Calls</th><th>Credits</th><th>Last Refreshed</th><th>Last Player</th>
+    </tr></thead><tbody id="elfaStatsBody"></tbody></table>
+    <h2 style="color:#f59e0b;font-size:16px;margin:20px 0 8px">Recent Errors (last 100)</h2>
+    <table><thead><tr>
+      <th>Time</th><th>Path</th><th>Status</th><th>Message</th>
+    </tr></thead><tbody id="elfaErrorsBody"></tbody></table>
   </div>
 
   <div id="taskStatsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center;padding:20px">
@@ -794,6 +812,62 @@ async function deleteTask(id) {
   loadTasks();
 }
 
+// ---------- Elfa admin ----------
+let ELFA_CACHE = { stats: [], errors: [], has_key: false };
+
+async function loadElfa() {
+  try {
+    const d = await api('/admin/elfa/stats');
+    ELFA_CACHE = d;
+    const totalHits = (d.stats || []).reduce((s, r) => s + (r.explain_hits || 0), 0);
+    const totalFresh = (d.stats || []).reduce((s, r) => s + (r.fresh_calls || 0), 0);
+    const totalCache = (d.stats || []).reduce((s, r) => s + (r.cache_hits || 0), 0);
+    const totalCredits = (d.stats || []).reduce((s, r) => s + (r.credits_total || 0), 0);
+    const cacheRatio = totalHits > 0 ? Math.round((totalCache / totalHits) * 100) : 0;
+    document.getElementById('elfaSummary').innerHTML =
+      '<div class="stat"><div class="v">' + (d.has_key ? '<span style="color:#34d399">ON</span>' : '<span style="color:#fca5a5">OFF</span>') + '</div><div class="l">API Key</div></div>' +
+      '<div class="stat"><div class="v">' + (d.stats || []).length + '</div><div class="l">Tracked Symbols</div></div>' +
+      '<div class="stat"><div class="v">' + totalHits + '</div><div class="l">Total Requests</div></div>' +
+      '<div class="stat"><div class="v" style="color:#34d399">' + totalCache + '</div><div class="l">Cache Hits</div></div>' +
+      '<div class="stat"><div class="v" style="color:#f59e0b">' + totalFresh + '</div><div class="l">Fresh Elfa Calls</div></div>' +
+      '<div class="stat"><div class="v">' + cacheRatio + '%</div><div class="l">Cache Ratio</div></div>' +
+      '<div class="stat"><div class="v" style="color:#e8b830">' + totalCredits + '</div><div class="l">Credits Used</div></div>' +
+      '<div class="stat"><div class="v" style="color:#fca5a5">' + (d.errors || []).length + '</div><div class="l">Recent Errors</div></div>';
+    renderElfaStats();
+  } catch(e) { console.error(e); }
+}
+
+function renderElfaStats() {
+  const search = (document.getElementById('elfaSearch').value || '').toLowerCase();
+  const rows = (ELFA_CACHE.stats || []).filter(r => !search || r.symbol.toLowerCase().includes(search));
+  document.getElementById('elfaCount').textContent = rows.length + ' symbols';
+  document.getElementById('elfaStatsBody').innerHTML = rows.map(r => {
+    const lastRefreshed = r.last_refreshed_at ? r.last_refreshed_at.replace('T',' ').split('.')[0] : '—';
+    const cacheRatio = r.explain_hits > 0 ? Math.round((r.cache_hits / r.explain_hits) * 100) : 0;
+    return '<tr>' +
+      '<td><strong>' + esc(r.symbol) + '</strong></td>' +
+      '<td>' + (r.explain_hits || 0) + '</td>' +
+      '<td style="color:#34d399">' + (r.cache_hits || 0) + ' <span style="color:#6b7280;font-size:10px">(' + cacheRatio + '%)</span></td>' +
+      '<td style="color:#f59e0b">' + (r.fresh_calls || 0) + '</td>' +
+      '<td style="color:#e8b830">' + (r.credits_total || 0) + '</td>' +
+      '<td class="mono" style="font-size:11px;color:#9ca3af">' + lastRefreshed + '</td>' +
+      '<td>' + esc(r.last_player || '—') + '</td>' +
+      '</tr>';
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">No usage yet</td></tr>';
+
+  document.getElementById('elfaErrorsBody').innerHTML = (ELFA_CACHE.errors || []).map(e => {
+    const t = (e.ts || '').split('T')[1]?.split('.')[0] || '';
+    const sc = e.status || 0;
+    const color = sc >= 500 ? '#fca5a5' : sc >= 400 ? '#f59e0b' : '#9ca3af';
+    return '<tr>' +
+      '<td class="mono" style="font-size:11px">' + t + '</td>' +
+      '<td class="mono" style="font-size:11px">' + esc(e.path || '') + '</td>' +
+      '<td style="color:' + color + ';font-weight:700">' + sc + '</td>' +
+      '<td style="font-size:11px;color:#9ca3af">' + esc(e.message || '') + '</td>' +
+      '</tr>';
+  }).join('') || '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:12px">No errors</td></tr>';
+}
+
 // Load logs/stats when switching to those tabs
 const origSwitch = switchTab;
 switchTab = function(name) {
@@ -801,6 +875,7 @@ switchTab = function(name) {
   if (name === 'logs') loadLogs();
   if (name === 'stats') loadStats();
   if (name === 'tasks') loadTasks();
+  if (name === 'elfa') loadElfa();
 };
 
 // Auto-login if key saved
