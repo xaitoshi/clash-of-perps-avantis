@@ -234,6 +234,8 @@ func _handle_react_action(action: String, data: Dictionary) -> void:
 			_do_register(data.get("name", ""), data.get("wallet", ""))
 		"wallet_connected":
 			_try_wallet_login(data.get("wallet", ""))
+		"logout":
+			_do_logout()
 		"deselect_building":
 			var active = _get_active_building_system()
 			if active:
@@ -311,6 +313,33 @@ func _do_register(player_name: String, wallet: String = "") -> void:
 		"player_id": net.player_id,
 		"token": net.token,
 	})
+
+
+func _do_logout() -> void:
+	var net = get_node_or_null("/root/Net")
+	if not net:
+		return
+	# Clear server session on the client side.
+	net.token = ""
+	net.player_id = ""
+	net.display_name = ""
+	net.trophies = 0
+	net.wallet = ""
+	var cfg = ConfigFile.new()
+	cfg.save("user://auth.cfg")  # overwrites any saved token
+	# Destroy all placed buildings so next login starts from a clean scene.
+	for bsys in _bs_cache:
+		if bsys and bsys.has_method("_destroy_all_buildings"):
+			bsys._destroy_all_buildings()
+	# Reset React-side UI
+	send_to_react("state", {
+		"player_name": "",
+		"trophies": 0,
+		"player_id": "",
+		"token": "",
+		"wallet": "",
+	})
+	send_to_react("show_register", {})
 
 
 func _try_wallet_login(wallet: String) -> void:

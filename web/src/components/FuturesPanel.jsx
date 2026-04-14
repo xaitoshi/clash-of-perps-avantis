@@ -215,7 +215,7 @@ const OrdersList = memo(function OrdersList({ orders, cancelOrder }) {
 
 // ==================== POSITIONS LIST (mobile/tab card view) ====================
 const PositionsList = memo(function PositionsList({
-  positions, prices, dataReady, leverageSettings, loading, error,
+  positions, prices, dataReady, leverageSettings, marginModes, loading, error,
   closePosition, setTpsl, clearError,
 }) {
   const [expandedPos, setExpandedPos] = useState(null);
@@ -254,6 +254,14 @@ const PositionsList = memo(function PositionsList({
             <div style={S.row}>
               <span style={{fontSize: 16, fontWeight: 900}}>{pos.symbol}</span>
               <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
+                {(() => {
+                  const isIso = pos.is_isolated ?? marginModes?.[pos.symbol];
+                  return (
+                    <span style={{fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 5, border: '1px solid', borderColor: isIso ? '#FF9800' : '#4CAF50', color: isIso ? '#FF9800' : '#4CAF50', background: 'rgba(255,255,255,0.4)'}}>
+                      {isIso ? 'ISO' : 'CROSS'}
+                    </span>
+                  );
+                })()}
                 <span style={{fontSize: 11, fontWeight: 800, color: '#a3906a', background: '#fdf8e7', padding: '2px 6px', borderRadius: 5, border: '1px solid #d4c8b0'}}>{setLev}x</span>
                 <span style={{fontSize: 13, fontWeight: 900, color: pos.side === 'bid' ? '#4CAF50' : '#E53935'}}>
                   {pos.side === 'bid' ? 'LONG' : 'SHORT'}
@@ -1070,6 +1078,14 @@ function FuturesPanel() {
               <div style={S.row}>
                 <span style={{fontSize: 16, fontWeight: 900}}>{pos.symbol}</span>
                 <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
+                  {(() => {
+                    const isIso = pos.is_isolated ?? marginModes?.[pos.symbol];
+                    return (
+                      <span style={{fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 5, border: '1px solid', borderColor: isIso ? '#FF9800' : '#4CAF50', color: isIso ? '#FF9800' : '#4CAF50', background: 'rgba(255,255,255,0.4)'}}>
+                        {isIso ? 'ISO' : 'CROSS'}
+                      </span>
+                    );
+                  })()}
                   <span style={{fontSize: 11, fontWeight: 800, color: '#a3906a', background: '#fdf8e7', padding: '2px 6px', borderRadius: 5, border: '1px solid #d4c8b0'}}>{setLev}x</span>
                   <span style={{fontSize: 13, fontWeight: 900, color: pos.side === 'bid' ? '#4CAF50' : '#E53935'}}>
                     {pos.side === 'bid' ? 'LONG' : 'SHORT'}

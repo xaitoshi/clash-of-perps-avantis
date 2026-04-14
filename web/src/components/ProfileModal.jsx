@@ -2,7 +2,7 @@ import { memo, useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { usePrivy } from '@privy-io/react-auth';
-import { usePlayer, useResources, useBuilding } from '../hooks/useGodot';
+import { usePlayer, useResources, useBuilding, useSend } from '../hooks/useGodot';
 import { usePacifica } from '../hooks/usePacifica';
 import { useFarcaster } from '../hooks/useFarcaster';
 import { cartoonBtn } from '../styles/theme';
@@ -13,6 +13,7 @@ const PRIVY_ENABLED = !!import.meta.env.VITE_PRIVY_APP_ID;
 function ProfileModal({ onClose }) {
   const player = usePlayer();
   const resources = useResources();
+  const { sendToGodot } = useSend();
   const { publicKey, connected, disconnect, select, wallets, connect } = useWallet();
   const { setVisible: openWalletModal } = useWalletModal();
   const { isInFrame: inFrame } = useFarcaster();
@@ -35,15 +36,16 @@ function ProfileModal({ onClose }) {
   const walletSource = adapterAddr ? 'adapter' : (activeWallet ? 'privy' : null);
 
   const handleDisconnect = async () => {
+    // Tell Godot to drop its session + destroy all placed buildings. On next
+    // login, building_system reloads fresh from the server via auth_ok.
+    sendToGodot('logout');
     if (walletSource === 'adapter') {
-      disconnect();
+      try { disconnect(); } catch {}
     } else if (walletSource === 'privy' && privyLogout && privyAuthed) {
-      await privyLogout();
+      try { await privyLogout(); } catch {}
     }
-    // Clear local session so the register screen shows again
     window._playerToken = null;
-    try { localStorage.removeItem('godot_user_auth_cfg'); } catch {}
-    window.location.reload();
+    onClose();
   };
 
   const { buildingDefs } = useBuilding();
