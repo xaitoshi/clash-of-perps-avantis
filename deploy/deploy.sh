@@ -60,7 +60,10 @@ fi
 # ── 4. Build frontend ──
 echo "[4/7] Building frontend..."
 cd "$WEB_DIR"
-npm ci
+# --legacy-peer-deps: @privy-io/react-auth@3.21.2 pins @farcaster/mini-app-solana@^1,
+# but we're on 2.0.0 (works fine at runtime — Privy gracefully degrades).
+# Using `install` over `ci` so a slightly stale lockfile on the server still works.
+npm install --legacy-peer-deps
 npm run build
 
 # Stamp build hash into sw.js so browsers pick up new cache on deploy
