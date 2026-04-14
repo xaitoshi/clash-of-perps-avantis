@@ -187,7 +187,8 @@ async function getExplain(symbol, playerName) {
 
       const prompt = `In 2-3 short factual sentences describe what's happening with ${sym} (crypto ticker) on social media right now — the current narrative, key events, and notable voices. Don't frame it as "why it's moving" — it may not be moving. Focus on what people are actually saying. No hype. Cite one handle if useful. ${ctxStr}`;
 
-      const chat = await fetchElfa('/chat', {}, { method: 'POST', body: { message: prompt } });
+      // Elfa chat responses routinely take 5-15s server-side — default 8s timeout aborts too early.
+      const chat = await fetchElfa('/chat', {}, { method: 'POST', body: { message: prompt }, timeoutMs: 25000 });
       const msg = chat && chat.data && (chat.data.message || chat.data.response || chat.data.text);
       credits_used = (chat && chat.data && chat.data.creditsConsumed) || 0;
       recordStat(sym, {
