@@ -59,7 +59,8 @@ function MiniChart({ symbol, entry, tp, sl, mark }) {
     const pad = (maxY - minY) * 0.05 || maxY * 0.01 || 1;
     const yLo = minY - pad;
     const yHi = maxY + pad;
-    const W = 200, H = 90; // viewBox units; fits nice aspect ~2.2:1
+    // Native-pixel viewBox keeps text + strokes crisp at any container width.
+    const W = 600, H = 270;
     const y = v => H - ((v - yLo) / (yHi - yLo)) * H;
     const barW = (W / candles.length) * 0.62;
     return { W, H, y, barW, candles };
@@ -77,21 +78,21 @@ function MiniChart({ symbol, entry, tp, sl, mark }) {
     { key: 'sl',    val: sl,    color: '#E53935', label: 'SL' },
   ].filter(l => typeof l.val === 'number' && isFinite(l.val));
 
-  const tagW = 30;
+  const tagW = 78; // enough for "75 900", "74,150" etc.
 
   return (
     <div style={miniS.wrap}>
       <svg viewBox={`0 0 ${W + tagW} ${H}`} style={miniS.svg} preserveAspectRatio="none">
-        {/* Horizontal grid-ish reference lines */}
+        {/* Horizontal reference lines */}
         {levels.map(l => (
           <line
             key={l.key}
             x1={0} x2={W}
             y1={y(l.val)} y2={y(l.val)}
             stroke={l.color}
-            strokeWidth={0.5}
-            strokeDasharray={l.key === 'mark' ? '1.5 1.5' : '2.5 1.5'}
-            opacity={0.7}
+            strokeWidth={1.5}
+            strokeDasharray={l.key === 'mark' ? '4 4' : '6 4'}
+            opacity={0.8}
           />
         ))}
         {/* Candlesticks */}
@@ -102,25 +103,25 @@ function MiniChart({ symbol, entry, tp, sl, mark }) {
           const up = c.c >= c.o;
           const color = up ? '#4CAF50' : '#E53935';
           const bodyTop = Math.min(yOpen, yClose);
-          const bodyH = Math.max(0.5, Math.abs(yClose - yOpen));
+          const bodyH = Math.max(1.5, Math.abs(yClose - yOpen));
           return (
             <g key={i}>
-              <line x1={cx} x2={cx} y1={yHigh} y2={yLow} stroke={color} strokeWidth={0.4} />
+              <line x1={cx} x2={cx} y1={yHigh} y2={yLow} stroke={color} strokeWidth={1.3} />
               <rect x={cx - barW / 2} y={bodyTop} width={barW} height={bodyH} fill={color} />
             </g>
           );
         })}
         {/* Level tags at right edge */}
         {levels.map(l => {
-          const ty = Math.max(3, Math.min(H - 1, y(l.val)));
+          const ty = Math.max(10, Math.min(H - 4, y(l.val)));
           return (
             <g key={l.key + '-tag'}>
-              <rect x={W + 1} y={ty - 2.2} width={tagW - 2} height={4.4} rx={0.8} fill={l.color} />
+              <rect x={W + 4} y={ty - 9} width={tagW - 8} height={18} rx={3} fill={l.color} />
               <text
-                x={W + tagW / 2} y={ty + 1.1}
+                x={W + tagW / 2} y={ty + 5}
                 textAnchor="middle"
-                fontSize={3} fontWeight={900} fill="#fff"
-                style={{ fontFamily: 'monospace' }}
+                fontSize={13} fontWeight={900} fill="#fff"
+                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
               >{fmt(l.val)}</text>
             </g>
           );
@@ -200,7 +201,8 @@ function TradeIdeaModal({ symbol, currentPrice, onClose, onApply }) {
 
         {!loading && data && !idea && (
           <div style={S.error}>
-            Elfa couldn't produce a trade idea for {symbol} right now. Try the Explain feature for a narrative instead.
+            Elfa isn't responding right now — we tried {data.attempts || 3} times.
+            Please try again in a minute or pick another symbol.
           </div>
         )}
 

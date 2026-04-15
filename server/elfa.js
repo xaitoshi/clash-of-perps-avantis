@@ -297,6 +297,7 @@ async function getTradeIdea(symbol, playerName) {
   const promise = (async () => {
     let idea = null;
     let credits_used = 0;
+    let attempts = 0;
 
     if (hasKey()) {
       const all = await getAllSignals();
@@ -326,40 +327,62 @@ Rules:
 - "reason" max 120 chars, no hype words.
 ${ctxStr}`;
 
-      const chat = await fetchElfa('/chat', {}, { method: 'POST', body: { message: prompt }, timeoutMs: 25000 });
-      const msg = chat && chat.data && (chat.data.message || chat.data.response || chat.data.text);
-      credits_used = (chat && chat.data && chat.data.creditsConsumed) || 0;
+      // Up to 3 attempts — Elfa sometimes times out or returns malformed JSON.
+      // Each attempt costs ~46-60 credits, but we only retry on failure so the
+      // happy path still charges once.
+      const MAX_ATTEMPTS = 3;
+      for (attempts = 1; attempts <= MAX_ATTEMPTS; attempts++) {
+        let chat = null;
+        try {
+          chat = await fetchElfa('/chat', {}, { method: 'POST', body: { message: prompt }, timeoutMs: 25000 });
+        } catch (e) {
+          console.warn(`[elfa.trade] ${sym} attempt ${attempts}/${MAX_ATTEMPTS} fetch error: ${e.message}`);
+        }
+        const msg = chat && chat.data && (chat.data.message || chat.data.response || chat.data.text);
+        credits_used += (chat && chat.data && chat.data.creditsConsumed) || 0;
+        console.log(`[elfa.trade] ${sym} attempt ${attempts}/${MAX_ATTEMPTS} raw_len=${msg ? msg.length : 0} credits+=${(chat && chat.data && chat.data.creditsConsumed) || 0}`);
+
+        const parsed = safeParseJson(msg);
+        if (parsed && validTradeIdea(parsed)) {
+          idea = {
+            side: String(parsed.side).toLowerCase(),
+            entry: Number(parsed.entry),
+            tp: Number(parsed.tp),
+            sl: Number(parsed.sl),
+            confidence: Math.max(0, Math.min(100, Math.round(Number(parsed.confidence) || 0))),
+            rr: String(parsed.rr || ''),
+            horizon: String(parsed.horizon || ''),
+            reason: String(parsed.reason || '').slice(0, 200),
+          };
+          break;
+        }
+        // Retry — short backoff so we don't slam the API.
+        if (attempts < MAX_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, 600));
+        } else {
+          recordError('/trade-idea', 0, `All ${MAX_ATTEMPTS} attempts failed for ${sym}. Last raw: ${(msg || '').slice(0, 200)}`);
+        }
+      }
+
       recordStat(sym, {
         fresh_calls: 1,
         credits_total: credits_used,
         last_refreshed_at: new Date().toISOString(),
       });
-      console.log(`[elfa.trade] ${sym} raw_len=${msg ? msg.length : 0} credits=${credits_used}`);
-
-      const parsed = safeParseJson(msg);
-      if (parsed && validTradeIdea(parsed)) {
-        idea = {
-          side: String(parsed.side).toLowerCase(),
-          entry: Number(parsed.entry),
-          tp: Number(parsed.tp),
-          sl: Number(parsed.sl),
-          confidence: Math.max(0, Math.min(100, Math.round(Number(parsed.confidence) || 0))),
-          rr: String(parsed.rr || ''),
-          horizon: String(parsed.horizon || ''),
-          reason: String(parsed.reason || '').slice(0, 200),
-        };
-      } else {
-        recordError('/trade-idea', 0, `Invalid JSON from /chat for ${sym}: ${(msg || '').slice(0, 200)}`);
-      }
     }
 
     const result = {
       symbol: sym,
-      idea, // null if parse failed — client should show "unavailable" state
+      idea, // null if all attempts failed — client shows "unavailable" state
       credits_used,
+      attempts,
       updated_at: new Date().toISOString(),
     };
-    cacheSet(key, result, 30 * 60 * 1000);
+    // Only cache successful results — retrying 3 times is expensive, but a null
+    // cached for 15 min would hide real ideas that would have succeeded later.
+    if (idea) {
+      cacheSet(key, result, 15 * 60 * 1000);
+    }
     return { ...result, cached: false };
   })();
 
