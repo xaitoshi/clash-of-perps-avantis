@@ -11,7 +11,6 @@ import OrderBook from './OrderBook';
 import TradeHistory from './TradeHistory';
 import FundingHistory from './FundingHistory';
 import QuestsTab from './QuestsTab';
-import ExplainMoveModal from './ExplainMoveModal';
 import TradeIdeaModal from './TradeIdeaModal';
 import { useElfaSignals } from '../hooks/useElfaSignals';
 import FilterPopup from './FilterPopup';
@@ -506,7 +505,6 @@ function FuturesPanel() {
   const [orderType, setOrderType] = useState('market');
   const [limitPrice, setLimitPrice] = useState('');
   const [showSymbolPicker, setShowSymbolPicker] = useState(false);
-  const [explainOpen, setExplainOpen] = useState(false);
   const [tradeIdeaOpen, setTradeIdeaOpen] = useState(false);
   const [walletCopied, setWalletCopied] = useState(false);
   const elfaSignals = useElfaSignals();
@@ -955,33 +953,19 @@ function FuturesPanel() {
       </div>
     ) : null;
 
-    // Floating pills — bottom-right of chart, opposite TradingView logo
+    // Floating pill — bottom-right of chart, opposite TradingView logo.
+    // Single button opens the Trade Idea modal (chart + narrative in one).
     const explainBadge = (
-      <>
-        <button
-          data-nodrag
-          onClick={() => setTradeIdeaOpen(true)}
-          className="trade-idea-chart-pill"
-          title="Get a trade idea (entry / TP / SL)"
-          aria-label="Trade Idea"
-        >
-          <svg className="trade-idea-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 3v18h18"/>
-            <path d="m19 9-5 5-4-4-3 3"/>
-          </svg>
-          <span className="trade-idea-label">Trade idea</span>
-        </button>
-        <button
-          data-nodrag
-          onClick={() => setExplainOpen(true)}
-          className="explain-chart-pill"
-          title="What's happening with this token?"
-          aria-label="Explain"
-        >
-          <img src={elfaBadge} alt="" className="explain-q" />
-          <span className="explain-label">Explain</span>
-        </button>
-      </>
+      <button
+        data-nodrag
+        onClick={() => setTradeIdeaOpen(true)}
+        className="explain-chart-pill"
+        title="Get a trade idea (entry / TP / SL)"
+        aria-label="Trade Idea"
+      >
+        <img src={elfaBadge} alt="" className="explain-q" />
+        <span className="explain-label">Trade idea</span>
+      </button>
     );
 
     if (fullscreen) {
@@ -1412,7 +1396,6 @@ function FuturesPanel() {
           <span style={S.pacificaBrand}>Pacifica</span>
         </div>
 
-        {explainOpen && <ExplainMoveModal symbol={symbol} onClose={() => setExplainOpen(false)} />}
         {tradeIdeaOpen && (
           <TradeIdeaModal
             symbol={symbol}
@@ -1467,7 +1450,7 @@ const animCSS = `
   }
   .explain-chart-pill:hover,
   .explain-chart-pill:focus-visible {
-    width: 94px;
+    width: 112px;
     padding: 0 10px 0 4px;
     background: #fff;
     outline: none;
@@ -1488,7 +1471,7 @@ const animCSS = `
   }
   .explain-chart-pill:hover .explain-label,
   .explain-chart-pill:focus-visible .explain-label {
-    max-width: 80px; opacity: 1; margin-left: 6px;
+    max-width: 100px; opacity: 1; margin-left: 6px;
   }
   /* On touch devices — stay as a circle; a tap just opens the modal */
   @media (hover: none) {
@@ -1496,46 +1479,6 @@ const animCSS = `
     .explain-chart-pill:hover .explain-label { max-width: 0; opacity: 0; margin-left: 0; }
   }
 
-  /* Trade-idea pill — sits just left of the Explain pill */
-  .trade-idea-chart-pill {
-    position: absolute; bottom: 8px; right: 44px; z-index: 20;
-    display: inline-flex; align-items: center;
-    height: 28px; width: 28px; padding: 0;
-    background: rgba(156, 39, 176, 0.92);
-    color: #fff;
-    border: 2px solid #5C3A21;
-    border-radius: 999px;
-    cursor: pointer; overflow: hidden;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-    transition: width 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), padding 0.22s ease, background 0.15s ease, right 0.22s ease;
-    font-family: inherit;
-  }
-  .trade-idea-chart-pill:hover,
-  .trade-idea-chart-pill:focus-visible {
-    width: 108px;
-    padding: 0 10px 0 4px;
-    background: rgba(156, 39, 176, 1);
-    outline: none;
-  }
-  .trade-idea-chart-pill .trade-idea-icon {
-    width: 20px; height: 20px; flex-shrink: 0;
-    margin-left: 3px;
-  }
-  .trade-idea-chart-pill .trade-idea-label {
-    max-width: 0; opacity: 0;
-    overflow: hidden; white-space: nowrap;
-    font-size: 12px; font-weight: 800;
-    margin-left: 0;
-    transition: max-width 0.22s ease, opacity 0.15s ease 0.05s, margin-left 0.22s ease;
-  }
-  .trade-idea-chart-pill:hover .trade-idea-label,
-  .trade-idea-chart-pill:focus-visible .trade-idea-label {
-    max-width: 90px; opacity: 1; margin-left: 4px;
-  }
-  @media (hover: none) {
-    .trade-idea-chart-pill:hover { width: 28px; padding: 0; }
-    .trade-idea-chart-pill:hover .trade-idea-label { max-width: 0; opacity: 0; margin-left: 0; }
-  }
   @keyframes pulse-glow {
     0%, 100% { box-shadow: 0 0 0 rgba(232, 184, 48, 0.6); }
     50% { box-shadow: 0 0 12px rgba(232, 184, 48, 0.9); }
