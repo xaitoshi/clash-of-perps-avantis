@@ -71,20 +71,58 @@ function MiniChart({ symbol, entry, tp, sl, mark }) {
 
   const { W, H, y, barW } = view;
   const fmt = (n) => n >= 100 ? Math.round(n).toLocaleString() : n.toFixed(4);
-  const levels = [
+  const levelsRaw = [
     { key: 'tp',    val: tp,    color: '#4CAF50', label: 'TP' },
     { key: 'mark',  val: mark,  color: '#5C3A21', label: 'Mark' },
     { key: 'entry', val: entry, color: '#9c27b0', label: 'Entry' },
     { key: 'sl',    val: sl,    color: '#E53935', label: 'SL' },
   ].filter(l => typeof l.val === 'number' && isFinite(l.val));
 
-  const tagW = 78; // enough for "75 900", "74,150" etc.
+  const tagW = 78;
+  const tagH = 18;
+
+  // Collision resolution for right-edge price tags. When two levels (e.g. Mark
+  // and Entry) sit within `tagH` of each other the tags would overlap and the
+  // numbers get unreadable. Strategy:
+  //  1. Each tag keeps its natural y (drawn on the real level line).
+  //  2. After sorting top→bottom, enforce a minimum vertical gap; push the
+  //     lower tag down when needed, then re-sweep bottom→top to stay inside H.
+  //  3. Draw a short elbow connector from the level line to the displaced tag
+  //     so the user can still tell which number belongs to which line.
+  const minGap = tagH + 2;
+  const placed = levelsRaw
+    .map(l => ({ ...l, yLine: y(l.val), yTag: y(l.val) }))
+    .sort((a, b) => a.yLine - b.yLine);
+  for (let i = 1; i < placed.length; i++) {
+    const prev = placed[i - 1];
+    if (placed[i].yTag < prev.yTag + minGap) {
+      placed[i].yTag = prev.yTag + minGap;
+    }
+  }
+  // Push back into [pad, H - pad] by sweeping upward from the last one.
+  const pad = tagH / 2 + 2;
+  if (placed.length > 0 && placed[placed.length - 1].yTag > H - pad) {
+    placed[placed.length - 1].yTag = H - pad;
+    for (let i = placed.length - 2; i >= 0; i--) {
+      if (placed[i].yTag > placed[i + 1].yTag - minGap) {
+        placed[i].yTag = placed[i + 1].yTag - minGap;
+      }
+    }
+  }
+  if (placed.length > 0 && placed[0].yTag < pad) {
+    placed[0].yTag = pad;
+    for (let i = 1; i < placed.length; i++) {
+      if (placed[i].yTag < placed[i - 1].yTag + minGap) {
+        placed[i].yTag = placed[i - 1].yTag + minGap;
+      }
+    }
+  }
 
   return (
     <div style={miniS.wrap}>
       <svg viewBox={`0 0 ${W + tagW} ${H}`} style={miniS.svg} preserveAspectRatio="none">
         {/* Horizontal reference lines */}
-        {levels.map(l => (
+        {levelsRaw.map(l => (
           <line
             key={l.key}
             x1={0} x2={W}
@@ -111,14 +149,23 @@ function MiniChart({ symbol, entry, tp, sl, mark }) {
             </g>
           );
         })}
-        {/* Level tags at right edge */}
-        {levels.map(l => {
-          const ty = Math.max(10, Math.min(H - 4, y(l.val)));
+        {/* Level tags at right edge — de-overlapped with connectors */}
+        {placed.map(l => {
+          const displaced = Math.abs(l.yTag - l.yLine) > 0.5;
           return (
             <g key={l.key + '-tag'}>
-              <rect x={W + 4} y={ty - 9} width={tagW - 8} height={18} rx={3} fill={l.color} />
+              {displaced && (
+                <path
+                  d={`M${W},${l.yLine} L${W + 4},${l.yLine} L${W + 6},${l.yTag} L${W + 4},${l.yTag}`}
+                  fill="none"
+                  stroke={l.color}
+                  strokeWidth={1}
+                  opacity={0.8}
+                />
+              )}
+              <rect x={W + 4} y={l.yTag - tagH / 2} width={tagW - 8} height={tagH} rx={3} fill={l.color} />
               <text
-                x={W + tagW / 2} y={ty + 5}
+                x={W + tagW / 2} y={l.yTag + 5}
                 textAnchor="middle"
                 fontSize={13} fontWeight={900} fill="#fff"
                 style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
@@ -136,14 +183,14 @@ const miniS = {
     background: 'rgba(0,0,0,0.04)',
     border: '1.5px solid rgba(92,58,33,0.2)',
     borderRadius: 8,
-    padding: 8,
+    padding: 6,
     marginBottom: 12,
-    height: 140,
+    height: 160,
   },
   svg: { width: '100%', height: '100%', display: 'block' },
   loading: {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    height: 140, fontSize: 12, color: '#8a7252', fontWeight: 700,
+    height: 160, fontSize: 12, color: '#8a7252', fontWeight: 700,
     background: 'rgba(0,0,0,0.04)', border: '1.5px solid rgba(92,58,33,0.2)',
     borderRadius: 8, marginBottom: 12,
   },
@@ -290,8 +337,9 @@ const S = {
   },
   modal: {
     background: 'linear-gradient(180deg, #fdf8e7 0%, #f3ebd1 100%)',
-    border: '3px solid #5C3A21', borderRadius: 14, padding: 18,
+    border: '3px solid #5C3A21', borderRadius: 14, padding: 14,
     maxWidth: 460, width: '100%', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+    maxHeight: '92vh', overflowY: 'auto',
   },
   header: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 },
   title: { fontSize: 16, fontWeight: 900, color: '#5C3A21', flex: 1, margin: 0 },
@@ -308,21 +356,21 @@ const S = {
   levelsGrid: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 },
   levelRow: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '8px 10px', background: 'rgba(255,255,255,0.5)',
-    border: '1.5px solid rgba(92,58,33,0.25)', borderRadius: 8,
+    padding: '7px 10px', background: 'rgba(255,255,255,0.5)',
+    border: '1.5px solid rgba(92,58,33,0.25)', borderRadius: 8, gap: 8,
   },
   levelLabel: {
     color: '#fff', fontSize: 11, fontWeight: 900, padding: '2px 10px',
-    borderRadius: 4, letterSpacing: '0.5px', minWidth: 52, textAlign: 'center',
+    borderRadius: 4, letterSpacing: '0.5px', minWidth: 52, textAlign: 'center', flexShrink: 0,
   },
-  levelValue: { fontSize: 15, fontWeight: 800, color: '#5C3A21', fontFamily: 'monospace' },
+  levelValue: { fontSize: 15, fontWeight: 800, color: '#5C3A21', fontFamily: 'monospace', whiteSpace: 'nowrap' },
   metaGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 12 },
   metaCard: {
     background: 'rgba(255,255,255,0.5)', border: '1.5px solid rgba(92,58,33,0.25)',
-    borderRadius: 8, padding: '8px 6px', textAlign: 'center',
+    borderRadius: 8, padding: '8px 4px', textAlign: 'center', minWidth: 0,
   },
-  metaLabel: { fontSize: 10, fontWeight: 800, color: '#a3906a', textTransform: 'uppercase', letterSpacing: '0.5px' },
-  metaValue: { fontSize: 14, fontWeight: 900, marginTop: 2 },
+  metaLabel: { fontSize: 9, fontWeight: 800, color: '#a3906a', textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap' },
+  metaValue: { fontSize: 13, fontWeight: 900, marginTop: 2, whiteSpace: 'nowrap' },
   reason: {
     fontSize: 13, color: '#5C3A21', lineHeight: 1.4, fontWeight: 600,
     background: 'rgba(255,255,255,0.4)', padding: '8px 10px', borderRadius: 8,

@@ -975,9 +975,8 @@ function FuturesPanel() {
             {renderSymbolBar()}
             {/* Top: chart */}
             <div style={{flex: 1, position: 'relative', minHeight: 0}}>
-              <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} />
+              <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} chartOverlay={explainBadge} />
               {fundingBadge}
-              {explainBadge}
             </div>
 
             {/* Bottom: Trade controls */}
@@ -994,8 +993,7 @@ function FuturesPanel() {
           {/* Top: chart + orderbook + controls */}
           <div style={{display: 'flex', flex: 1, overflow: 'hidden'}}>
             <div style={{flex: `0 0 ${chartPct}%`, maxWidth: `${chartPct}%`, position: 'relative'}}>
-              <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} />
-              {explainBadge}
+              <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} chartOverlay={explainBadge} />
             </div>
             {/* Drag handle: chart ↔ orderbook */}
             <div style={S.dragHandleV} onMouseDown={dragChart} />
@@ -1037,9 +1035,8 @@ function FuturesPanel() {
       <>
         {renderSymbolBar()}
         <div style={{...S.chartArea, position: 'relative'}}>
-          <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} />
+          <TradingViewWidget symbol={symbol} positions={positions} orders={orders} currentPrice={currentPrice} chartOverlay={explainBadge} />
           {fundingBadge}
-          {explainBadge}
         </div>
         {renderTradeControls()}
       </>

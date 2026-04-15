@@ -12,7 +12,7 @@ const INTERVALS = [
   { label: '1D', value: '1d', ms: 180 * 24 * 60 * 60 * 1000 },
 ];
 
-function TradingViewWidget({ symbol = 'BTC', positions = [], orders = [], currentPrice }) {
+function TradingViewWidget({ symbol = 'BTC', positions = [], orders = [], currentPrice, chartOverlay }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
@@ -193,6 +193,10 @@ function TradingViewWidget({ symbol = 'BTC', positions = [], orders = [], curren
             <style dangerouslySetInnerHTML={{__html: `@keyframes tv-spin { to { transform: rotate(360deg); } }`}} />
           </div>
         )}
+        {/* Overlay rendered inside the chart container — absolute positioning
+            anchors to the actual price-chart area, not to the outer wrapper
+            that also includes the timeframe tab bar. */}
+        {chartOverlay}
       </div>
     </div>
   );
