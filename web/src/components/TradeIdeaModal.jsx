@@ -4,8 +4,31 @@ import elfaLogo from '../assets/elfa.svg';
 const GAME_API = import.meta.env.VITE_GAME_API || '/api';
 const PACIFICA_API = 'https://api.pacifica.fi/api/v1';
 
-// Mini sparkline with horizontal reference lines (TP / Entry / Mark / SL).
-// Kept dependency-free — pure SVG, recomputes viewBox from data + levels.
+// Live mark price from Pacifica — polled every 5s while modal open.
+function useLiveMark(symbol) {
+  const [mark, setMark] = useState(null);
+  useEffect(() => {
+    if (!symbol) return;
+    let cancelled = false;
+    const fetchMark = async () => {
+      try {
+        const r = await fetch(`${PACIFICA_API}/info/prices`);
+        const j = await r.json();
+        if (cancelled) return;
+        const row = Array.isArray(j?.data) ? j.data.find(p => p.symbol === symbol) : null;
+        const v = row ? parseFloat(row.mark) : null;
+        if (Number.isFinite(v)) setMark(v);
+      } catch {}
+    };
+    fetchMark();
+    const iv = setInterval(fetchMark, 5000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [symbol]);
+  return mark;
+}
+
+// Candlestick mini-chart with horizontal reference lines (TP / Entry / Mark / SL).
+// Dependency-free SVG. Scales to container via viewBox.
 function MiniChart({ symbol, entry, tp, sl, mark }) {
   const [candles, setCandles] = useState(null);
 
@@ -17,7 +40,10 @@ function MiniChart({ symbol, entry, tp, sl, mark }) {
       .then(r => r.json())
       .then(j => {
         if (cancelled) return;
-        setCandles(Array.isArray(j?.data) ? j.data.map(c => parseFloat(c.c)).filter(Number.isFinite) : []);
+        const parsed = Array.isArray(j?.data) ? j.data.map(c => ({
+          o: parseFloat(c.o), h: parseFloat(c.h), l: parseFloat(c.l), c: parseFloat(c.c),
+        })).filter(x => Number.isFinite(x.o) && Number.isFinite(x.c)) : [];
+        setCandles(parsed);
       })
       .catch(() => { if (!cancelled) setCandles([]); });
     return () => { cancelled = true; };
@@ -26,31 +52,24 @@ function MiniChart({ symbol, entry, tp, sl, mark }) {
   const view = useMemo(() => {
     if (!candles || candles.length === 0) return null;
     const levels = [entry, tp, sl, mark].filter(v => typeof v === 'number' && isFinite(v));
-    const allY = [...candles, ...levels];
-    const minY = Math.min(...allY);
-    const maxY = Math.max(...allY);
-    const pad = (maxY - minY) * 0.08 || maxY * 0.02 || 1;
+    const highs = candles.map(c => c.h);
+    const lows = candles.map(c => c.l);
+    const minY = Math.min(...lows, ...levels);
+    const maxY = Math.max(...highs, ...levels);
+    const pad = (maxY - minY) * 0.05 || maxY * 0.01 || 1;
     const yLo = minY - pad;
     const yHi = maxY + pad;
-    const W = 100, H = 60; // viewBox units; scales to container
+    const W = 200, H = 90; // viewBox units; fits nice aspect ~2.2:1
     const y = v => H - ((v - yLo) / (yHi - yLo)) * H;
-    const path = candles.map((v, i) => {
-      const x = (i / (candles.length - 1 || 1)) * W;
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y(v).toFixed(2)}`;
-    }).join(' ');
-    return { W, H, y, path };
+    const barW = (W / candles.length) * 0.62;
+    return { W, H, y, barW, candles };
   }, [candles, entry, tp, sl, mark]);
 
-  if (candles === null) {
-    return <div style={miniS.loading}>Loading chart…</div>;
-  }
-  if (!view) {
-    return <div style={miniS.loading}>No price data</div>;
-  }
+  if (candles === null) return <div style={miniS.loading}>Loading chart…</div>;
+  if (!view) return <div style={miniS.loading}>No price data</div>;
 
-  const { W, H, y, path } = view;
+  const { W, H, y, barW } = view;
   const fmt = (n) => n >= 100 ? Math.round(n).toLocaleString() : n.toFixed(4);
-  // Level labels — position a tag at right edge of chart
   const levels = [
     { key: 'tp',    val: tp,    color: '#4CAF50', label: 'TP' },
     { key: 'mark',  val: mark,  color: '#5C3A21', label: 'Mark' },
@@ -58,33 +77,49 @@ function MiniChart({ symbol, entry, tp, sl, mark }) {
     { key: 'sl',    val: sl,    color: '#E53935', label: 'SL' },
   ].filter(l => typeof l.val === 'number' && isFinite(l.val));
 
+  const tagW = 30;
+
   return (
     <div style={miniS.wrap}>
-      <svg viewBox={`0 0 ${W + 28} ${H}`} style={miniS.svg} preserveAspectRatio="none">
-        {/* Reference lines */}
+      <svg viewBox={`0 0 ${W + tagW} ${H}`} style={miniS.svg} preserveAspectRatio="none">
+        {/* Horizontal grid-ish reference lines */}
         {levels.map(l => (
           <line
             key={l.key}
             x1={0} x2={W}
             y1={y(l.val)} y2={y(l.val)}
             stroke={l.color}
-            strokeWidth={0.4}
-            strokeDasharray={l.key === 'mark' ? '1.5 1' : '2 1.5'}
-            opacity={0.75}
+            strokeWidth={0.5}
+            strokeDasharray={l.key === 'mark' ? '1.5 1.5' : '2.5 1.5'}
+            opacity={0.7}
           />
         ))}
-        {/* Price path */}
-        <path d={path} fill="none" stroke="#9c27b0" strokeWidth={0.9} strokeLinejoin="round" />
+        {/* Candlesticks */}
+        {view.candles.map((c, i) => {
+          const cx = ((i + 0.5) / view.candles.length) * W;
+          const yOpen = y(c.o), yClose = y(c.c);
+          const yHigh = y(c.h), yLow = y(c.l);
+          const up = c.c >= c.o;
+          const color = up ? '#4CAF50' : '#E53935';
+          const bodyTop = Math.min(yOpen, yClose);
+          const bodyH = Math.max(0.5, Math.abs(yClose - yOpen));
+          return (
+            <g key={i}>
+              <line x1={cx} x2={cx} y1={yHigh} y2={yLow} stroke={color} strokeWidth={0.4} />
+              <rect x={cx - barW / 2} y={bodyTop} width={barW} height={bodyH} fill={color} />
+            </g>
+          );
+        })}
         {/* Level tags at right edge */}
         {levels.map(l => {
-          const ty = Math.max(4, Math.min(H - 2, y(l.val)));
+          const ty = Math.max(3, Math.min(H - 1, y(l.val)));
           return (
             <g key={l.key + '-tag'}>
-              <rect x={W + 1} y={ty - 3} width={26} height={6} rx={1} fill={l.color} />
+              <rect x={W + 1} y={ty - 2.2} width={tagW - 2} height={4.4} rx={0.8} fill={l.color} />
               <text
-                x={W + 14} y={ty + 1.5}
+                x={W + tagW / 2} y={ty + 1.1}
                 textAnchor="middle"
-                fontSize={4} fontWeight={900} fill="#fff"
+                fontSize={3} fontWeight={900} fill="#fff"
                 style={{ fontFamily: 'monospace' }}
               >{fmt(l.val)}</text>
             </g>
@@ -102,12 +137,12 @@ const miniS = {
     borderRadius: 8,
     padding: 8,
     marginBottom: 12,
-    height: 120,
+    height: 140,
   },
   svg: { width: '100%', height: '100%', display: 'block' },
   loading: {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    height: 120, fontSize: 12, color: '#8a7252', fontWeight: 700,
+    height: 140, fontSize: 12, color: '#8a7252', fontWeight: 700,
     background: 'rgba(0,0,0,0.04)', border: '1.5px solid rgba(92,58,33,0.2)',
     borderRadius: 8, marginBottom: 12,
   },
@@ -117,6 +152,9 @@ function TradeIdeaModal({ symbol, currentPrice, onClose, onApply }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Always pull live mark from Pacifica so it's never stale/null.
+  const liveMark = useLiveMark(symbol);
+  const mark = (typeof currentPrice === 'number' && isFinite(currentPrice)) ? currentPrice : liveMark;
 
   useEffect(() => {
     let cancelled = false;
@@ -177,13 +215,13 @@ function TradeIdeaModal({ symbol, currentPrice, onClose, onApply }) {
               entry={idea.entry}
               tp={idea.tp}
               sl={idea.sl}
-              mark={typeof currentPrice === 'number' ? currentPrice : null}
+              mark={mark}
             />
 
             <div style={S.levelsGrid}>
               <LevelRow label="Entry"  value={fmt(idea.entry)} color="#9c27b0" />
-              {currentPrice != null && (
-                <LevelRow label="Mark" value={fmt(currentPrice)} color="#5C3A21" muted />
+              {mark != null && (
+                <LevelRow label="Mark" value={fmt(mark)} color="#5C3A21" muted />
               )}
               <LevelRow label="TP"     value={fmt(idea.tp)}    color="#4CAF50" />
               <LevelRow label="SL"     value={fmt(idea.sl)}    color="#E53935" />
@@ -206,7 +244,7 @@ function TradeIdeaModal({ symbol, currentPrice, onClose, onApply }) {
                 style={{...S.applyBtn, background: sideColor}}
                 onClick={() => { onApply(idea); onClose(); }}
               >
-                Apply to order form
+                Got it
               </button>
             )}
 
