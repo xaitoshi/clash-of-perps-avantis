@@ -172,13 +172,20 @@ function RegisterPanel() {
     // Godot's _do_register tries login_by_wallet first, then registers if new.
     const name = email ? email.split('@')[0].slice(0, 20) : ('player_' + wallet.slice(0, 6));
     sendToGodot('register', { name, wallet });
+    // Safety: drop the spinner after 8s if Godot never fires `registered` —
+    // otherwise a silent failure traps the user forever.
+    setTimeout(() => setWaitingForGodot(false), 8000);
   };
 
-  // Auto-login by wallet when connected (recovers account after cache clear)
+  // Auto-login by wallet when connected (recovers account after cache clear).
+  // Fire-and-forget: if the wallet already has an account the server logs in
+  // and Godot fires `registered` → parent hides RegisterPanel. If not, nothing
+  // happens — user sees the name-input form below and types a name manually.
+  // We deliberately do NOT set waitingForGodot here: a 404 from /login-wallet
+  // would otherwise trap the UI in an infinite spinner.
   useEffect(() => {
     if (connected && publicKey && !triedWalletLogin.current) {
       triedWalletLogin.current = true;
-      setWaitingForGodot(true);
       sendToGodot('wallet_connected', { wallet: publicKey.toBase58() });
     }
   }, [connected, publicKey, sendToGodot]);
